@@ -4,6 +4,9 @@
  * Workflow System API
  */
 
+// بدء الجلسة للوصول إلى بيانات المستخدم
+session_start();
+
 // تعطيل عرض الأخطاء في الإخراج (سيتم إرسالها كـ JSON)
 error_reporting(E_ALL);
 ini_set('display_errors', 0);
@@ -120,7 +123,7 @@ try {
                 $file = null;
             }
             
-            if (empty($input['date']) || empty($input['type_id']) || empty($input['description']) || empty($input['amount'])) {
+            if (empty($input['type_id']) || empty($input['description']) || empty($input['amount'])) {
                 jsonResponse(['success' => false, 'message' => 'جميع الحقول مطلوبة'], 400);
             }
             
@@ -312,6 +315,28 @@ try {
             
             $data = getEmployeePerformanceDetails($employeeId, $dateFrom, $dateTo);
             jsonResponse(['success' => true, 'data' => $data]);
+            break;
+        
+        // أحداث المعاملة (سجل التغييرات)
+        case 'transaction_events':
+            $transactionId = isset($_GET['transaction_id']) ? (int)$_GET['transaction_id'] : 0;
+            if ($transactionId <= 0) {
+                jsonResponse(['success' => false, 'message' => 'معرف المعاملة غير صالح'], 400);
+            }
+            
+            $stage = $_GET['stage'] ?? null;
+            $events = getTransactionEvents($transactionId, $stage);
+            jsonResponse(['success' => true, 'data' => $events]);
+            break;
+        
+        // جميع الأحداث
+        case 'all_events':
+            $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 50;
+            $stage = $_GET['stage'] ?? null;
+            $employeeId = isset($_GET['employee_id']) ? (int)$_GET['employee_id'] : null;
+            
+            $events = getAllEvents($limit, $stage, $employeeId);
+            jsonResponse(['success' => true, 'data' => $events]);
             break;
         
         default:

@@ -39,12 +39,12 @@ function initEventListeners() {
     DOM.navTabs.forEach(tab => {
         tab.addEventListener('click', () => switchTab(tab.dataset.tab));
     });
-    
+
     document.querySelector('.modal-close')?.addEventListener('click', closeModal);
     document.querySelector('.modal-overlay')?.addEventListener('click', (e) => {
         if (e.target.classList.contains('modal-overlay')) closeModal();
     });
-    
+
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') closeModal();
     });
@@ -54,11 +54,11 @@ function initEventListeners() {
 function switchTab(tab) {
     App.currentTab = tab;
     App.expandedRow = null;
-    
+
     DOM.navTabs.forEach(t => {
         t.classList.toggle('active', t.dataset.tab === tab);
     });
-    
+
     if (tab === 'dashboard') {
         loadDashboard();
     } else if (tab === 'transactions') {
@@ -71,23 +71,23 @@ function switchTab(tab) {
 // تحميل لوحة التحكم
 async function loadDashboard() {
     showLoading();
-    
+
     try {
         const [statsRes, chartRes, urgentRes] = await Promise.all([
             fetch('api/?action=stats'),
             fetch('api/?action=chart'),
             fetch('api/?action=urgent')
         ]);
-        
+
         const stats = await statsRes.json();
         const chart = await chartRes.json();
         const urgent = await urgentRes.json();
-        
+
         if (stats.success) App.stats = stats.data;
         if (chart.success) App.chartData = chart.data;
-        
+
         renderDashboard(urgent.success ? urgent.data : []);
-        
+
     } catch (error) {
         showToast('خطأ في تحميل البيانات', 'error');
         console.error(error);
@@ -239,9 +239,9 @@ function renderDashboard(urgentTransactions) {
             </div>
         </div>
     `;
-    
+
     DOM.mainContent.innerHTML = html;
-    
+
     if (DOM.notificationBadge) {
         DOM.notificationBadge.textContent = App.stats.urgent || 0;
         DOM.notificationBadge.style.display = App.stats.urgent > 0 ? 'flex' : 'none';
@@ -252,7 +252,7 @@ function renderDashboard(urgentTransactions) {
 function filterUrgent(type, btn) {
     document.querySelectorAll('.urgent-filter-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
-    
+
     document.querySelectorAll('.urgent-row').forEach(row => {
         if (type === 'all' || row.dataset.type === type) {
             row.style.display = '';
@@ -266,20 +266,20 @@ function filterUrgent(type, btn) {
 function renderLineChart() {
     const canvas = document.getElementById('lineChart');
     if (!canvas || !App.chartData.length) return;
-    
+
     const ctx = canvas.getContext('2d');
     const data = App.chartData;
-    
+
     const rect = canvas.parentElement.getBoundingClientRect();
     canvas.width = rect.width;
     canvas.height = rect.height - 20;
-    
+
     const padding = { top: 20, right: 20, bottom: 40, left: 60 };
     const width = canvas.width - padding.left - padding.right;
     const height = canvas.height - padding.top - padding.bottom;
-    
+
     const maxCount = Math.max(...data.map(d => d.count), 1);
-    
+
     ctx.strokeStyle = 'rgba(71, 85, 105, 0.3)';
     ctx.lineWidth = 1;
     for (let i = 0; i <= 4; i++) {
@@ -289,7 +289,7 @@ function renderLineChart() {
         ctx.lineTo(canvas.width - padding.right, y);
         ctx.stroke();
     }
-    
+
     ctx.strokeStyle = '#0ea5e9';
     ctx.lineWidth = 3;
     ctx.beginPath();
@@ -300,7 +300,7 @@ function renderLineChart() {
         else ctx.lineTo(x, y);
     });
     ctx.stroke();
-    
+
     ctx.fillStyle = '#0ea5e9';
     data.forEach((d, i) => {
         const x = padding.left + (width / (data.length - 1 || 1)) * i;
@@ -309,7 +309,7 @@ function renderLineChart() {
         ctx.arc(x, y, 5, 0, Math.PI * 2);
         ctx.fill();
     });
-    
+
     ctx.fillStyle = '#64748b';
     ctx.font = '12px Noto Sans Arabic';
     ctx.textAlign = 'center';
@@ -323,44 +323,44 @@ function renderLineChart() {
 function renderPieChart() {
     const canvas = document.getElementById('pieChart');
     if (!canvas) return;
-    
+
     const ctx = canvas.getContext('2d');
     const rect = canvas.parentElement.getBoundingClientRect();
     canvas.width = rect.width;
     canvas.height = rect.height - 60;
-    
+
     const centerX = canvas.width / 2;
     const centerY = canvas.height / 2;
     const radius = Math.min(centerX, centerY) - 20;
     const innerRadius = radius * 0.6;
-    
+
     const data = [
         { value: App.stats.paid || 0, color: '#10b981' },
         { value: (App.stats.total || 0) - (App.stats.paid || 0) - (App.stats.urgent || 0), color: '#0ea5e9' },
         { value: App.stats.urgent || 0, color: '#ef4444' }
     ];
-    
+
     const total = data.reduce((sum, d) => sum + d.value, 0) || 1;
     let startAngle = -Math.PI / 2;
-    
+
     data.forEach(d => {
         const sliceAngle = (d.value / total) * Math.PI * 2;
-        
+
         ctx.beginPath();
         ctx.moveTo(centerX, centerY);
         ctx.arc(centerX, centerY, radius, startAngle, startAngle + sliceAngle);
         ctx.closePath();
         ctx.fillStyle = d.color;
         ctx.fill();
-        
+
         ctx.beginPath();
         ctx.arc(centerX, centerY, innerRadius, 0, Math.PI * 2);
         ctx.fillStyle = '#1e293b';
         ctx.fill();
-        
+
         startAngle += sliceAngle;
     });
-    
+
     ctx.fillStyle = '#f8fafc';
     ctx.font = 'bold 24px Noto Sans Arabic';
     ctx.textAlign = 'center';
@@ -374,11 +374,11 @@ function renderPieChart() {
 // تحميل المعاملات
 async function loadTransactions() {
     showLoading();
-    
+
     try {
         const res = await fetch('api/?action=transactions');
         const data = await res.json();
-        
+
         if (data.success) {
             App.transactions = data.data;
             renderTransactions();
@@ -445,7 +445,7 @@ function renderTransactions() {
             </div>
         </div>
     `;
-    
+
     DOM.mainContent.innerHTML = html;
 }
 
@@ -454,13 +454,13 @@ function renderTransactionRows(transactions) {
     if (!transactions || !transactions.length) {
         return '<tr><td colspan="11" style="text-align: center; padding: 3rem; color: var(--text-muted);">لا توجد معاملات</td></tr>';
     }
-    
+
     let html = '';
-    
+
     for (let i = 0; i < transactions.length; i++) {
         const tx = transactions[i];
         const isExpanded = (App.expandedRow == tx.id);
-        
+
         // صف المعاملة الرئيسي
         html += '<tr class="transaction-row ' + (isExpanded ? 'expanded' : '') + '" data-id="' + tx.id + '" onclick="toggleRow(' + tx.id + ')">';
         html += '<td><span class="tx-number">' + tx.transaction_number + '</span></td>';
@@ -475,14 +475,14 @@ function renderTransactionRows(transactions) {
         html += '<td>' + getAlertBadge(tx.alert_type) + '</td>';
         html += '<td>';
         html += '<div style="display: flex; align-items: center; gap: 0.5rem;">';
-        
+
         // زر استعراض PDF
         if (tx.attachment) {
             html += '<button class="btn-icon btn-pdf" onclick="event.stopPropagation(); openPDF(\'' + tx.attachment + '\')" title="استعراض PDF">';
             html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><line x1="10" y1="9" x2="8" y2="9"></line></svg>';
             html += '</button>';
         }
-        
+
         html += '<button class="btn-icon" onclick="event.stopPropagation(); editTransaction(' + tx.id + ')" title="تعديل">';
         html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>';
         html += '</button>';
@@ -492,13 +492,28 @@ function renderTransactionRows(transactions) {
         html += '</div>';
         html += '</td>';
         html += '</tr>';
-        
+
         // صف التفاصيل الموسع
         if (isExpanded) {
             html += '<tr class="expanded-row">';
             html += '<td colspan="11" style="padding: 0;">';
+
+            // معلومات الإنشاء
+            html += '<div class="creation-info-bar" style="background: var(--bg-surface); padding: 0.75rem 1.5rem; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; gap: 2rem; flex-wrap: wrap;">';
+            html += '<div style="display: flex; align-items: center; gap: 0.5rem;">';
+            html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent-blue)" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="20" y1="8" x2="20" y2="14"></line><line x1="23" y1="11" x2="17" y2="11"></line></svg>';
+            html += '<span style="color: var(--text-muted); font-size: 0.85rem;">أنشئت بواسطة:</span>';
+            html += '<span style="color: var(--text-primary); font-weight: 600;">' + (tx.created_by_name || 'النظام') + '</span>';
+            html += '</div>';
+            html += '<div style="display: flex; align-items: center; gap: 0.5rem;">';
+            html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent-green)" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>';
+            html += '<span style="color: var(--text-muted); font-size: 0.85rem;">وقت الإنشاء:</span>';
+            html += '<span style="color: var(--text-primary); font-weight: 500;">' + formatCreationTime(tx.creation_time) + '</span>';
+            html += '</div>';
+            html += '</div>';
+
             html += '<div class="expanded-content four-columns">';
-            
+
             // قسم الاستلام
             html += '<div class="detail-section receiving">';
             html += '<div class="detail-header green">';
@@ -510,7 +525,7 @@ function renderTransactionRows(transactions) {
             html += '<div class="detail-row"><span class="detail-label">الحالة:</span><span class="detail-value">' + getStatusBadge(tx.receive_status) + '</span></div>';
             html += '<div class="detail-row"><span class="detail-label">ملاحظات:</span><span class="detail-value">' + (tx.receive_notes || '—') + '</span></div>';
             html += '</div>';
-            
+
             // قسم الموازنة (جديد)
             html += '<div class="detail-section budget">';
             html += '<div class="detail-header cyan">';
@@ -523,7 +538,7 @@ function renderTransactionRows(transactions) {
             html += '<div class="detail-row"><span class="detail-label">الحالة:</span><span class="detail-value">' + getStatusBadge(tx.budget_status) + '</span></div>';
             html += '<div class="detail-row"><span class="detail-label">ملاحظات:</span><span class="detail-value">' + (tx.budget_notes || '—') + '</span></div>';
             html += '</div>';
-            
+
             // قسم الدفع
             html += '<div class="detail-section payment">';
             html += '<div class="detail-header orange">';
@@ -537,7 +552,7 @@ function renderTransactionRows(transactions) {
             html += '<div class="detail-row"><span class="detail-label">المرجع:</span><span class="detail-value" style="color: var(--accent-blue); font-family: monospace;">' + (tx.reference_number || '—') + '</span></div>';
             html += '<div class="detail-row"><span class="detail-label">ملاحظات:</span><span class="detail-value">' + (tx.payment_notes || '—') + '</span></div>';
             html += '</div>';
-            
+
             // قسم الفوترة
             html += '<div class="detail-section invoice">';
             html += '<div class="detail-header purple">';
@@ -551,16 +566,26 @@ function renderTransactionRows(transactions) {
             html += '<div class="detail-row"><span class="detail-label">التنبيه:</span><span class="detail-value">' + getAlertBadge(tx.alert_type) + '</span></div>';
             html += '<div class="detail-row"><span class="detail-label">ملاحظات:</span><span class="detail-value">' + (tx.invoice_notes || '—') + '</span></div>';
             html += '</div>';
-            
+
             html += '</div>';
-            
+
+            // قسم سجل الأحداث (Timeline)
+            html += '<div class="events-timeline-section">';
+            html += '<div class="events-header" onclick="loadTransactionEvents(' + tx.id + ')">';
+            html += '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>';
+            html += ' سجل الأحداث والتغييرات';
+            html += '<span class="events-toggle-icon">▼</span>';
+            html += '</div>';
+            html += '<div id="events-container-' + tx.id + '" class="events-container" style="display: none;"></div>';
+            html += '</div>';
+
             // قسم المرفقات
             html += '<div class="attachment-section">';
             html += '<div class="attachment-header">';
             html += '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>';
             html += ' المرفقات';
             html += '</div>';
-            
+
             if (tx.attachment) {
                 html += '<div class="attachment-file">';
                 html += '<div class="attachment-info">';
@@ -587,14 +612,14 @@ function renderTransactionRows(transactions) {
                 html += '</button>';
                 html += '</div>';
             }
-            
+
             html += '</div>';
-            
+
             html += '</td>';
             html += '</tr>';
         }
     }
-    
+
     return html;
 }
 
@@ -605,7 +630,7 @@ function toggleRow(id) {
     } else {
         App.expandedRow = id;
     }
-    
+
     const tbody = document.getElementById('transactionsBody');
     if (tbody) {
         tbody.innerHTML = renderTransactionRows(App.transactions);
@@ -616,21 +641,21 @@ function toggleRow(id) {
 function filterTransactions() {
     const search = document.getElementById('searchInput')?.value.toLowerCase() || '';
     const status = document.getElementById('statusFilter')?.value || '';
-    
+
     const filtered = App.transactions.filter(tx => {
-        const matchSearch = !search || 
+        const matchSearch = !search ||
             tx.transaction_number.toLowerCase().includes(search) ||
             tx.description.toLowerCase().includes(search) ||
             (tx.transaction_type && tx.transaction_type.toLowerCase().includes(search));
-        
+
         const matchStatus = !status ||
             tx.alert_type === status ||
             tx.payment_status === status ||
             tx.receive_status === status;
-        
+
         return matchSearch && matchStatus;
     });
-    
+
     App.expandedRow = null;
     document.getElementById('transactionsBody').innerHTML = renderTransactionRows(filtered);
 }
@@ -642,31 +667,42 @@ async function openAddModal() {
             fetch('api/?action=types'),
             fetch('api/?action=employees')
         ]);
-        
+
         const types = await typesRes.json();
-        
+
         let typeOptions = '';
         if (types.success) {
             types.data.forEach(t => {
                 typeOptions += '<option value="' + t.id + '">' + t.name + '</option>';
             });
         }
-        
+
+        // التاريخ والوقت الحالي
+        const now = new Date();
+        const dateStr = now.toLocaleDateString('ar-SA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+        const timeStr = now.toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
+
         DOM.modalTitle.textContent = 'إضافة معاملة جديدة';
         DOM.modalBody.innerHTML = `
             <form id="addForm" onsubmit="submitAddForm(event)" enctype="multipart/form-data">
-                <div class="form-row">
-                    <div class="form-group">
-                        <label class="form-label">التاريخ</label>
-                        <input type="date" class="form-input" name="date" value="${new Date().toISOString().split('T')[0]}" required>
+                <div class="auto-date-info" style="background: var(--bg-surface); padding: 1rem; border-radius: 10px; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 1rem;">
+                    <div style="width: 45px; height: 45px; background: var(--btn-primary-bg); border-radius: 10px; display: flex; align-items: center; justify-content: center;">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--btn-primary-text)" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <polyline points="12 6 12 12 16 14"></polyline>
+                        </svg>
                     </div>
-                    <div class="form-group">
-                        <label class="form-label">نوع المعاملة</label>
-                        <select class="form-select" name="type_id" required>
-                            <option value="">اختر النوع</option>
-                            ${typeOptions}
-                        </select>
+                    <div>
+                        <div style="font-size: 0.8rem; color: var(--text-muted);">تاريخ ووقت الإنشاء</div>
+                        <div style="font-weight: 600; color: var(--text-primary);">${dateStr} - ${timeStr}</div>
                     </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">نوع المعاملة</label>
+                    <select class="form-select" name="type_id" required>
+                        <option value="">اختر النوع</option>
+                        ${typeOptions}
+                    </select>
                 </div>
                 <div class="form-group">
                     <label class="form-label">الوصف</label>
@@ -698,7 +734,7 @@ async function openAddModal() {
                 </div>
             </form>
         `;
-        
+
         openModal();
     } catch (error) {
         showToast('خطأ في تحميل البيانات', 'error');
@@ -731,18 +767,18 @@ function handleFileSelect(input) {
 // إرسال نموذج الإضافة
 async function submitAddForm(e) {
     e.preventDefault();
-    
+
     const form = e.target;
     const formData = new FormData(form);
-    
+
     try {
         const res = await fetch('api/?action=add', {
             method: 'POST',
             body: formData
         });
-        
+
         const result = await res.json();
-        
+
         if (result.success) {
             showToast('تم إضافة المعاملة بنجاح', 'success');
             closeModal();
@@ -762,38 +798,164 @@ function openPDF(path) {
     }
 }
 
+// تحميل وعرض أحداث المعاملة
+async function loadTransactionEvents(transactionId) {
+    const container = document.getElementById('events-container-' + transactionId);
+    if (!container) return;
+
+    // Toggle visibility
+    if (container.style.display === 'none') {
+        container.style.display = 'block';
+        container.innerHTML = '<div class="loading-events">جاري التحميل...</div>';
+
+        try {
+            const res = await fetch('api/?action=transaction_events&transaction_id=' + transactionId);
+            const result = await res.json();
+
+            if (result.success && result.data.length > 0) {
+                let html = '<div class="events-timeline">';
+
+                const stageNames = {
+                    'creation': 'الإنشاء',
+                    'receiving': 'الاستلام',
+                    'budget': 'الموازنة',
+                    'payment': 'الدفع',
+                    'invoice': 'الفوترة'
+                };
+
+                const stageColors = {
+                    'creation': '#4dabf7',
+                    'receiving': '#69db7c',
+                    'budget': '#3bc9db',
+                    'payment': '#ffa94d',
+                    'invoice': '#b197fc'
+                };
+
+                result.data.forEach((event, index) => {
+                    const stageName = stageNames[event.stage] || event.stage;
+                    const stageColor = stageColors[event.stage] || '#888';
+                    const duration = event.duration_from_previous;
+                    const durationText = duration !== null ? formatEventDuration(duration) : '';
+
+                    html += '<div class="event-item">';
+                    html += '<div class="event-dot" style="background: ' + stageColor + ';"></div>';
+                    html += '<div class="event-line"></div>';
+                    html += '<div class="event-content">';
+
+                    // Header
+                    html += '<div class="event-header">';
+                    html += '<span class="event-stage" style="background: ' + stageColor + ';">' + stageName + '</span>';
+                    if (durationText) {
+                        html += '<span class="event-duration">' + durationText + '</span>';
+                    }
+                    html += '</div>';
+
+                    // Status change
+                    html += '<div class="event-status-change">';
+                    if (event.old_status && event.new_status) {
+                        html += '<span class="old-status">' + event.old_status + '</span>';
+                        html += '<span class="status-arrow">←</span>';
+                        html += '<span class="new-status">' + event.new_status + '</span>';
+                    } else if (event.new_status) {
+                        html += '<span class="new-status">' + event.new_status + '</span>';
+                    }
+                    html += '</div>';
+
+                    // Notes (reason)
+                    if (event.notes) {
+                        html += '<div class="event-notes">';
+                        html += '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>';
+                        html += '<span>' + event.notes + '</span>';
+                        html += '</div>';
+                    }
+
+                    // Footer (employee & time)
+                    html += '<div class="event-footer">';
+                    html += '<span class="event-employee">';
+                    html += '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>';
+                    html += ' ' + (event.employee_name || 'النظام');
+                    html += '</span>';
+                    html += '<span class="event-time">' + formatEventTime(event.event_time) + '</span>';
+                    html += '</div>';
+
+                    html += '</div>'; // event-content
+                    html += '</div>'; // event-item
+                });
+
+                html += '</div>';
+                container.innerHTML = html;
+            } else {
+                container.innerHTML = '<div class="no-events">لا توجد أحداث مسجلة</div>';
+            }
+        } catch (error) {
+            container.innerHTML = '<div class="error-events">خطأ في تحميل الأحداث</div>';
+        }
+    } else {
+        container.style.display = 'none';
+    }
+}
+
+// تنسيق مدة الحدث
+function formatEventDuration(minutes) {
+    if (minutes === null || minutes === undefined) return '';
+    if (minutes === 0) return 'فوري';
+    if (minutes < 60) return minutes + ' دقيقة';
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    if (hours < 24) {
+        return hours + ' ساعة' + (mins > 0 ? ' و ' + mins + ' دقيقة' : '');
+    }
+    const days = Math.floor(hours / 24);
+    const remainingHours = hours % 24;
+    return days + ' يوم' + (remainingHours > 0 ? ' و ' + remainingHours + ' ساعة' : '');
+}
+
+// تنسيق وقت الحدث
+function formatEventTime(datetime) {
+    if (!datetime) return '';
+    const date = new Date(datetime);
+    const options = {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    };
+    return date.toLocaleDateString('ar-SA', options);
+}
+
 // رفع مرفق لمعاملة موجودة
 async function uploadAttachment(transactionId) {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.pdf,application/pdf';
-    
-    input.onchange = async function() {
+
+    input.onchange = async function () {
         if (input.files && input.files[0]) {
             const file = input.files[0];
-            
+
             if (file.type !== 'application/pdf') {
                 showToast('يرجى اختيار ملف PDF فقط', 'error');
                 return;
             }
-            
+
             if (file.size > 10 * 1024 * 1024) {
                 showToast('حجم الملف كبير جداً', 'error');
                 return;
             }
-            
+
             const formData = new FormData();
             formData.append('transaction_id', transactionId);
             formData.append('attachment', file);
-            
+
             try {
                 const res = await fetch('api/?action=upload_attachment', {
                     method: 'POST',
                     body: formData
                 });
-                
+
                 const result = await res.json();
-                
+
                 if (result.success) {
                     showToast('تم رفع الملف بنجاح', 'success');
                     loadTransactions();
@@ -805,23 +967,23 @@ async function uploadAttachment(transactionId) {
             }
         }
     };
-    
+
     input.click();
 }
 
 // حذف مرفق
 async function deleteAttachment(transactionId) {
     if (!confirm('هل أنت متأكد من حذف المرفق؟')) return;
-    
+
     try {
         const res = await fetch('api/?action=delete_attachment', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ transaction_id: transactionId })
         });
-        
+
         const result = await res.json();
-        
+
         if (result.success) {
             showToast('تم حذف المرفق', 'success');
             loadTransactions();
@@ -837,21 +999,21 @@ async function deleteAttachment(transactionId) {
 async function editTransaction(id) {
     const tx = App.transactions.find(t => t.id == id);
     if (!tx) return;
-    
+
     App.editingTransaction = tx;
-    
+
     // الحصول على صلاحية المستخدم
     const userRole = (typeof currentUser !== 'undefined') ? currentUser.role : '';
-    
+
     try {
         const employeesRes = await fetch('api/?action=employees');
         const employees = await employeesRes.json();
-        
+
         let receiversOptions = '';
         let budgetOptions = '';
         let paymentOptions = '';
         let invoiceOptions = '';
-        
+
         if (employees.success) {
             employees.data.forEach(e => {
                 if (e.role === 'receiver') {
@@ -868,22 +1030,22 @@ async function editTransaction(id) {
                 }
             });
         }
-        
+
         // تحديد التبويبات المرئية حسب الصلاحية
         const showReceiving = (userRole === 'receiver' || userRole === '' || userRole === 'admin');
         const showBudget = (userRole === 'budget' || userRole === '' || userRole === 'admin');
         const showPayment = (userRole === 'payment' || userRole === '' || userRole === 'admin');
         const showInvoice = (userRole === 'invoice' || userRole === '' || userRole === 'admin');
-        
+
         // تحديد التبويب النشط الأول
         let activeTab = '';
         if (showReceiving) activeTab = 'receiving';
         else if (showBudget) activeTab = 'budget';
         else if (showPayment) activeTab = 'payment';
         else if (showInvoice) activeTab = 'invoice';
-        
+
         DOM.modalTitle.textContent = 'تعديل المعاملة ' + tx.transaction_number;
-        
+
         // بناء التبويبات
         let tabsHtml = '<div class="modal-tabs">';
         if (showReceiving) tabsHtml += '<button type="button" class="modal-tab green ' + (activeTab === 'receiving' ? 'active' : '') + '" onclick="switchModalTab(\'receiving\', this)">الاستلام</button>';
@@ -891,28 +1053,19 @@ async function editTransaction(id) {
         if (showPayment) tabsHtml += '<button type="button" class="modal-tab orange ' + (activeTab === 'payment' ? 'active' : '') + '" onclick="switchModalTab(\'payment\', this)">الدفع</button>';
         if (showInvoice) tabsHtml += '<button type="button" class="modal-tab purple ' + (activeTab === 'invoice' ? 'active' : '') + '" onclick="switchModalTab(\'invoice\', this)">الفوترة</button>';
         tabsHtml += '</div>';
-        
+
         // بناء المحتوى
         let contentHtml = '';
-        
+
         // تبويب الاستلام
         if (showReceiving) {
             contentHtml += `
             <div id="tab-receiving" class="tab-content" style="${activeTab === 'receiving' ? '' : 'display: none;'}">
                 <form id="receivingForm" onsubmit="submitUpdateForm(event, 'receiving')">
                     <input type="hidden" name="transaction_id" value="${tx.id}">
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label class="form-label">الموظف</label>
-                            <select class="form-select" name="employee_id">
-                                <option value="">اختر الموظف</option>
-                                ${receiversOptions}
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">تاريخ الاستلام</label>
-                            <input type="date" class="form-input" name="date" value="${tx.receive_date || ''}">
-                        </div>
+                    <div class="auto-employee-info">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                        <span>سيتم تسجيل التحديث باسمك وبالوقت الحالي تلقائياً</span>
                     </div>
                     <div class="form-group">
                         <label class="form-label">الحالة</label>
@@ -934,25 +1087,16 @@ async function editTransaction(id) {
                 </form>
             </div>`;
         }
-        
+
         // تبويب الموازنة
         if (showBudget) {
             contentHtml += `
             <div id="tab-budget" class="tab-content" style="${activeTab === 'budget' ? '' : 'display: none;'}">
                 <form id="budgetForm" onsubmit="submitUpdateForm(event, 'budget')">
                     <input type="hidden" name="transaction_id" value="${tx.id}">
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label class="form-label">الموظف</label>
-                            <select class="form-select" name="employee_id">
-                                <option value="">اختر الموظف</option>
-                                ${budgetOptions}
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">تاريخ المراجعة</label>
-                            <input type="date" class="form-input" name="date" value="${tx.budget_date || ''}">
-                        </div>
+                    <div class="auto-employee-info">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                        <span>سيتم تسجيل التحديث باسمك وبالوقت الحالي تلقائياً</span>
                     </div>
                     <div class="form-row">
                         <div class="form-group">
@@ -980,25 +1124,16 @@ async function editTransaction(id) {
                 </form>
             </div>`;
         }
-        
+
         // تبويب الدفع
         if (showPayment) {
             contentHtml += `
             <div id="tab-payment" class="tab-content" style="${activeTab === 'payment' ? '' : 'display: none;'}">
                 <form id="paymentForm" onsubmit="submitUpdateForm(event, 'payment')">
                     <input type="hidden" name="transaction_id" value="${tx.id}">
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label class="form-label">الموظف</label>
-                            <select class="form-select" name="employee_id">
-                                <option value="">اختر الموظف</option>
-                                ${paymentOptions}
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">تاريخ الدفع</label>
-                            <input type="date" class="form-input" name="date" value="${tx.payment_date || ''}">
-                        </div>
+                    <div class="auto-employee-info">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                        <span>سيتم تسجيل التحديث باسمك وبالوقت الحالي تلقائياً</span>
                     </div>
                     <div class="form-row">
                         <div class="form-group">
@@ -1036,30 +1171,21 @@ async function editTransaction(id) {
                 </form>
             </div>`;
         }
-        
+
         // تبويب الفوترة
         if (showInvoice) {
             contentHtml += `
             <div id="tab-invoice" class="tab-content" style="${activeTab === 'invoice' ? '' : 'display: none;'}">
                 <form id="invoiceForm" onsubmit="submitUpdateForm(event, 'invoice')">
                     <input type="hidden" name="transaction_id" value="${tx.id}">
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label class="form-label">الموظف</label>
-                            <select class="form-select" name="employee_id">
-                                <option value="">اختر الموظف</option>
-                                ${invoiceOptions}
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">رقم الفاتورة</label>
-                            <input type="text" class="form-input" name="invoice_number" value="${tx.invoice_number || ''}" placeholder="INV-XXXX">
-                        </div>
+                    <div class="auto-employee-info">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                        <span>سيتم تسجيل التحديث باسمك وبالوقت الحالي تلقائياً</span>
                     </div>
                     <div class="form-row">
                         <div class="form-group">
-                            <label class="form-label">تاريخ الفاتورة</label>
-                            <input type="date" class="form-input" name="date" value="${tx.invoice_date || ''}">
+                            <label class="form-label">رقم الفاتورة</label>
+                            <input type="text" class="form-input" name="invoice_number" value="${tx.invoice_number || ''}" placeholder="INV-XXXX">
                         </div>
                         <div class="form-group">
                             <label class="form-label">الحالة</label>
@@ -1092,9 +1218,9 @@ async function editTransaction(id) {
                 </form>
             </div>`;
         }
-        
+
         DOM.modalBody.innerHTML = tabsHtml + contentHtml;
-        
+
         openModal();
     } catch (error) {
         showToast('خطأ في تحميل البيانات', 'error');
@@ -1105,7 +1231,7 @@ async function editTransaction(id) {
 function switchModalTab(tab, btn) {
     document.querySelectorAll('.modal-tab').forEach(t => t.classList.remove('active'));
     document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
-    
+
     btn.classList.add('active');
     document.getElementById('tab-' + tab).style.display = 'block';
 }
@@ -1113,27 +1239,27 @@ function switchModalTab(tab, btn) {
 // إرسال نموذج التحديث
 async function submitUpdateForm(e, type) {
     e.preventDefault();
-    
+
     const form = e.target;
     const formData = new FormData(form);
     const data = Object.fromEntries(formData.entries());
-    
+
     const actionMap = {
         'receiving': 'update_receiving',
         'budget': 'update_budget',
         'payment': 'update_payment',
         'invoice': 'update_invoice'
     };
-    
+
     try {
         const res = await fetch('api/?action=' + actionMap[type], {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data)
         });
-        
+
         const result = await res.json();
-        
+
         if (result.success) {
             showToast('تم الحفظ بنجاح', 'success');
             closeModal();
@@ -1149,7 +1275,7 @@ async function submitUpdateForm(e, type) {
 // عرض معاملة
 function viewTransaction(id) {
     switchTab('transactions');
-    setTimeout(function() {
+    setTimeout(function () {
         App.expandedRow = id;
         const tbody = document.getElementById('transactionsBody');
         if (tbody) {
@@ -1161,13 +1287,13 @@ function viewTransaction(id) {
 // ========== دوال مساعدة ==========
 function getStatusBadge(status) {
     if (!status) return '<span class="badge badge-slate"><span class="badge-dot"></span>—</span>';
-    
+
     let color = 'slate';
     if (status === 'مستلم' || status === 'تم الدفع' || status === 'صدرت الفاتورة' || status === 'معتمد') color = 'green';
     else if (status === 'قيد المراجعة' || status === 'بدون فاتورة') color = 'amber';
     else if (status === 'قيد المعالجة' || status === 'قيد الإصدار') color = 'blue';
     else if (status === 'مرفوض' || status === 'ملغاة') color = 'red';
-    
+
     return '<span class="badge badge-' + color + '"><span class="badge-dot"></span>' + status + '</span>';
 }
 
@@ -1175,7 +1301,7 @@ function getStatusBadge(status) {
 function toggleTheme() {
     const html = document.documentElement;
     const currentTheme = html.getAttribute('data-theme');
-    
+
     if (currentTheme === 'light') {
         html.removeAttribute('data-theme');
         localStorage.setItem('theme', 'dark');
@@ -1197,14 +1323,14 @@ function loadSavedTheme() {
 }
 
 // تحميل الوضع عند بدء الصفحة
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
     loadSavedTheme();
 });
 
 // تسجيل الخروج
 async function logout() {
     if (!confirm('هل تريد تسجيل الخروج؟')) return;
-    
+
     try {
         await fetch('api/auth.php?action=logout', { method: 'POST' });
         window.location.href = 'login.php';
@@ -1215,14 +1341,14 @@ async function logout() {
 
 function getAlertBadge(alert) {
     if (!alert) return '<span class="badge badge-slate"><span class="badge-dot"></span>—</span>';
-    
+
     let color = 'slate';
     let icon = '⏳';
-    
+
     if (alert === 'عاجل') { color = 'red'; icon = '🔴'; }
     else if (alert === 'متابعة') { color = 'amber'; icon = '⚠️'; }
     else if (alert === 'مكتمل') { color = 'green'; icon = '✅'; }
-    
+
     return '<span class="badge badge-' + color + '">' + icon + ' ' + alert + '</span>';
 }
 
@@ -1232,6 +1358,18 @@ function formatMoney(amount) {
 
 function formatNumber(amount) {
     return new Intl.NumberFormat('en-US').format(amount || 0);
+}
+
+function formatCreationTime(datetime) {
+    if (!datetime) return '—';
+    try {
+        const date = new Date(datetime);
+        const dateStr = date.toLocaleDateString('ar-SA', { year: 'numeric', month: 'short', day: 'numeric' });
+        const timeStr = date.toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
+        return dateStr + ' - ' + timeStr;
+    } catch (e) {
+        return datetime;
+    }
 }
 
 function showLoading() {
@@ -1253,8 +1391,8 @@ function showToast(message, type) {
     type = type || 'success';
     DOM.toast.textContent = message;
     DOM.toast.className = 'toast ' + type + ' show';
-    
-    setTimeout(function() {
+
+    setTimeout(function () {
         DOM.toast.classList.remove('show');
     }, 3000);
 }
@@ -1318,7 +1456,7 @@ async function loadSettingsPage() {
             </div>
         </div>
     `;
-    
+
     // تحميل الموظفين افتراضياً
     await loadSettingsEmployees();
     showSettingsSection('employees', document.querySelector('.settings-nav-btn'));
@@ -1327,13 +1465,13 @@ async function loadSettingsPage() {
 // عرض قسم في الإعدادات
 function showSettingsSection(section, btn) {
     // تحديث الأزرار
-    document.querySelectorAll('.settings-nav-btn').forEach(function(b) {
+    document.querySelectorAll('.settings-nav-btn').forEach(function (b) {
         b.classList.remove('active');
     });
     if (btn) btn.classList.add('active');
-    
+
     var content = document.getElementById('settingsContent');
-    
+
     if (section === 'employees') {
         renderEmployeesSection();
     } else if (section === 'performance') {
@@ -1362,7 +1500,7 @@ async function loadSettingsEmployees() {
 
 function renderEmployeesSection() {
     var content = document.getElementById('settingsContent');
-    
+
     var html = '<div class="settings-section-header">';
     html += '<h2>إدارة الموظفين</h2>';
     html += '<button class="btn btn-primary" onclick="openAddEmployeeModal()">';
@@ -1370,7 +1508,7 @@ function renderEmployeesSection() {
     html += ' إضافة موظف';
     html += '</button>';
     html += '</div>';
-    
+
     // فلتر الأقسام
     html += '<div class="filter-tabs">';
     html += '<button class="filter-tab ' + (SettingsData.currentFilter === 'all' ? 'active' : '') + '" onclick="filterEmployees(\'all\', this)">الكل</button>';
@@ -1380,27 +1518,28 @@ function renderEmployeesSection() {
     html += '<button class="filter-tab ' + (SettingsData.currentFilter === 'payment' ? 'active' : '') + '" onclick="filterEmployees(\'payment\', this)">الدفع</button>';
     html += '<button class="filter-tab ' + (SettingsData.currentFilter === 'invoice' ? 'active' : '') + '" onclick="filterEmployees(\'invoice\', this)">الفوترة</button>';
     html += '</div>';
-    
+
     // بطاقات الموظفين
     html += '<div class="employees-grid">';
-    
+
     var filtered = SettingsData.employees;
     if (SettingsData.currentFilter !== 'all') {
-        filtered = SettingsData.employees.filter(function(e) {
+        filtered = SettingsData.employees.filter(function (e) {
             return e.role === SettingsData.currentFilter;
         });
     }
-    
+
     if (filtered.length === 0) {
         html += '<div class="empty-state">لا يوجد موظفين</div>';
     } else {
         for (var i = 0; i < filtered.length; i++) {
             var emp = filtered[i];
             html += '<div class="employee-card">';
-            html += '<div class="employee-avatar">' + emp.name.charAt(0) + '</div>';
+            html += '<div class="employee-avatar">' + emp.employee_number + '</div>';
             html += '<div class="employee-info">';
             html += '<h4>' + emp.name + '</h4>';
             html += '<span class="role-badge role-' + emp.role + '">' + getRoleName(emp.role) + '</span>';
+
             html += '<p class="employee-contact">' + (emp.email || '—') + '</p>';
             html += '<p class="employee-contact">' + (emp.phone || '—') + '</p>';
             html += '</div>';
@@ -1411,7 +1550,7 @@ function renderEmployeesSection() {
             html += '</div>';
         }
     }
-    
+
     html += '</div>';
     content.innerHTML = html;
 }
@@ -1429,7 +1568,7 @@ function getRoleName(role) {
 
 function filterEmployees(role, btn) {
     SettingsData.currentFilter = role;
-    document.querySelectorAll('.filter-tab').forEach(function(t) {
+    document.querySelectorAll('.filter-tab').forEach(function (t) {
         t.classList.remove('active');
     });
     btn.classList.add('active');
@@ -1474,9 +1613,9 @@ function openAddEmployeeModal() {
 }
 
 function editEmployee(id) {
-    var emp = SettingsData.employees.find(function(e) { return e.id == id; });
+    var emp = SettingsData.employees.find(function (e) { return e.id == id; });
     if (!emp) return;
-    
+
     DOM.modalTitle.textContent = 'تعديل موظف';
     DOM.modalBody.innerHTML = `
         <form id="employeeForm" onsubmit="saveEmployee(event)">
@@ -1514,7 +1653,7 @@ function editEmployee(id) {
 
 async function saveEmployee(e) {
     e.preventDefault();
-    
+
     var id = document.getElementById('empId').value;
     var data = {
         name: document.getElementById('empName').value,
@@ -1522,20 +1661,20 @@ async function saveEmployee(e) {
         phone: document.getElementById('empPhone').value,
         role: document.getElementById('empRole').value
     };
-    
+
     if (id) data.id = id;
-    
+
     var action = id ? 'update_employee' : 'add_employee';
-    
+
     try {
         var res = await fetch('api/settings.php?action=' + action, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data)
         });
-        
+
         var result = await res.json();
-        
+
         if (result.success) {
             showToast(id ? 'تم تحديث الموظف' : 'تم إضافة الموظف', 'success');
             closeModal();
@@ -1551,16 +1690,16 @@ async function saveEmployee(e) {
 
 async function deleteEmployee(id, name) {
     if (!confirm('هل أنت متأكد من حذف الموظف "' + name + '"؟')) return;
-    
+
     try {
         var res = await fetch('api/settings.php?action=delete_employee', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ id: id })
         });
-        
+
         var result = await res.json();
-        
+
         if (result.success) {
             showToast('تم حذف الموظف', 'success');
             await loadSettingsEmployees();
@@ -1588,9 +1727,9 @@ async function loadSettingsTypes() {
 
 async function renderTypesSection() {
     await loadSettingsTypes();
-    
+
     var content = document.getElementById('settingsContent');
-    
+
     var html = '<div class="settings-section-header">';
     html += '<h2>أنواع المعاملات</h2>';
     html += '<button class="btn btn-primary" onclick="openAddTypeModal()">';
@@ -1598,9 +1737,9 @@ async function renderTypesSection() {
     html += ' إضافة نوع';
     html += '</button>';
     html += '</div>';
-    
+
     html += '<div class="types-grid">';
-    
+
     if (SettingsData.types.length === 0) {
         html += '<div class="empty-state">لا يوجد أنواع</div>';
     } else {
@@ -1619,7 +1758,7 @@ async function renderTypesSection() {
             html += '</div>';
         }
     }
-    
+
     html += '</div>';
     content.innerHTML = html;
 }
@@ -1647,9 +1786,9 @@ function openAddTypeModal() {
 }
 
 function editType(id) {
-    var type = SettingsData.types.find(function(t) { return t.id == id; });
+    var type = SettingsData.types.find(function (t) { return t.id == id; });
     if (!type) return;
-    
+
     DOM.modalTitle.textContent = 'تعديل نوع المعاملة';
     DOM.modalBody.innerHTML = `
         <form id="typeForm" onsubmit="saveType(event)">
@@ -1673,26 +1812,26 @@ function editType(id) {
 
 async function saveType(e) {
     e.preventDefault();
-    
+
     var id = document.getElementById('typeId').value;
     var data = {
         name: document.getElementById('typeName').value,
         description: document.getElementById('typeDesc').value
     };
-    
+
     if (id) data.id = id;
-    
+
     var action = id ? 'update_type' : 'add_type';
-    
+
     try {
         var res = await fetch('api/settings.php?action=' + action, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data)
         });
-        
+
         var result = await res.json();
-        
+
         if (result.success) {
             showToast(id ? 'تم تحديث النوع' : 'تم إضافة النوع', 'success');
             closeModal();
@@ -1707,16 +1846,16 @@ async function saveType(e) {
 
 async function deleteType(id, name) {
     if (!confirm('هل أنت متأكد من حذف النوع "' + name + '"؟')) return;
-    
+
     try {
         var res = await fetch('api/settings.php?action=delete_type', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ id: id })
         });
-        
+
         var result = await res.json();
-        
+
         if (result.success) {
             showToast('تم حذف النوع', 'success');
             renderTypesSection();
@@ -1731,7 +1870,7 @@ async function deleteType(id, name) {
 // ========== قسم جميع المعاملات ==========
 function renderAllTransactionsSection() {
     var content = document.getElementById('settingsContent');
-    
+
     var html = '<div class="settings-section-header">';
     html += '<h2>جميع المعاملات</h2>';
     html += '<div class="header-actions">';
@@ -1739,7 +1878,7 @@ function renderAllTransactionsSection() {
     html += '<button class="btn btn-secondary" onclick="exportTransactions()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> تصدير</button>';
     html += '</div>';
     html += '</div>';
-    
+
     html += '<div class="table-container"><table class="settings-table" id="settingsTxTable">';
     html += '<thead><tr>';
     html += '<th>رقم المعاملة</th>';
@@ -1751,7 +1890,7 @@ function renderAllTransactionsSection() {
     html += '<th>الإجراءات</th>';
     html += '</tr></thead>';
     html += '<tbody id="settingsTxBody">';
-    
+
     if (App.transactions.length === 0) {
         html += '<tr><td colspan="7" style="text-align: center; padding: 2rem;">لا توجد معاملات</td></tr>';
     } else {
@@ -1771,7 +1910,7 @@ function renderAllTransactionsSection() {
             html += '</tr>';
         }
     }
-    
+
     html += '</tbody></table></div>';
     content.innerHTML = html;
 }
@@ -1779,13 +1918,13 @@ function renderAllTransactionsSection() {
 function filterSettingsTransactions() {
     var search = document.getElementById('txSearchInput').value.toLowerCase();
     var tbody = document.getElementById('settingsTxBody');
-    
-    var filtered = App.transactions.filter(function(tx) {
+
+    var filtered = App.transactions.filter(function (tx) {
         return tx.transaction_number.toLowerCase().indexOf(search) > -1 ||
-               tx.description.toLowerCase().indexOf(search) > -1 ||
-               (tx.transaction_type && tx.transaction_type.toLowerCase().indexOf(search) > -1);
+            tx.description.toLowerCase().indexOf(search) > -1 ||
+            (tx.transaction_type && tx.transaction_type.toLowerCase().indexOf(search) > -1);
     });
-    
+
     var html = '';
     if (filtered.length === 0) {
         html = '<tr><td colspan="7" style="text-align: center; padding: 2rem;">لا توجد نتائج</td></tr>';
@@ -1806,22 +1945,22 @@ function filterSettingsTransactions() {
             html += '</tr>';
         }
     }
-    
+
     tbody.innerHTML = html;
 }
 
 async function deleteSettingsTransaction(id, number) {
     if (!confirm('هل أنت متأكد من حذف المعاملة "' + number + '"؟')) return;
-    
+
     try {
         var res = await fetch('api/settings.php?action=delete_transaction', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ id: id })
         });
-        
+
         var result = await res.json();
-        
+
         if (result.success) {
             showToast('تم حذف المعاملة', 'success');
             await loadTransactions();
@@ -1841,73 +1980,380 @@ function exportTransactions() {
 // ========== قسم أداء الموظفين ==========
 async function renderPerformanceSection() {
     var content = document.getElementById('settingsContent');
-    
-    var html = '<div class="settings-section-header">';
-    html += '<h2>⏱️ أداء الموظفين</h2>';
-    html += '<p style="color: var(--text-muted); margin-top: 0.5rem;">متابعة أوقات إنجاز المعاملات لكل موظف</p>';
-    html += '</div>';
-    
-    // فلاتر
-    html += '<div class="performance-filters card" style="padding: 1.5rem; margin-bottom: 1.5rem;">';
-    html += '<div class="filter-row" style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-end;">';
-    
-    // فلتر الموظف
-    html += '<div class="form-group" style="flex: 1; min-width: 200px; margin: 0;">';
-    html += '<label class="form-label">الموظف</label>';
-    html += '<select class="form-select" id="perfEmployeeFilter" onchange="loadPerformanceData()">';
-    html += '<option value="">جميع الموظفين</option>';
-    if (SettingsData.employees) {
-        SettingsData.employees.forEach(function(emp) {
-            html += '<option value="' + emp.id + '">' + emp.name + ' (' + getRoleName(emp.role) + ')</option>';
-        });
-    }
-    html += '</select>';
-    html += '</div>';
-    
-    // فلتر المرحلة
-    html += '<div class="form-group" style="flex: 1; min-width: 150px; margin: 0;">';
-    html += '<label class="form-label">المرحلة</label>';
-    html += '<select class="form-select" id="perfStageFilter" onchange="loadPerformanceData()">';
-    html += '<option value="">جميع المراحل</option>';
-    html += '<option value="receiving">الاستلام</option>';
-    html += '<option value="budget">الموازنة</option>';
-    html += '<option value="payment">الدفع</option>';
-    html += '<option value="invoice">الفوترة</option>';
-    html += '</select>';
-    html += '</div>';
-    
-    // فلتر التاريخ من
-    html += '<div class="form-group" style="flex: 1; min-width: 150px; margin: 0;">';
-    html += '<label class="form-label">من تاريخ</label>';
-    html += '<input type="date" class="form-input" id="perfDateFrom" onchange="loadPerformanceData()">';
-    html += '</div>';
-    
-    // فلتر التاريخ إلى
-    html += '<div class="form-group" style="flex: 1; min-width: 150px; margin: 0;">';
-    html += '<label class="form-label">إلى تاريخ</label>';
-    html += '<input type="date" class="form-input" id="perfDateTo" onchange="loadPerformanceData()">';
-    html += '</div>';
-    
-    html += '</div>';
-    html += '</div>';
-    
-    // ملخص الأداء
-    html += '<div id="performanceSummary" class="performance-summary" style="margin-bottom: 1.5rem;"></div>';
-    
-    // جدول التفاصيل
-    html += '<div class="card">';
-    html += '<div class="card-header">';
-    html += '<span class="card-title">📋 تفاصيل الأوقات</span>';
-    html += '</div>';
-    html += '<div class="card-body" style="padding: 0;">';
-    html += '<div id="performanceTable" style="overflow-x: auto;"></div>';
-    html += '</div>';
-    html += '</div>';
-    
+
+    var html = `
+    <div class="performance-page">
+        <!-- Header -->
+        <div class="perf-header">
+            <div class="perf-header-content">
+                <div class="perf-title">
+                    <div class="perf-icon">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <polyline points="12 6 12 12 16 14"></polyline>
+                        </svg>
+                    </div>
+                    <div>
+                        <h1>متابعة الأداء</h1>
+                        <p>تحليل أوقات إنجاز المعاملات وأداء الموظفين</p>
+                    </div>
+                </div>
+                <div class="perf-header-stats" id="perfHeaderStats">
+                    <div class="header-stat">
+                        <span class="stat-number" id="totalEventsToday">-</span>
+                        <span class="stat-label">أحداث اليوم</span>
+                    </div>
+                    <div class="header-stat">
+                        <span class="stat-number" id="avgTimeToday">-</span>
+                        <span class="stat-label">متوسط الوقت</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- تبويبات -->
+        <div class="perf-tabs">
+            <button class="perf-tab active" onclick="switchPerfTab('overview')">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="3" width="7" height="7"></rect>
+                    <rect x="14" y="3" width="7" height="7"></rect>
+                    <rect x="14" y="14" width="7" height="7"></rect>
+                    <rect x="3" y="14" width="7" height="7"></rect>
+                </svg>
+                نظرة عامة
+            </button>
+            <button class="perf-tab" onclick="switchPerfTab('timeline')">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="20" x2="12" y2="10"></line>
+                    <line x1="18" y1="20" x2="18" y2="4"></line>
+                    <line x1="6" y1="20" x2="6" y2="16"></line>
+                </svg>
+                سجل الأحداث
+            </button>
+            <button class="perf-tab" onclick="switchPerfTab('analytics')">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="20" x2="18" y2="10"></line>
+                    <line x1="12" y1="20" x2="12" y2="4"></line>
+                    <line x1="6" y1="20" x2="6" y2="14"></line>
+                </svg>
+                تحليلات
+            </button>
+        </div>
+
+        <!-- الفلاتر -->
+        <div class="perf-filters">
+            <div class="filter-group">
+                <label>الموظف</label>
+                <select id="perfEmployeeFilter" onchange="loadPerformanceData()">
+                    <option value="">جميع الموظفين</option>
+                    ${SettingsData.employees ? SettingsData.employees.map(emp =>
+        `<option value="${emp.id}">${emp.name}</option>`
+    ).join('') : ''}
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>المرحلة</label>
+                <select id="perfStageFilter" onchange="loadPerformanceData()">
+                    <option value="">جميع المراحل</option>
+                    <option value="creation">الإنشاء</option>
+                    <option value="receiving">الاستلام</option>
+                    <option value="budget">الموازنة</option>
+                    <option value="payment">الدفع</option>
+                    <option value="invoice">الفوترة</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>من تاريخ</label>
+                <input type="date" id="perfDateFrom" onchange="loadPerformanceData()">
+            </div>
+            <div class="filter-group">
+                <label>إلى تاريخ</label>
+                <input type="date" id="perfDateTo" onchange="loadPerformanceData()">
+            </div>
+            <button class="filter-reset" onclick="resetPerfFilters()">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+                    <path d="M3 3v5h5"></path>
+                </svg>
+                إعادة تعيين
+            </button>
+        </div>
+
+        <!-- المحتوى -->
+        <div class="perf-content">
+            <!-- نظرة عامة -->
+            <div id="perfTabOverview" class="perf-tab-content active">
+                <!-- بطاقات الموظفين -->
+                <div id="performanceSummary" class="employee-cards-grid"></div>
+                
+                <!-- جدول التفاصيل -->
+                <div class="perf-section">
+                    <div class="section-header">
+                        <h3>
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                <polyline points="14 2 14 8 20 8"></polyline>
+                                <line x1="16" y1="13" x2="8" y2="13"></line>
+                                <line x1="16" y1="17" x2="8" y2="17"></line>
+                            </svg>
+                            تفاصيل الأوقات
+                        </h3>
+                    </div>
+                    <div id="performanceTable" class="perf-table-container"></div>
+                </div>
+            </div>
+
+            <!-- سجل الأحداث -->
+            <div id="perfTabTimeline" class="perf-tab-content">
+                <div class="perf-section">
+                    <div class="section-header">
+                        <h3>
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <polyline points="12 6 12 12 16 14"></polyline>
+                            </svg>
+                            سجل جميع الأحداث والتغييرات
+                        </h3>
+                        <span class="events-count" id="eventsCount">-</span>
+                    </div>
+                    <div id="eventsTimeline" class="events-timeline-container"></div>
+                </div>
+            </div>
+
+            <!-- تحليلات -->
+            <div id="perfTabAnalytics" class="perf-tab-content">
+                <div class="analytics-grid">
+                    <div class="analytics-card">
+                        <h4>توزيع الأحداث حسب المرحلة</h4>
+                        <div id="stageDistribution" class="chart-container"></div>
+                    </div>
+                    <div class="analytics-card">
+                        <h4>أداء الموظفين</h4>
+                        <div id="employeeRanking" class="ranking-list"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>`;
+
     content.innerHTML = html;
-    
+
     // تحميل البيانات
     loadPerformanceData();
+    loadEventsTimeline();
+}
+
+// تبديل التبويبات
+function switchPerfTab(tab) {
+    // إزالة active من جميع التبويبات
+    document.querySelectorAll('.perf-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.perf-tab-content').forEach(c => c.classList.remove('active'));
+
+    // تفعيل التبويب المطلوب
+    event.target.closest('.perf-tab').classList.add('active');
+    document.getElementById('perfTab' + tab.charAt(0).toUpperCase() + tab.slice(1)).classList.add('active');
+
+    // تحميل البيانات حسب التبويب
+    if (tab === 'timeline') {
+        loadEventsTimeline();
+    } else if (tab === 'analytics') {
+        loadAnalytics();
+    }
+}
+
+// إعادة تعيين الفلاتر
+function resetPerfFilters() {
+    document.getElementById('perfEmployeeFilter').value = '';
+    document.getElementById('perfStageFilter').value = '';
+    document.getElementById('perfDateFrom').value = '';
+    document.getElementById('perfDateTo').value = '';
+    loadPerformanceData();
+    loadEventsTimeline();
+}
+
+// تحميل سجل الأحداث
+async function loadEventsTimeline() {
+    var container = document.getElementById('eventsTimeline');
+    var countEl = document.getElementById('eventsCount');
+    if (!container) return;
+
+    container.innerHTML = '<div class="loading-spinner">جاري التحميل...</div>';
+
+    try {
+        var employeeId = document.getElementById('perfEmployeeFilter')?.value || '';
+        var stage = document.getElementById('perfStageFilter')?.value || '';
+
+        var params = new URLSearchParams();
+        params.append('limit', '100');
+        if (employeeId) params.append('employee_id', employeeId);
+        if (stage) params.append('stage', stage);
+
+        var res = await fetch('api/?action=all_events&' + params.toString());
+        var result = await res.json();
+
+        if (result.success && result.data && result.data.length > 0) {
+            if (countEl) countEl.textContent = result.data.length + ' حدث';
+
+            var html = '<div class="timeline-list">';
+
+            var stageInfo = {
+                'creation': { name: 'الإنشاء', color: '#4dabf7', icon: '➕' },
+                'receiving': { name: 'الاستلام', color: '#69db7c', icon: '📥' },
+                'budget': { name: 'الموازنة', color: '#3bc9db', icon: '💰' },
+                'payment': { name: 'الدفع', color: '#ffa94d', icon: '💳' },
+                'invoice': { name: 'الفوترة', color: '#b197fc', icon: '🧾' }
+            };
+
+            result.data.forEach(function (event) {
+                var info = stageInfo[event.stage] || { name: event.stage, color: '#888', icon: '📋' };
+                var duration = event.duration_from_previous;
+                var durationClass = duration <= 5 ? 'fast' : (duration <= 30 ? 'normal' : 'slow');
+
+                html += `
+                <div class="timeline-item">
+                    <div class="timeline-dot" style="background: ${info.color};">${info.icon}</div>
+                    <div class="timeline-content">
+                        <div class="timeline-header">
+                            <span class="timeline-tx">${event.transaction_number || '-'}</span>
+                            <span class="timeline-stage" style="background: ${info.color}20; color: ${info.color}; border: 1px solid ${info.color}40;">${info.name}</span>
+                            ${duration !== null ? `<span class="timeline-duration ${durationClass}">${duration} دقيقة</span>` : ''}
+                        </div>
+                        <div class="timeline-status">
+                            ${event.old_status ? `<span class="status-old">${event.old_status}</span><span class="status-arrow">←</span>` : ''}
+                            <span class="status-new">${event.new_status || '-'}</span>
+                        </div>
+                        ${event.notes ? `<div class="timeline-notes"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>${event.notes}</div>` : ''}
+                        <div class="timeline-footer">
+                            <span class="timeline-employee">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                                ${event.employee_name || 'النظام'}
+                            </span>
+                            <span class="timeline-time">${formatEventDateTime(event.event_time)}</span>
+                        </div>
+                    </div>
+                </div>`;
+            });
+
+            html += '</div>';
+            container.innerHTML = html;
+        } else {
+            if (countEl) countEl.textContent = '0 حدث';
+            container.innerHTML = '<div class="empty-state"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg><p>لا توجد أحداث مسجلة</p></div>';
+        }
+    } catch (err) {
+        container.innerHTML = '<div class="error-state">خطأ في تحميل الأحداث</div>';
+    }
+}
+
+// تحميل التحليلات
+async function loadAnalytics() {
+    var stageContainer = document.getElementById('stageDistribution');
+    var rankingContainer = document.getElementById('employeeRanking');
+
+    if (!stageContainer || !rankingContainer) return;
+
+    try {
+        var res = await fetch('api/?action=all_events&limit=500');
+        var result = await res.json();
+
+        if (result.success && result.data) {
+            // توزيع حسب المرحلة
+            var stageCounts = {};
+            var employeeStats = {};
+
+            result.data.forEach(function (event) {
+                // عدد حسب المرحلة
+                stageCounts[event.stage] = (stageCounts[event.stage] || 0) + 1;
+
+                // إحصائيات الموظفين
+                if (event.employee_name) {
+                    if (!employeeStats[event.employee_name]) {
+                        employeeStats[event.employee_name] = { count: 0, totalTime: 0 };
+                    }
+                    employeeStats[event.employee_name].count++;
+                    if (event.duration_from_previous) {
+                        employeeStats[event.employee_name].totalTime += event.duration_from_previous;
+                    }
+                }
+            });
+
+            // عرض توزيع المراحل
+            var stageInfo = {
+                'creation': { name: 'الإنشاء', color: '#4dabf7' },
+                'receiving': { name: 'الاستلام', color: '#69db7c' },
+                'budget': { name: 'الموازنة', color: '#3bc9db' },
+                'payment': { name: 'الدفع', color: '#ffa94d' },
+                'invoice': { name: 'الفوترة', color: '#b197fc' }
+            };
+
+            var total = Object.values(stageCounts).reduce((a, b) => a + b, 0);
+            var stageHtml = '<div class="stage-bars">';
+
+            Object.keys(stageInfo).forEach(function (stage) {
+                var count = stageCounts[stage] || 0;
+                var percent = total > 0 ? Math.round((count / total) * 100) : 0;
+                var info = stageInfo[stage];
+
+                stageHtml += `
+                <div class="stage-bar-item">
+                    <div class="stage-bar-label">
+                        <span style="color: ${info.color};">${info.name}</span>
+                        <span>${count} (${percent}%)</span>
+                    </div>
+                    <div class="stage-bar-track">
+                        <div class="stage-bar-fill" style="width: ${percent}%; background: ${info.color};"></div>
+                    </div>
+                </div>`;
+            });
+
+            stageHtml += '</div>';
+            stageContainer.innerHTML = stageHtml;
+
+            // ترتيب الموظفين
+            var employees = Object.entries(employeeStats)
+                .map(([name, stats]) => ({
+                    name,
+                    count: stats.count,
+                    avgTime: stats.count > 0 ? Math.round(stats.totalTime / stats.count) : 0
+                }))
+                .sort((a, b) => b.count - a.count);
+
+            var rankHtml = '<div class="ranking-items">';
+            employees.slice(0, 5).forEach(function (emp, index) {
+                var medal = index === 0 ? '🥇' : (index === 1 ? '🥈' : (index === 2 ? '🥉' : ''));
+                rankHtml += `
+                <div class="ranking-item">
+                    <span class="rank-number">${medal || (index + 1)}</span>
+                    <span class="rank-name">${emp.name}</span>
+                    <span class="rank-count">${emp.count} معاملة</span>
+                    <span class="rank-time">${emp.avgTime} د متوسط</span>
+                </div>`;
+            });
+            rankHtml += '</div>';
+            rankingContainer.innerHTML = rankHtml;
+        }
+    } catch (err) {
+        stageContainer.innerHTML = '<div class="error-state">خطأ</div>';
+    }
+}
+
+function formatEventDateTime(datetime) {
+    if (!datetime) return '-';
+    var date = new Date(datetime);
+    var now = new Date();
+    var diff = now - date;
+
+    // إذا كان اليوم
+    if (diff < 86400000 && date.getDate() === now.getDate()) {
+        return 'اليوم ' + date.toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
+    }
+    // إذا كان أمس
+    if (diff < 172800000) {
+        return 'أمس ' + date.toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
+    }
+
+    return date.toLocaleDateString('ar-SA', { month: 'short', day: 'numeric' }) + ' ' +
+        date.toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
 }
 
 async function loadPerformanceData() {
@@ -1915,23 +2361,23 @@ async function loadPerformanceData() {
     var stage = document.getElementById('perfStageFilter')?.value || '';
     var dateFrom = document.getElementById('perfDateFrom')?.value || '';
     var dateTo = document.getElementById('perfDateTo')?.value || '';
-    
+
     // تحميل ملخص الأداء
     try {
         var params = new URLSearchParams();
         if (dateFrom) params.append('date_from', dateFrom);
         if (dateTo) params.append('date_to', dateTo);
-        
+
         var summaryRes = await fetch('api/?action=performance_summary&' + params.toString());
         var summaryData = await summaryRes.json();
-        
+
         if (summaryData.success) {
             renderPerformanceSummary(summaryData.data);
         }
     } catch (e) {
         console.error('Error loading performance summary:', e);
     }
-    
+
     // تحميل التفاصيل
     try {
         var params = new URLSearchParams();
@@ -1939,10 +2385,10 @@ async function loadPerformanceData() {
         if (stage) params.append('stage', stage);
         if (dateFrom) params.append('date_from', dateFrom);
         if (dateTo) params.append('date_to', dateTo);
-        
+
         var detailsRes = await fetch('api/?action=employee_times&' + params.toString());
         var detailsData = await detailsRes.json();
-        
+
         if (detailsData.success) {
             renderPerformanceTable(detailsData.data);
         }
@@ -1954,10 +2400,10 @@ async function loadPerformanceData() {
 function renderPerformanceSummary(data) {
     var container = document.getElementById('performanceSummary');
     if (!container) return;
-    
+
     // تجميع البيانات حسب الموظف
     var employeeStats = {};
-    data.forEach(function(item) {
+    data.forEach(function (item) {
         if (!employeeStats[item.employee_id]) {
             employeeStats[item.employee_id] = {
                 name: item.employee_name,
@@ -1970,62 +2416,75 @@ function renderPerformanceSummary(data) {
         employeeStats[item.employee_id].total += parseInt(item.total_transactions) || 0;
         employeeStats[item.employee_id].totalDuration += parseInt(item.total_duration) || 0;
     });
-    
+
     // حساب المتوسط
-    Object.keys(employeeStats).forEach(function(id) {
+    Object.keys(employeeStats).forEach(function (id) {
         var emp = employeeStats[id];
         emp.avgTime = emp.total > 0 ? Math.round(emp.totalDuration / emp.total) : 0;
     });
-    
-    var html = '<div class="performance-cards" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem;">';
-    
-    Object.keys(employeeStats).forEach(function(id) {
+
+    var roleColors = {
+        'admin': '#667eea',
+        'receiver': '#69db7c',
+        'budget': '#3bc9db',
+        'payment': '#ffa94d',
+        'invoice': '#b197fc'
+    };
+
+    var html = '';
+
+    Object.keys(employeeStats).forEach(function (id) {
         var emp = employeeStats[id];
         var avgClass = emp.avgTime <= 10 ? 'excellent' : (emp.avgTime <= 30 ? 'good' : 'slow');
-        
-        html += '<div class="card performance-card" style="padding: 1.25rem;">';
-        html += '<div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">';
-        html += '<div class="emp-avatar" style="width: 50px; height: 50px; border-radius: 12px; background: var(--btn-primary-bg); color: var(--btn-primary-text); display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 1.2rem;">' + (emp.name ? emp.name.charAt(0) : '؟') + '</div>';
-        html += '<div>';
-        html += '<h4 style="margin: 0; color: var(--text-primary);">' + emp.name + '</h4>';
-        html += '<span class="role-badge role-' + emp.role + '" style="font-size: 0.75rem;">' + getRoleName(emp.role) + '</span>';
-        html += '</div>';
-        html += '</div>';
-        
-        html += '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">';
-        html += '<div style="text-align: center; padding: 0.75rem; background: var(--bg-surface); border-radius: 8px;">';
-        html += '<div style="font-size: 1.5rem; font-weight: 700; color: var(--accent-blue);">' + emp.total + '</div>';
-        html += '<div style="font-size: 0.75rem; color: var(--text-muted);">معاملة منجزة</div>';
-        html += '</div>';
-        html += '<div style="text-align: center; padding: 0.75rem; background: var(--bg-surface); border-radius: 8px;">';
-        html += '<div style="font-size: 1.5rem; font-weight: 700; color: ' + (avgClass === 'excellent' ? 'var(--accent-green)' : avgClass === 'good' ? 'var(--accent-orange)' : 'var(--accent-red)') + ';">' + formatDuration(emp.avgTime) + '</div>';
-        html += '<div style="font-size: 0.75rem; color: var(--text-muted);">متوسط الوقت</div>';
-        html += '</div>';
-        html += '</div>';
-        
-        html += '</div>';
+        var color = roleColors[emp.role] || '#667eea';
+
+        html += `
+        <div class="emp-card">
+            <div class="emp-card-header">
+                <div class="emp-avatar" style="background: ${color}20; color: ${color};">
+                    ${emp.name ? emp.name.charAt(0) : '؟'}
+                </div>
+                <div class="emp-info">
+                    <h4>${emp.name}</h4>
+                    <span class="emp-role" style="background: ${color}20; color: ${color};">${getRoleName(emp.role)}</span>
+                </div>
+            </div>
+            <div class="emp-stats">
+                <div class="emp-stat">
+                    <span class="emp-stat-value">${emp.total}</span>
+                    <span class="emp-stat-label">معاملة</span>
+                </div>
+                <div class="emp-stat">
+                    <span class="emp-stat-value ${avgClass}">${emp.avgTime > 0 ? emp.avgTime + ' د' : '-'}</span>
+                    <span class="emp-stat-label">متوسط الوقت</span>
+                </div>
+            </div>
+        </div>`;
     });
-    
+
     if (Object.keys(employeeStats).length === 0) {
-        html += '<div class="empty-state" style="grid-column: 1 / -1; text-align: center; padding: 3rem; color: var(--text-muted);">';
-        html += '<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom: 1rem; opacity: 0.5;"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>';
-        html += '<p>لا توجد بيانات أداء متاحة</p>';
-        html += '</div>';
+        html = `
+        <div class="empty-state" style="grid-column: 1 / -1;">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <circle cx="12" cy="12" r="10"></circle>
+                <polyline points="12 6 12 12 16 14"></polyline>
+            </svg>
+            <p>لا توجد بيانات أداء متاحة</p>
+        </div>`;
     }
-    
-    html += '</div>';
+
     container.innerHTML = html;
 }
 
 function renderPerformanceTable(data) {
     var container = document.getElementById('performanceTable');
     if (!container) return;
-    
+
     if (!data || data.length === 0) {
         container.innerHTML = '<div style="text-align: center; padding: 3rem; color: var(--text-muted);">لا توجد سجلات</div>';
         return;
     }
-    
+
     var html = '<table class="table" style="width: 100%;">';
     html += '<thead><tr>';
     html += '<th>رقم المعاملة</th>';
@@ -2037,10 +2496,10 @@ function renderPerformanceTable(data) {
     html += '<th>الحالة</th>';
     html += '</tr></thead>';
     html += '<tbody>';
-    
-    data.forEach(function(item) {
+
+    data.forEach(function (item) {
         var durationClass = item.duration_minutes <= 10 ? 'excellent' : (item.duration_minutes <= 30 ? 'good' : 'slow');
-        
+
         html += '<tr>';
         html += '<td><span style="color: var(--accent-blue); font-family: monospace;">' + (item.transaction_number || '-') + '</span></td>';
         html += '<td>' + (item.employee_name || '-') + '</td>';
@@ -2051,13 +2510,14 @@ function renderPerformanceTable(data) {
         html += '<td>' + (item.status || '-') + '</td>';
         html += '</tr>';
     });
-    
+
     html += '</tbody></table>';
     container.innerHTML = html;
 }
 
 function getStageName(stage) {
     var stages = {
+        'creation': 'الإنشاء',
         'receiving': 'الاستلام',
         'budget': 'الموازنة',
         'payment': 'الدفع',
@@ -2080,24 +2540,112 @@ function formatDateTime(datetime) {
     return date.toLocaleDateString('ar-SA') + ' ' + date.toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
 }
 
+// ========== دوال سجل الأحداث ==========
+function toggleEventsLog() {
+    var container = document.getElementById('eventsLogContainer');
+    var icon = document.getElementById('eventsToggleIcon');
+
+    if (container.style.display === 'none') {
+        container.style.display = 'block';
+        icon.textContent = '▲';
+        loadEventsLog();
+    } else {
+        container.style.display = 'none';
+        icon.textContent = '▼';
+    }
+}
+
+async function loadEventsLog() {
+    var container = document.getElementById('eventsLogTable');
+    if (!container) return;
+
+    container.innerHTML = '<div style="text-align: center; padding: 2rem; color: var(--text-muted);">جاري التحميل...</div>';
+
+    try {
+        var res = await fetch('api/?action=all_events');
+        var result = await res.json();
+
+        if (result.success && result.data && result.data.length > 0) {
+            var html = '<table class="table" style="width: 100%;">';
+            html += '<thead><tr>';
+            html += '<th>المعاملة</th>';
+            html += '<th>المرحلة</th>';
+            html += '<th>من</th>';
+            html += '<th>إلى</th>';
+            html += '<th>السبب/الملاحظات</th>';
+            html += '<th>المدة</th>';
+            html += '<th>الموظف</th>';
+            html += '<th>الوقت</th>';
+            html += '</tr></thead><tbody>';
+
+            var stageNames = {
+                'creation': 'الإنشاء',
+                'receiving': 'الاستلام',
+                'budget': 'الموازنة',
+                'payment': 'الدفع',
+                'invoice': 'الفوترة'
+            };
+
+            var stageColors = {
+                'creation': '#4dabf7',
+                'receiving': '#69db7c',
+                'budget': '#3bc9db',
+                'payment': '#ffa94d',
+                'invoice': '#b197fc'
+            };
+
+            result.data.forEach(function (event) {
+                var stageName = stageNames[event.stage] || event.stage;
+                var stageColor = stageColors[event.stage] || '#888';
+                var duration = event.duration_from_previous;
+
+                html += '<tr>';
+                html += '<td><span style="color: var(--accent-blue); font-family: monospace;">' + (event.transaction_number || '-') + '</span></td>';
+                html += '<td><span style="background: ' + stageColor + '; color: #000; padding: 2px 8px; border-radius: 10px; font-size: 0.8rem;">' + stageName + '</span></td>';
+                html += '<td style="color: var(--text-muted); text-decoration: line-through;">' + (event.old_status || '-') + '</td>';
+                html += '<td style="color: var(--accent-green); font-weight: 600;">' + (event.new_status || '-') + '</td>';
+                html += '<td style="max-width: 200px; font-size: 0.85rem;">' + (event.notes || '-') + '</td>';
+                html += '<td>';
+                if (duration !== null && duration !== undefined) {
+                    var durationColor = duration <= 5 ? '#69db7c' : (duration <= 30 ? '#ffa94d' : '#ff6b6b');
+                    html += '<span style="background: ' + durationColor + '; color: #000; padding: 2px 8px; border-radius: 10px; font-size: 0.8rem;">' + duration + ' د</span>';
+                } else {
+                    html += '-';
+                }
+                html += '</td>';
+                html += '<td>' + (event.employee_name || '-') + '</td>';
+                html += '<td style="font-size: 0.8rem; direction: ltr;">' + formatDateTime(event.event_time) + '</td>';
+                html += '</tr>';
+            });
+
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        } else {
+            container.innerHTML = '<div style="text-align: center; padding: 2rem; color: var(--text-muted);">لا توجد أحداث مسجلة</div>';
+        }
+    } catch (err) {
+        container.innerHTML = '<div style="text-align: center; padding: 2rem; color: var(--accent-red);">خطأ في تحميل الأحداث</div>';
+    }
+}
+
 // ========== قسم النظام ==========
 async function renderSystemSection() {
     var content = document.getElementById('settingsContent');
-    
+
     // جلب الإحصائيات
     var stats = { transactions: 0, employees: 0, types: 0, total_amount: 0 };
     try {
         var res = await fetch('api/settings.php?action=full_stats');
         var data = await res.json();
         if (data.success) stats = data.data;
-    } catch (e) {}
-    
+    } catch (e) { }
+
     var html = '<div class="settings-section-header">';
     html += '<h2>إعدادات النظام</h2>';
     html += '</div>';
-    
+
     html += '<div class="system-grid">';
-    
+
     // إحصائيات
     html += '<div class="system-card">';
     html += '<h3>📊 إحصائيات النظام</h3>';
@@ -2108,7 +2656,7 @@ async function renderSystemSection() {
     html += '<div class="stat-item"><span class="stat-number">' + formatMoney(stats.total_amount) + '</span><span class="stat-label">إجمالي المبالغ</span></div>';
     html += '</div>';
     html += '</div>';
-    
+
     // معلومات النظام
     html += '<div class="system-card">';
     html += '<h3>ℹ️ معلومات النظام</h3>';
@@ -2118,7 +2666,7 @@ async function renderSystemSection() {
     html += '<div class="info-item"><span>قاعدة البيانات:</span><span>MySQL</span></div>';
     html += '</div>';
     html += '</div>';
-    
+
     // منطقة الخطر
     html += '<div class="system-card danger-zone">';
     html += '<h3>⚠️ منطقة الخطر</h3>';
@@ -2127,7 +2675,7 @@ async function renderSystemSection() {
     html += '<button class="btn btn-danger" onclick="clearAllTransactions()">حذف جميع المعاملات</button>';
     html += '</div>';
     html += '</div>';
-    
+
     html += '</div>';
     content.innerHTML = html;
 }
@@ -2135,15 +2683,15 @@ async function renderSystemSection() {
 async function clearAllTransactions() {
     if (!confirm('⚠️ تحذير!\n\nسيتم حذف جميع المعاملات نهائياً.\nهذا الإجراء لا يمكن التراجع عنه.\n\nهل أنت متأكد؟')) return;
     if (!confirm('تأكيد نهائي: سيتم حذف كل شيء!')) return;
-    
+
     try {
         var res = await fetch('api/settings.php?action=clear_all', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' }
         });
-        
+
         var result = await res.json();
-        
+
         if (result.success) {
             showToast('تم حذف جميع المعاملات', 'success');
             await loadTransactions();

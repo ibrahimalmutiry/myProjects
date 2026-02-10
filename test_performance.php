@@ -353,6 +353,7 @@ echo "</select></div>";
 // اختيار المرحلة
 echo "<div><label>المرحلة:</label><br>";
 echo "<select name='stage' style='width:100%; padding:8px; border-radius:5px; background:#0f0f23; color:#fff; border:1px solid #333;'>";
+echo "<option value='creation'>الإنشاء</option>";
 echo "<option value='receiving'>الاستلام</option>";
 echo "<option value='budget'>الموازنة</option>";
 echo "<option value='payment'>الدفع</option>";

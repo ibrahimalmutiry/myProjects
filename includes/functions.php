@@ -48,7 +48,10 @@ function ensureViewExists() {
     // حذف View القديم وإنشاء جديد
     $conn->query("DROP VIEW IF EXISTS v_full_transactions");
     
-    // إنشاء View مع الموازنة
+    // التأكد من وجود أعمدة المنشئ
+    ensureCreatorColumns();
+    
+    // إنشاء View مع الموازنة ومعلومات المنشئ
     $sql = "
     CREATE VIEW v_full_transactions AS
     SELECT 
@@ -60,6 +63,10 @@ function ensureViewExists() {
         t.amount,
         IFNULL(t.attachment, '') as attachment,
         IFNULL(t.attachment_name, '') as attachment_name,
+        
+        t.created_by,
+        ec.name as created_by_name,
+        t.created_at as creation_time,
         
         r.status as receive_status,
         r.receive_date,
@@ -90,6 +97,7 @@ function ensureViewExists() {
         t.updated_at
     FROM transactions t
     LEFT JOIN transaction_types tt ON t.type_id = tt.id
+    LEFT JOIN employees ec ON t.created_by = ec.id
     LEFT JOIN receiving_data r ON t.id = r.transaction_id
     LEFT JOIN employees er ON r.employee_id = er.id
     LEFT JOIN budget_data b ON t.id = b.transaction_id
@@ -370,11 +378,16 @@ function generateTransactionNumber() {
 function addTransaction($data, $file = null) {
     $conn = db();
     
+    // التأكد من وجود أعمدة المنشئ
+    ensureCreatorColumns();
+    
     $transactionNumber = generateTransactionNumber();
-    $date = $conn->real_escape_string($data['date']);
     $typeId = (int)$data['type_id'];
     $description = $conn->real_escape_string($data['description']);
     $amount = (float)$data['amount'];
+    
+    // الحصول على معرف المستخدم الحالي من الجلسة
+    $createdBy = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : 'NULL';
     
     // معالجة الملف المرفق
     $attachment = 'NULL';
@@ -388,8 +401,9 @@ function addTransaction($data, $file = null) {
         }
     }
     
-    $sql = "INSERT INTO transactions (transaction_number, transaction_date, type_id, description, amount, attachment, attachment_name) 
-            VALUES ('$transactionNumber', '$date', $typeId, '$description', $amount, $attachment, $attachmentName)";
+    // التاريخ تلقائي (الآن)
+    $sql = "INSERT INTO transactions (transaction_number, transaction_date, type_id, description, amount, attachment, attachment_name, created_by, created_at) 
+            VALUES ('$transactionNumber', NOW(), $typeId, '$description', $amount, $attachment, $attachmentName, $createdBy, NOW())";
     
     if ($conn->query($sql)) {
         $transactionId = $conn->insert_id;
@@ -400,13 +414,42 @@ function addTransaction($data, $file = null) {
         $conn->query("INSERT INTO payment_data (transaction_id) VALUES ($transactionId)");
         $conn->query("INSERT INTO invoice_data (transaction_id) VALUES ($transactionId)");
         
+        // تسجيل وقت الإنشاء في جدول الأوقات
+        ensureStageTimesTable();
+        $now = date('Y-m-d H:i:s');
+        
+        // تسجيل مرحلة الإنشاء (مكتملة فوراً)
+        $conn->query("INSERT INTO stage_times (transaction_id, stage, employee_id, started_at, completed_at, duration_minutes, status) 
+                      VALUES ($transactionId, 'creation', $createdBy, '$now', '$now', 0, 'تم الإنشاء')
+                      ON DUPLICATE KEY UPDATE completed_at = '$now', status = 'تم الإنشاء'");
+        
+        // تسجيل بدء مرحلة الاستلام (في انتظار موظف الاستلام)
+        $conn->query("INSERT INTO stage_times (transaction_id, stage, started_at, status) 
+                      VALUES ($transactionId, 'receiving', '$now', 'في الانتظار')
+                      ON DUPLICATE KEY UPDATE started_at = COALESCE(started_at, '$now')");
+        
         // تسجيل النشاط
-        logActivity($transactionId, 'إنشاء', 'تم إنشاء المعاملة');
+        $creatorName = $_SESSION['user_name'] ?? 'النظام';
+        logActivity($transactionId, 'إنشاء', "تم إنشاء المعاملة بواسطة: $creatorName في $now");
         
         return $transactionId;
     }
     
     return false;
+}
+
+/**
+ * التأكد من وجود أعمدة المنشئ في جدول المعاملات
+ */
+function ensureCreatorColumns() {
+    $conn = db();
+    
+    // التحقق من وجود عمود created_by
+    $result = $conn->query("SHOW COLUMNS FROM transactions LIKE 'created_by'");
+    if (!$result || $result->num_rows == 0) {
+        $conn->query("ALTER TABLE transactions ADD COLUMN created_by INT DEFAULT NULL");
+        $conn->query("ALTER TABLE transactions ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP");
+    }
 }
 
 /**
@@ -519,24 +562,43 @@ function updateReceivingData($transactionId, $data) {
     $conn = db();
     
     $transactionId = (int)$transactionId;
-    $employeeId = !empty($data['employee_id']) ? (int)$data['employee_id'] : 'NULL';
-    $date = !empty($data['date']) ? "'" . $conn->real_escape_string($data['date']) . "'" : 'NULL';
+    
+    // الموظف من الجلسة تلقائياً
+    $employeeId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : 'NULL';
+    
+    // التاريخ تلقائي (الآن)
+    $now = date('Y-m-d H:i:s');
+    
+    // الحصول على الحالة السابقة
+    $oldStatus = getLastStageStatus($transactionId, 'receiving');
+    
     $status = $conn->real_escape_string($data['status']);
     $notes = $conn->real_escape_string($data['notes'] ?? '');
     
     $sql = "UPDATE receiving_data SET 
             employee_id = $employeeId,
-            receive_date = $date,
+            receive_date = '$now',
             status = '$status',
             notes = '$notes'
             WHERE transaction_id = $transactionId";
     
     if ($conn->query($sql)) {
-        // تسجيل وقت المرحلة
-        $empId = !empty($data['employee_id']) ? (int)$data['employee_id'] : null;
-        recordStageTime($transactionId, 'receiving', $empId, $status);
+        // تسجيل الحدث
+        logTransactionEvent(
+            $transactionId,
+            'receiving',
+            'تغيير الحالة',
+            $oldStatus,
+            $status,
+            $notes ?: null
+        );
         
-        logActivity($transactionId, 'تحديث الاستلام', "تم تحديث حالة الاستلام إلى: $status");
+        // تسجيل وقت المرحلة مع حساب المدة من آخر تحديث
+        $empId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : null;
+        recordStageTimeFromLastUpdate($transactionId, 'receiving', $empId, $status);
+        
+        $employeeName = $_SESSION['user_name'] ?? 'النظام';
+        logActivity($transactionId, 'تحديث الاستلام', "تم تحديث حالة الاستلام إلى: $status بواسطة: $employeeName");
         return true;
     }
     
@@ -550,26 +612,45 @@ function updateBudgetData($transactionId, $data) {
     $conn = db();
     
     $transactionId = (int)$transactionId;
-    $employeeId = !empty($data['employee_id']) ? (int)$data['employee_id'] : 'NULL';
-    $date = !empty($data['date']) ? "'" . $conn->real_escape_string($data['date']) . "'" : 'NULL';
+    
+    // الموظف من الجلسة تلقائياً
+    $employeeId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : 'NULL';
+    
+    // التاريخ تلقائي (الآن)
+    $now = date('Y-m-d H:i:s');
+    
+    // الحصول على الحالة السابقة
+    $oldStatus = getLastStageStatus($transactionId, 'budget');
+    
     $status = $conn->real_escape_string($data['status'] ?? 'معلق');
     $budgetCode = $conn->real_escape_string($data['budget_code'] ?? '');
     $notes = $conn->real_escape_string($data['notes'] ?? '');
     
     $sql = "UPDATE budget_data SET 
             employee_id = $employeeId,
-            review_date = $date,
+            review_date = '$now',
             budget_status = '$status',
             budget_code = '$budgetCode',
             notes = '$notes'
             WHERE transaction_id = $transactionId";
     
     if ($conn->query($sql)) {
-        // تسجيل وقت المرحلة
-        $empId = !empty($data['employee_id']) ? (int)$data['employee_id'] : null;
-        recordStageTime($transactionId, 'budget', $empId, $status);
+        // تسجيل الحدث
+        logTransactionEvent(
+            $transactionId,
+            'budget',
+            'تغيير الحالة',
+            $oldStatus,
+            $status,
+            $notes ?: null
+        );
         
-        logActivity($transactionId, 'تحديث الموازنة', "تم تحديث حالة الموازنة إلى: $status");
+        // تسجيل وقت المرحلة مع حساب المدة من آخر تحديث
+        $empId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : null;
+        recordStageTimeFromLastUpdate($transactionId, 'budget', $empId, $status);
+        
+        $employeeName = $_SESSION['user_name'] ?? 'النظام';
+        logActivity($transactionId, 'تحديث الموازنة', "تم تحديث حالة الموازنة إلى: $status بواسطة: $employeeName");
         return true;
     }
     
@@ -583,8 +664,16 @@ function updatePaymentData($transactionId, $data) {
     $conn = db();
     
     $transactionId = (int)$transactionId;
-    $employeeId = !empty($data['employee_id']) ? (int)$data['employee_id'] : 'NULL';
-    $date = !empty($data['date']) ? "'" . $conn->real_escape_string($data['date']) . "'" : 'NULL';
+    
+    // الموظف من الجلسة تلقائياً
+    $employeeId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : 'NULL';
+    
+    // التاريخ تلقائي (الآن)
+    $now = date('Y-m-d H:i:s');
+    
+    // الحصول على الحالة السابقة
+    $oldStatus = getLastStageStatus($transactionId, 'payment');
+    
     $method = !empty($data['method']) ? "'" . $conn->real_escape_string($data['method']) . "'" : 'NULL';
     $status = $conn->real_escape_string($data['status']);
     $reference = $conn->real_escape_string($data['reference'] ?? '');
@@ -592,7 +681,7 @@ function updatePaymentData($transactionId, $data) {
     
     $sql = "UPDATE payment_data SET 
             employee_id = $employeeId,
-            payment_date = $date,
+            payment_date = '$now',
             payment_method = $method,
             status = '$status',
             reference_number = '$reference',
@@ -600,11 +689,22 @@ function updatePaymentData($transactionId, $data) {
             WHERE transaction_id = $transactionId";
     
     if ($conn->query($sql)) {
-        // تسجيل وقت المرحلة
-        $empId = !empty($data['employee_id']) ? (int)$data['employee_id'] : null;
-        recordStageTime($transactionId, 'payment', $empId, $status);
+        // تسجيل الحدث
+        logTransactionEvent(
+            $transactionId,
+            'payment',
+            'تغيير الحالة',
+            $oldStatus,
+            $status,
+            $notes ?: null
+        );
         
-        logActivity($transactionId, 'تحديث الدفع', "تم تحديث حالة الدفع إلى: $status");
+        // تسجيل وقت المرحلة مع حساب المدة من آخر تحديث
+        $empId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : null;
+        recordStageTimeFromLastUpdate($transactionId, 'payment', $empId, $status);
+        
+        $employeeName = $_SESSION['user_name'] ?? 'النظام';
+        logActivity($transactionId, 'تحديث الدفع', "تم تحديث حالة الدفع إلى: $status بواسطة: $employeeName");
         return true;
     }
     
@@ -618,29 +718,48 @@ function updateInvoiceData($transactionId, $data) {
     $conn = db();
     
     $transactionId = (int)$transactionId;
-    $employeeId = !empty($data['employee_id']) ? (int)$data['employee_id'] : 'NULL';
+    
+    // الموظف من الجلسة تلقائياً
+    $employeeId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : 'NULL';
+    
+    // التاريخ تلقائي (الآن)
+    $now = date('Y-m-d H:i:s');
+    
+    // الحصول على الحالة السابقة
+    $oldStatus = getLastStageStatus($transactionId, 'invoice');
+    
     $invoiceNumber = $conn->real_escape_string($data['invoice_number'] ?? '');
-    $date = !empty($data['date']) ? "'" . $conn->real_escape_string($data['date']) . "'" : 'NULL';
     $status = !empty($data['status']) ? "'" . $conn->real_escape_string($data['status']) . "'" : 'NULL';
+    $statusText = !empty($data['status']) ? $data['status'] : ($data['alert_type'] ?? 'انتظار');
     $alertType = $conn->real_escape_string($data['alert_type'] ?? 'انتظار');
     $notes = $conn->real_escape_string($data['notes'] ?? '');
     
     $sql = "UPDATE invoice_data SET 
             employee_id = $employeeId,
             invoice_number = '$invoiceNumber',
-            invoice_date = $date,
+            invoice_date = '$now',
             status = $status,
             alert_type = '$alertType',
             notes = '$notes'
             WHERE transaction_id = $transactionId";
     
     if ($conn->query($sql)) {
-        // تسجيل وقت المرحلة
-        $empId = !empty($data['employee_id']) ? (int)$data['employee_id'] : null;
-        $statusText = !empty($data['status']) ? $data['status'] : $alertType;
-        recordStageTime($transactionId, 'invoice', $empId, $statusText);
+        // تسجيل الحدث
+        logTransactionEvent(
+            $transactionId,
+            'invoice',
+            'تغيير الحالة',
+            $oldStatus,
+            $statusText,
+            $notes ?: null
+        );
         
-        logActivity($transactionId, 'تحديث الفوترة', "تم تحديث حالة الفوترة، التنبيه: $alertType");
+        // تسجيل وقت المرحلة مع حساب المدة من آخر تحديث
+        $empId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : null;
+        recordStageTimeFromLastUpdate($transactionId, 'invoice', $empId, $statusText);
+        
+        $employeeName = $_SESSION['user_name'] ?? 'النظام';
+        logActivity($transactionId, 'تحديث الفوترة', "تم تحديث حالة الفوترة، التنبيه: $alertType بواسطة: $employeeName");
         return true;
     }
     
@@ -729,7 +848,7 @@ function ensureStageTimesTable() {
             CREATE TABLE IF NOT EXISTS stage_times (
                 id INT PRIMARY KEY AUTO_INCREMENT,
                 transaction_id INT NOT NULL,
-                stage ENUM('receiving', 'budget', 'payment', 'invoice') NOT NULL,
+                stage ENUM('creation', 'receiving', 'budget', 'payment', 'invoice') NOT NULL,
                 employee_id INT,
                 started_at DATETIME,
                 completed_at DATETIME,
@@ -737,30 +856,233 @@ function ensureStageTimesTable() {
                 status VARCHAR(50),
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                FOREIGN KEY (transaction_id) REFERENCES transactions(id) ON DELETE CASCADE,
                 UNIQUE KEY unique_stage (transaction_id, stage)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         ");
-        
-        // إضافة سجلات للمعاملات الموجودة
+    } else {
+        // التأكد من وجود قيمة 'creation' في ENUM
+        $result = $conn->query("SHOW COLUMNS FROM stage_times WHERE Field = 'stage'");
+        if ($result && $row = $result->fetch_assoc()) {
+            if (strpos($row['Type'], 'creation') === false) {
+                $conn->query("ALTER TABLE stage_times MODIFY COLUMN stage ENUM('creation', 'receiving', 'budget', 'payment', 'invoice') NOT NULL");
+            }
+        }
+    }
+}
+
+/**
+ * التأكد من وجود جدول أحداث المعاملات
+ */
+function ensureEventsTable() {
+    $conn = db();
+    
+    $result = $conn->query("SHOW TABLES LIKE 'transaction_events'");
+    if (!$result || $result->num_rows == 0) {
         $conn->query("
-            INSERT IGNORE INTO stage_times (transaction_id, stage)
-            SELECT t.id, s.stage
-            FROM transactions t
-            CROSS JOIN (
-                SELECT 'receiving' as stage UNION ALL
-                SELECT 'budget' UNION ALL
-                SELECT 'payment' UNION ALL
-                SELECT 'invoice'
-            ) s
+            CREATE TABLE IF NOT EXISTS transaction_events (
+                id INT PRIMARY KEY AUTO_INCREMENT,
+                transaction_id INT NOT NULL,
+                stage ENUM('creation', 'receiving', 'budget', 'payment', 'invoice') NOT NULL,
+                employee_id INT,
+                action VARCHAR(100) NOT NULL,
+                old_status VARCHAR(50),
+                new_status VARCHAR(50),
+                notes TEXT,
+                event_time DATETIME NOT NULL,
+                duration_from_previous INT DEFAULT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_transaction (transaction_id),
+                INDEX idx_stage (stage),
+                INDEX idx_event_time (event_time)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         ");
     }
 }
 
 /**
- * تسجيل وقت بدء/انتهاء مرحلة
+ * تسجيل حدث على المعاملة
+ * @param int $transactionId معرف المعاملة
+ * @param string $stage المرحلة
+ * @param string $action نوع الإجراء
+ * @param string|null $oldStatus الحالة السابقة
+ * @param string|null $newStatus الحالة الجديدة
+ * @param string|null $notes ملاحظات/سبب
  */
-function recordStageTime($transactionId, $stage, $employeeId, $status) {
+function logTransactionEvent($transactionId, $stage, $action, $oldStatus = null, $newStatus = null, $notes = null) {
+    $conn = db();
+    ensureEventsTable();
+    
+    $transactionId = (int)$transactionId;
+    $stage = $conn->real_escape_string($stage);
+    $action = $conn->real_escape_string($action);
+    $employeeId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : 'NULL';
+    $employeeName = $_SESSION['user_name'] ?? 'النظام';
+    $now = date('Y-m-d H:i:s');
+    
+    // الحصول على آخر حدث لحساب المدة
+    $result = $conn->query("
+        SELECT event_time FROM transaction_events 
+        WHERE transaction_id = $transactionId 
+        ORDER BY event_time DESC LIMIT 1
+    ");
+    
+    $durationFromPrevious = 'NULL';
+    if ($result && $row = $result->fetch_assoc()) {
+        $lastTime = strtotime($row['event_time']);
+        $currentTime = strtotime($now);
+        $durationFromPrevious = max(0, round(($currentTime - $lastTime) / 60));
+    } else {
+        // أول حدث - نحسب من وقت إنشاء المعاملة
+        $result = $conn->query("SELECT created_at FROM transactions WHERE id = $transactionId");
+        if ($result && $row = $result->fetch_assoc()) {
+            $createdTime = strtotime($row['created_at']);
+            $currentTime = strtotime($now);
+            $durationFromPrevious = max(0, round(($currentTime - $createdTime) / 60));
+        }
+    }
+    
+    // تجهيز القيم
+    $oldStatusSql = $oldStatus ? "'" . $conn->real_escape_string($oldStatus) . "'" : 'NULL';
+    $newStatusSql = $newStatus ? "'" . $conn->real_escape_string($newStatus) . "'" : 'NULL';
+    $notesSql = $notes ? "'" . $conn->real_escape_string($notes) . "'" : 'NULL';
+    
+    // إدراج الحدث
+    $sql = "INSERT INTO transaction_events 
+            (transaction_id, stage, employee_id, action, old_status, new_status, notes, event_time, duration_from_previous)
+            VALUES ($transactionId, '$stage', $employeeId, '$action', $oldStatusSql, $newStatusSql, $notesSql, '$now', $durationFromPrevious)";
+    
+    $conn->query($sql);
+    
+    // تحديث وقت آخر تعديل على المعاملة
+    $conn->query("UPDATE transactions SET updated_at = '$now' WHERE id = $transactionId");
+    
+    return $conn->insert_id;
+}
+
+/**
+ * الحصول على أحداث معاملة معينة
+ */
+function getTransactionEvents($transactionId, $stage = null) {
+    $conn = db();
+    ensureEventsTable();
+    
+    $transactionId = (int)$transactionId;
+    
+    $sql = "
+        SELECT te.*, e.name as employee_name
+        FROM transaction_events te
+        LEFT JOIN employees e ON te.employee_id = e.id
+        WHERE te.transaction_id = $transactionId
+    ";
+    
+    if ($stage) {
+        $stage = $conn->real_escape_string($stage);
+        $sql .= " AND te.stage = '$stage'";
+    }
+    
+    $sql .= " ORDER BY te.event_time ASC";
+    
+    $result = $conn->query($sql);
+    $events = [];
+    
+    if ($result && $result->num_rows > 0) {
+        while ($row = $result->fetch_assoc()) {
+            $events[] = $row;
+        }
+    }
+    
+    return $events;
+}
+
+/**
+ * الحصول على جميع الأحداث
+ */
+function getAllEvents($limit = 50, $stage = null, $employeeId = null) {
+    $conn = db();
+    ensureEventsTable();
+    
+    $limit = (int)$limit;
+    
+    $sql = "
+        SELECT te.*, e.name as employee_name, t.transaction_number
+        FROM transaction_events te
+        LEFT JOIN employees e ON te.employee_id = e.id
+        LEFT JOIN transactions t ON te.transaction_id = t.id
+        WHERE 1=1
+    ";
+    
+    if ($stage) {
+        $stage = $conn->real_escape_string($stage);
+        $sql .= " AND te.stage = '$stage'";
+    }
+    
+    if ($employeeId) {
+        $employeeId = (int)$employeeId;
+        $sql .= " AND te.employee_id = $employeeId";
+    }
+    
+    $sql .= " ORDER BY te.event_time DESC LIMIT $limit";
+    
+    $result = $conn->query($sql);
+    $events = [];
+    
+    if ($result && $result->num_rows > 0) {
+        while ($row = $result->fetch_assoc()) {
+            $events[] = $row;
+        }
+    }
+    
+    return $events;
+}
+
+/**
+ * الحصول على آخر حالة لمرحلة معينة
+ */
+function getLastStageStatus($transactionId, $stage) {
+    $conn = db();
+    $transactionId = (int)$transactionId;
+    $stage = $conn->real_escape_string($stage);
+    
+    // البحث في جدول الأحداث
+    $result = $conn->query("
+        SELECT new_status FROM transaction_events 
+        WHERE transaction_id = $transactionId AND stage = '$stage' AND new_status IS NOT NULL
+        ORDER BY event_time DESC LIMIT 1
+    ");
+    
+    if ($result && $row = $result->fetch_assoc()) {
+        return $row['new_status'];
+    }
+    
+    // البحث في الجدول الأصلي
+    $tableMap = [
+        'receiving' => ['table' => 'receiving_data', 'column' => 'status'],
+        'budget' => ['table' => 'budget_data', 'column' => 'budget_status'],
+        'payment' => ['table' => 'payment_data', 'column' => 'status'],
+        'invoice' => ['table' => 'invoice_data', 'column' => 'status']
+    ];
+    
+    if (isset($tableMap[$stage])) {
+        $table = $tableMap[$stage]['table'];
+        $column = $tableMap[$stage]['column'];
+        $result = $conn->query("SELECT $column as status FROM $table WHERE transaction_id = $transactionId");
+        if ($result && $row = $result->fetch_assoc()) {
+            return $row['status'];
+        }
+    }
+    
+    return null;
+}
+
+/**
+ * تسجيل وقت بدء/انتهاء مرحلة
+ * @param int $transactionId معرف المعاملة
+ * @param string $stage المرحلة (creation, receiving, budget, payment, invoice)
+ * @param int|null $employeeId معرف الموظف
+ * @param string $status الحالة الجديدة
+ * @param bool $isStart هل هذا وقت البدء؟
+ */
+function recordStageTime($transactionId, $stage, $employeeId, $status, $isStart = false) {
     $conn = db();
     ensureStageTimesTable();
     
@@ -770,47 +1092,214 @@ function recordStageTime($transactionId, $stage, $employeeId, $status) {
     $status = $conn->real_escape_string($status);
     $now = date('Y-m-d H:i:s');
     
+    // الحالات التي تعني اكتمال المرحلة
+    $completedStatuses = [
+        'creation' => ['تم الإنشاء'],
+        'receiving' => ['مستلم'],
+        'budget' => ['معتمد'],
+        'payment' => ['تم الدفع'],
+        'invoice' => ['صدرت الفاتورة', 'مكتمل']
+    ];
+    
+    $isCompleted = in_array($status, $completedStatuses[$stage] ?? []);
+    
     // التحقق من وجود سجل
     $result = $conn->query("SELECT * FROM stage_times WHERE transaction_id = $transactionId AND stage = '$stage'");
     
     if ($result && $result->num_rows > 0) {
         $row = $result->fetch_assoc();
         
-        // تحديد ما إذا كانت المرحلة مكتملة
-        $isCompleted = in_array($status, ['مستلم', 'معتمد', 'تم الدفع', 'صدرت الفاتورة', 'مكتمل']);
-        
         if ($isCompleted && empty($row['completed_at'])) {
-            // تسجيل وقت الانتهاء وحساب المدة
+            // اكتمال المرحلة - تسجيل وقت الانتهاء وحساب المدة
             $startedAt = $row['started_at'] ?? $now;
-            $duration = "TIMESTAMPDIFF(MINUTE, '$startedAt', '$now')";
             
             $sql = "UPDATE stage_times SET 
                     employee_id = $employeeId,
                     completed_at = '$now',
-                    duration_minutes = $duration,
+                    duration_minutes = TIMESTAMPDIFF(MINUTE, '$startedAt', '$now'),
                     status = '$status'
                     WHERE transaction_id = $transactionId AND stage = '$stage'";
+                    
+            $conn->query($sql);
+            
+            // تسجيل وقت بدء المرحلة التالية
+            $nextStage = getNextStage($stage);
+            if ($nextStage) {
+                startNextStage($transactionId, $nextStage, $now);
+            }
+            
         } else if (empty($row['started_at'])) {
-            // تسجيل وقت البدء
+            // تسجيل وقت البدء إذا لم يكن موجوداً
             $sql = "UPDATE stage_times SET 
                     employee_id = $employeeId,
                     started_at = '$now',
                     status = '$status'
                     WHERE transaction_id = $transactionId AND stage = '$stage'";
+            $conn->query($sql);
         } else {
-            // تحديث الحالة فقط
+            // تحديث الموظف والحالة فقط
             $sql = "UPDATE stage_times SET 
                     employee_id = $employeeId,
                     status = '$status'
                     WHERE transaction_id = $transactionId AND stage = '$stage'";
+            $conn->query($sql);
         }
     } else {
         // إنشاء سجل جديد
-        $sql = "INSERT INTO stage_times (transaction_id, stage, employee_id, started_at, status) 
-                VALUES ($transactionId, '$stage', $employeeId, '$now', '$status')";
+        $completedAt = $isCompleted ? "'$now'" : "NULL";
+        $duration = $isCompleted ? "0" : "NULL";
+        
+        $sql = "INSERT INTO stage_times (transaction_id, stage, employee_id, started_at, completed_at, duration_minutes, status) 
+                VALUES ($transactionId, '$stage', $employeeId, '$now', $completedAt, $duration, '$status')";
+        $conn->query($sql);
+        
+        // إذا تم اكتمال المرحلة، سجل بدء المرحلة التالية
+        if ($isCompleted) {
+            $nextStage = getNextStage($stage);
+            if ($nextStage) {
+                startNextStage($transactionId, $nextStage, $now);
+            }
+        }
     }
     
-    return $conn->query($sql);
+    return true;
+}
+
+/**
+ * تسجيل وقت المرحلة مع حساب المدة من آخر تحديث على المعاملة
+ * يحسب الوقت بين التحديث السابق والتحديث الحالي
+ */
+function recordStageTimeFromLastUpdate($transactionId, $stage, $employeeId, $status) {
+    $conn = db();
+    ensureStageTimesTable();
+    
+    $transactionId = (int)$transactionId;
+    $stage = $conn->real_escape_string($stage);
+    $employeeId = $employeeId ? (int)$employeeId : 'NULL';
+    $status = $conn->real_escape_string($status);
+    $now = date('Y-m-d H:i:s');
+    
+    // الحصول على آخر تحديث على المعاملة من جدول transactions
+    $result = $conn->query("SELECT updated_at FROM transactions WHERE id = $transactionId");
+    $lastUpdate = null;
+    if ($result && $row = $result->fetch_assoc()) {
+        $lastUpdate = $row['updated_at'];
+    }
+    
+    // إذا لم يكن هناك تحديث سابق، نحسب من وقت الإنشاء
+    if (!$lastUpdate) {
+        $result = $conn->query("SELECT created_at FROM transactions WHERE id = $transactionId");
+        if ($result && $row = $result->fetch_assoc()) {
+            $lastUpdate = $row['created_at'];
+        }
+    }
+    
+    // حساب المدة من آخر تحديث (بالدقائق)
+    $durationMinutes = 0;
+    if ($lastUpdate) {
+        $lastTime = strtotime($lastUpdate);
+        $currentTime = strtotime($now);
+        $durationMinutes = max(0, round(($currentTime - $lastTime) / 60));
+    }
+    
+    // الحالات التي تعني اكتمال المرحلة
+    $completedStatuses = [
+        'creation' => ['تم الإنشاء'],
+        'receiving' => ['مستلم'],
+        'budget' => ['معتمد'],
+        'payment' => ['تم الدفع'],
+        'invoice' => ['صدرت الفاتورة', 'مكتمل']
+    ];
+    
+    $isCompleted = in_array($status, $completedStatuses[$stage] ?? []);
+    
+    // التحقق من وجود سجل
+    $result = $conn->query("SELECT * FROM stage_times WHERE transaction_id = $transactionId AND stage = '$stage'");
+    
+    if ($result && $result->num_rows > 0) {
+        $row = $result->fetch_assoc();
+        
+        if ($isCompleted) {
+            // اكتمال المرحلة - تسجيل وقت الانتهاء والمدة من آخر تحديث
+            $sql = "UPDATE stage_times SET 
+                    employee_id = $employeeId,
+                    completed_at = '$now',
+                    duration_minutes = $durationMinutes,
+                    status = '$status'
+                    WHERE transaction_id = $transactionId AND stage = '$stage'";
+            $conn->query($sql);
+            
+            // تسجيل وقت بدء المرحلة التالية
+            $nextStage = getNextStage($stage);
+            if ($nextStage) {
+                startNextStage($transactionId, $nextStage, $now);
+            }
+        } else {
+            // تحديث عادي - تسجيل الموظف والحالة فقط
+            // إذا لم يكن هناك وقت بدء، نسجله الآن
+            $sql = "UPDATE stage_times SET 
+                    employee_id = $employeeId,
+                    started_at = COALESCE(started_at, '$now'),
+                    status = '$status'
+                    WHERE transaction_id = $transactionId AND stage = '$stage'";
+            $conn->query($sql);
+        }
+    } else {
+        // إنشاء سجل جديد
+        $completedAt = $isCompleted ? "'$now'" : "NULL";
+        $duration = $isCompleted ? $durationMinutes : "NULL";
+        
+        $sql = "INSERT INTO stage_times (transaction_id, stage, employee_id, started_at, completed_at, duration_minutes, status) 
+                VALUES ($transactionId, '$stage', $employeeId, '$now', $completedAt, $duration, '$status')";
+        $conn->query($sql);
+        
+        // إذا تم اكتمال المرحلة، سجل بدء المرحلة التالية
+        if ($isCompleted) {
+            $nextStage = getNextStage($stage);
+            if ($nextStage) {
+                startNextStage($transactionId, $nextStage, $now);
+            }
+        }
+    }
+    
+    // تحديث وقت آخر تعديل على المعاملة
+    $conn->query("UPDATE transactions SET updated_at = '$now' WHERE id = $transactionId");
+    
+    return true;
+}
+
+/**
+ * الحصول على المرحلة التالية
+ */
+function getNextStage($currentStage) {
+    $stages = [
+        'creation' => 'receiving',
+        'receiving' => 'budget', 
+        'budget' => 'payment', 
+        'payment' => 'invoice', 
+        'invoice' => null
+    ];
+    return $stages[$currentStage] ?? null;
+}
+
+/**
+ * تسجيل وقت بدء المرحلة التالية
+ */
+function startNextStage($transactionId, $stage, $startTime) {
+    $conn = db();
+    $transactionId = (int)$transactionId;
+    $stage = $conn->real_escape_string($stage);
+    
+    // التحقق من وجود سجل
+    $result = $conn->query("SELECT id FROM stage_times WHERE transaction_id = $transactionId AND stage = '$stage'");
+    
+    if ($result && $result->num_rows > 0) {
+        $conn->query("UPDATE stage_times SET started_at = COALESCE(started_at, '$startTime') 
+                      WHERE transaction_id = $transactionId AND stage = '$stage'");
+    } else {
+        $conn->query("INSERT INTO stage_times (transaction_id, stage, started_at, status) 
+                      VALUES ($transactionId, '$stage', '$startTime', 'في الانتظار')");
+    }
 }
 
 /**
