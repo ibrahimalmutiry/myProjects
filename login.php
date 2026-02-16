@@ -16,7 +16,7 @@ if (isset($_SESSION['user_id'])) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>تسجيل الدخول | نظام إدارة المعاملات</title>
+    <title>تسجيل الدخول | نظام إدارة معاملات القطاع المالي</title>
     <link rel="icon"
         href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@300;400;500;600;700&display=swap"
@@ -452,7 +452,7 @@ if (isset($_SESSION['user_id'])) {
         <div class="login-card">
             <div class="logo">
                 <div class="logo-icon">⚡</div>
-                <h1>نظام إدارة المعاملات</h1>
+                <h1>نظام إدارة معاملات القطاع المالي</h1>
                 <p>سجّل دخولك للمتابعة</p>
             </div>
 

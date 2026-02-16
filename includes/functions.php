@@ -450,6 +450,12 @@ function ensureCreatorColumns() {
         $conn->query("ALTER TABLE transactions ADD COLUMN created_by INT DEFAULT NULL");
         $conn->query("ALTER TABLE transactions ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP");
     }
+    
+    // التحقق من وجود عمود updated_at
+    $result = $conn->query("SHOW COLUMNS FROM transactions LIKE 'updated_at'");
+    if (!$result || $result->num_rows == 0) {
+        $conn->query("ALTER TABLE transactions ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
+    }
 }
 
 /**
@@ -916,28 +922,38 @@ function logTransactionEvent($transactionId, $stage, $action, $oldStatus = null,
     $stage = $conn->real_escape_string($stage);
     $action = $conn->real_escape_string($action);
     $employeeId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : 'NULL';
-    $employeeName = $_SESSION['user_name'] ?? 'النظام';
     $now = date('Y-m-d H:i:s');
     
-    // الحصول على آخر حدث لحساب المدة
-    $result = $conn->query("
-        SELECT event_time FROM transaction_events 
-        WHERE transaction_id = $transactionId 
-        ORDER BY event_time DESC LIMIT 1
-    ");
+    // الحصول على وقت بدء هذه المرحلة من stage_times
+    $startedAt = null;
+    $result = $conn->query("SELECT started_at FROM stage_times WHERE transaction_id = $transactionId AND stage = '$stage'");
+    if ($result && $result->num_rows > 0 && $row = $result->fetch_assoc()) {
+        $startedAt = $row['started_at'];
+    }
     
-    $durationFromPrevious = 'NULL';
-    if ($result && $row = $result->fetch_assoc()) {
-        $lastTime = strtotime($row['event_time']);
+    // إذا لم نجد started_at، نبحث عن آخر حدث
+    if (!$startedAt) {
+        $result = $conn->query("
+            SELECT event_time FROM transaction_events 
+            WHERE transaction_id = $transactionId 
+            ORDER BY event_time DESC LIMIT 1
+        ");
+        if ($result && $result->num_rows > 0 && $row = $result->fetch_assoc()) {
+            $startedAt = $row['event_time'];
+        }
+    }
+    
+    // حساب المدة
+    $durationFromPrevious = 0;
+    if ($startedAt) {
+        $startTime = strtotime($startedAt);
         $currentTime = strtotime($now);
-        $durationFromPrevious = max(0, round(($currentTime - $lastTime) / 60));
-    } else {
-        // أول حدث - نحسب من وقت إنشاء المعاملة
-        $result = $conn->query("SELECT created_at FROM transactions WHERE id = $transactionId");
-        if ($result && $row = $result->fetch_assoc()) {
-            $createdTime = strtotime($row['created_at']);
-            $currentTime = strtotime($now);
-            $durationFromPrevious = max(0, round(($currentTime - $createdTime) / 60));
+        $diffSeconds = $currentTime - $startTime;
+        
+        if ($diffSeconds > 0 && $diffSeconds < 60) {
+            $durationFromPrevious = 1;
+        } elseif ($diffSeconds >= 60) {
+            $durationFromPrevious = round($diffSeconds / 60);
         }
     }
     
@@ -1113,10 +1129,14 @@ function recordStageTime($transactionId, $stage, $employeeId, $status, $isStart 
             // اكتمال المرحلة - تسجيل وقت الانتهاء وحساب المدة
             $startedAt = $row['started_at'] ?? $now;
             
+            // حساب المدة بالدقائق (الحد الأدنى 1 إذا كان أكبر من 0 ثواني)
+            $diffSeconds = strtotime($now) - strtotime($startedAt);
+            $durationCalc = $diffSeconds > 0 && $diffSeconds < 60 ? 1 : max(0, round($diffSeconds / 60));
+            
             $sql = "UPDATE stage_times SET 
                     employee_id = $employeeId,
                     completed_at = '$now',
-                    duration_minutes = TIMESTAMPDIFF(MINUTE, '$startedAt', '$now'),
+                    duration_minutes = $durationCalc,
                     status = '$status'
                     WHERE transaction_id = $transactionId AND stage = '$stage'";
                     
@@ -1179,27 +1199,25 @@ function recordStageTimeFromLastUpdate($transactionId, $stage, $employeeId, $sta
     $status = $conn->real_escape_string($status);
     $now = date('Y-m-d H:i:s');
     
-    // الحصول على آخر تحديث على المعاملة من جدول transactions
-    $result = $conn->query("SELECT updated_at FROM transactions WHERE id = $transactionId");
-    $lastUpdate = null;
-    if ($result && $row = $result->fetch_assoc()) {
-        $lastUpdate = $row['updated_at'];
+    // الحصول على وقت بدء هذه المرحلة من stage_times
+    $startedAt = null;
+    $result = $conn->query("SELECT started_at FROM stage_times WHERE transaction_id = $transactionId AND stage = '$stage'");
+    if ($result && $result->num_rows > 0 && $row = $result->fetch_assoc()) {
+        $startedAt = $row['started_at'];
     }
     
-    // إذا لم يكن هناك تحديث سابق، نحسب من وقت الإنشاء
-    if (!$lastUpdate) {
-        $result = $conn->query("SELECT created_at FROM transactions WHERE id = $transactionId");
-        if ($result && $row = $result->fetch_assoc()) {
-            $lastUpdate = $row['created_at'];
-        }
-    }
-    
-    // حساب المدة من آخر تحديث (بالدقائق)
+    // حساب المدة من وقت بدء المرحلة
     $durationMinutes = 0;
-    if ($lastUpdate) {
-        $lastTime = strtotime($lastUpdate);
+    if ($startedAt) {
+        $startTime = strtotime($startedAt);
         $currentTime = strtotime($now);
-        $durationMinutes = max(0, round(($currentTime - $lastTime) / 60));
+        $diffSeconds = $currentTime - $startTime;
+        
+        if ($diffSeconds > 0 && $diffSeconds < 60) {
+            $durationMinutes = 1;
+        } elseif ($diffSeconds >= 60) {
+            $durationMinutes = round($diffSeconds / 60);
+        }
     }
     
     // الحالات التي تعني اكتمال المرحلة
@@ -1219,38 +1237,33 @@ function recordStageTimeFromLastUpdate($transactionId, $stage, $employeeId, $sta
     if ($result && $result->num_rows > 0) {
         $row = $result->fetch_assoc();
         
+        // تحديث المدة دائماً (سواء مكتملة أو لا)
+        $sql = "UPDATE stage_times SET 
+                employee_id = $employeeId,
+                started_at = COALESCE(started_at, '$now'),
+                duration_minutes = $durationMinutes,
+                status = '$status'";
+        
         if ($isCompleted) {
-            // اكتمال المرحلة - تسجيل وقت الانتهاء والمدة من آخر تحديث
-            $sql = "UPDATE stage_times SET 
-                    employee_id = $employeeId,
-                    completed_at = '$now',
-                    duration_minutes = $durationMinutes,
-                    status = '$status'
-                    WHERE transaction_id = $transactionId AND stage = '$stage'";
-            $conn->query($sql);
-            
-            // تسجيل وقت بدء المرحلة التالية
+            $sql .= ", completed_at = '$now'";
+        }
+        
+        $sql .= " WHERE transaction_id = $transactionId AND stage = '$stage'";
+        $conn->query($sql);
+        
+        // تسجيل وقت بدء المرحلة التالية
+        if ($isCompleted) {
             $nextStage = getNextStage($stage);
             if ($nextStage) {
                 startNextStage($transactionId, $nextStage, $now);
             }
-        } else {
-            // تحديث عادي - تسجيل الموظف والحالة فقط
-            // إذا لم يكن هناك وقت بدء، نسجله الآن
-            $sql = "UPDATE stage_times SET 
-                    employee_id = $employeeId,
-                    started_at = COALESCE(started_at, '$now'),
-                    status = '$status'
-                    WHERE transaction_id = $transactionId AND stage = '$stage'";
-            $conn->query($sql);
         }
     } else {
         // إنشاء سجل جديد
         $completedAt = $isCompleted ? "'$now'" : "NULL";
-        $duration = $isCompleted ? $durationMinutes : "NULL";
         
         $sql = "INSERT INTO stage_times (transaction_id, stage, employee_id, started_at, completed_at, duration_minutes, status) 
-                VALUES ($transactionId, '$stage', $employeeId, '$now', $completedAt, $duration, '$status')";
+                VALUES ($transactionId, '$stage', $employeeId, '$now', $completedAt, $durationMinutes, '$status')";
         $conn->query($sql);
         
         // إذا تم اكتمال المرحلة، سجل بدء المرحلة التالية
@@ -1488,3 +1501,109 @@ function getEmployeePerformanceDetails($employeeId, $dateFrom = null, $dateTo = 
         'details' => $details
     ];
 }
+
+/**
+ * الحصول على آخر التنبيهات (آخر تحديث لكل معاملة في كل قسم)
+ * أضف هذه الدالة في نهاية ملف functions.php
+ */
+function getRecentNotifications($limit = 5) {
+    $conn = db();
+    
+    ensureViewExists();
+    
+    $notifications = [];
+    
+    $sql = "
+        SELECT 
+            t.id,
+            t.transaction_number,
+            tt.name as transaction_type,
+            t.amount,
+            'receiving' as stage,
+            r.status,
+            r.updated_at as update_time,
+            er.name as employee_name,
+            r.notes
+        FROM transactions t
+        LEFT JOIN transaction_types tt ON t.type_id = tt.id
+        LEFT JOIN receiving_data r ON t.id = r.transaction_id
+        LEFT JOIN employees er ON r.employee_id = er.id
+        WHERE r.status IS NOT NULL AND r.status != 'معلق' AND r.updated_at IS NOT NULL
+        
+        UNION ALL
+        
+        SELECT 
+            t.id,
+            t.transaction_number,
+            tt.name as transaction_type,
+            t.amount,
+            'budget' as stage,
+            b.budget_status as status,
+            b.updated_at as update_time,
+            eb.name as employee_name,
+            b.notes
+        FROM transactions t
+        LEFT JOIN transaction_types tt ON t.type_id = tt.id
+        LEFT JOIN budget_data b ON t.id = b.transaction_id
+        LEFT JOIN employees eb ON b.employee_id = eb.id
+        WHERE b.budget_status IS NOT NULL AND b.budget_status != 'معلق' AND b.updated_at IS NOT NULL
+        
+        UNION ALL
+        
+        SELECT 
+            t.id,
+            t.transaction_number,
+            tt.name as transaction_type,
+            t.amount,
+            'payment' as stage,
+            p.status,
+            p.updated_at as update_time,
+            ep.name as employee_name,
+            p.notes
+        FROM transactions t
+        LEFT JOIN transaction_types tt ON t.type_id = tt.id
+        LEFT JOIN payment_data p ON t.id = p.transaction_id
+        LEFT JOIN employees ep ON p.employee_id = ep.id
+        WHERE p.status IS NOT NULL AND p.status != 'معلق' AND p.updated_at IS NOT NULL
+        
+        UNION ALL
+        
+        SELECT 
+            t.id,
+            t.transaction_number,
+            tt.name as transaction_type,
+            t.amount,
+            'invoice' as stage,
+            i.status,
+            i.updated_at as update_time,
+            ei.name as employee_name,
+            i.notes
+        FROM transactions t
+        LEFT JOIN transaction_types tt ON t.type_id = tt.id
+        LEFT JOIN invoice_data i ON t.id = i.transaction_id
+        LEFT JOIN employees ei ON i.employee_id = ei.id
+        WHERE i.status IS NOT NULL AND i.status != '' AND i.updated_at IS NOT NULL
+        
+        ORDER BY update_time DESC
+        LIMIT $limit
+    ";
+    
+    $result = $conn->query($sql);
+    
+    if ($result && $result->num_rows > 0) {
+        while ($row = $result->fetch_assoc()) {
+            $notifications[] = $row;
+        }
+    }
+    
+    return $notifications;
+}
+
+/*
+ * أضف هذا في api/index.php داخل switch statement:
+ 
+    case 'notifications':
+        $limit = (int)($_GET['limit'] ?? 5);
+        echo json_encode(['success' => true, 'data' => getRecentNotifications($limit)]);
+        break;
+*/

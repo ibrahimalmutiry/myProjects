@@ -17,7 +17,7 @@ define('DB_PASS', '');
 define('DB_CHARSET', 'utf8mb4');
 
 // إعدادات التطبيق
-define('APP_NAME', 'نظام إدارة المعاملات');
+define('APP_NAME', 'نظام إدارة معاملات القطاع المالي');
 define('APP_VERSION', '1.0.0');
 define('APP_LANG', 'ar');
 

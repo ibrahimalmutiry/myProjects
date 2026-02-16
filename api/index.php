@@ -329,7 +329,29 @@ try {
             jsonResponse(['success' => true, 'data' => $events]);
             break;
         
-        // جميع الأحداث
+  case 'notifications':
+    $limit = (int)($_GET['limit'] ?? 5);
+    echo json_encode(['success' => true, 'data' => getRecentNotifications($limit)]);
+    break;
+
+case 'update_payment':
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        echo json_encode(['success' => false, 'message' => 'طريقة غير صحيحة']);
+        break;
+    }
+    
+    $data = json_decode(file_get_contents('php://input'), true);
+    // تعيين طريقة الدفع تلقائياً كتحويل بنكي
+    $data['method'] = 'تحويل بنكي';
+    $transactionId = isset($data['transaction_id']) ? (int)$data['transaction_id'] : 0;
+    if ($transactionId <= 0) {
+        echo json_encode(['success' => false, 'message' => 'معرف المعاملة غير صالح']);
+        break;
+    }
+    $result = updatePaymentData($transactionId, $data);
+    echo json_encode($result);
+    break;
+            // جميع الأحداث
         case 'all_events':
             $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 50;
             $stage = $_GET['stage'] ?? null;

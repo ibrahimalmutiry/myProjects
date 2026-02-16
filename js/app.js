@@ -1,5 +1,5 @@
 /**
- * نظام إدارة المعاملات - JavaScript
+ * نظام إدارة معاملات القطاع المالي - JavaScript
  * Workflow Management System
  */
 
@@ -49,7 +49,182 @@ function initEventListeners() {
         if (e.key === 'Escape') closeModal();
     });
 }
+// ========== نظام التنبيهات (قائمة منسدلة) ==========
 
+// أضف هذا في initEventListeners()
+document.querySelector('.notification-btn')?.addEventListener('click', toggleNotificationsDropdown);
+
+// إغلاق القائمة عند النقر خارجها
+document.addEventListener('click', (e) => {
+    const dropdown = document.getElementById('notifications-dropdown');
+    const btn = document.querySelector('.notification-btn');
+    if (dropdown && !dropdown.contains(e.target) && !btn.contains(e.target)) {
+        dropdown.classList.remove('show');
+    }
+});
+
+// فتح/إغلاق قائمة التنبيهات
+function toggleNotificationsDropdown(e) {
+    e.stopPropagation();
+
+    let dropdown = document.getElementById('notifications-dropdown');
+
+    // إنشاء القائمة إذا لم تكن موجودة
+    if (!dropdown) {
+        dropdown = document.createElement('div');
+        dropdown.id = 'notifications-dropdown';
+        dropdown.className = 'notifications-dropdown';
+        document.querySelector('.notification-btn').appendChild(dropdown);
+    }
+
+    // إذا كانت مفتوحة، أغلقها
+    if (dropdown.classList.contains('show')) {
+        dropdown.classList.remove('show');
+        return;
+    }
+
+    // تحميل التنبيهات
+    dropdown.innerHTML = '<div class="notif-loading"><div class="spinner-small"></div> جاري التحميل...</div>';
+    dropdown.classList.add('show');
+
+    loadNotifications(dropdown);
+}
+
+// تحميل التنبيهات
+async function loadNotifications(dropdown) {
+    try {
+        const res = await fetch('api/?action=notifications&limit=5');
+        const result = await res.json();
+
+        let html = '<div class="notif-header">';
+        html += '<h4>الإشعارات</h4>';
+        html += '<button class="mark-all-read" onclick="markAllAsRead()">تعيين الكل كمقروء</button>';
+        html += '</div>';
+
+        html += '<div class="notif-list">';
+
+        if (result.success && result.data && result.data.length > 0) {
+            const stageNames = {
+                'receiving': 'الاستلام',
+                'budget': 'الموازنة',
+                'payment': 'الدفع',
+                'invoice': 'الفوترة'
+            };
+
+            const stageIcons = {
+                'receiving': '📥',
+                'budget': '💰',
+                'payment': '💳',
+                'invoice': '📄'
+            };
+
+            result.data.forEach(notification => {
+                const stageName = stageNames[notification.stage] || notification.stage;
+                const stageIcon = stageIcons[notification.stage] || '📋';
+                const timeAgo = formatTimeAgo(notification.update_time);
+
+                html += `
+                <div class="notif-item" onclick="goToTransaction(${notification.id})">
+                    <div class="notif-icon">${stageIcon}</div>
+                    <div class="notif-content">
+                        <div class="notif-title">${notification.status || stageName} - ${notification.transaction_number}</div>
+                        <div class="notif-desc">${notification.transaction_type || ''} ${notification.employee_name ? '• ' + notification.employee_name : ''}</div>
+                        <div class="notif-time">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <polyline points="12 6 12 12 16 14"></polyline>
+                            </svg>
+                            ${timeAgo}
+                        </div>
+                    </div>
+                </div>`;
+            });
+        } else {
+            html += '<div class="notif-empty"><div class="empty-icon">🔔</div><p>لا توجد إشعارات جديدة</p></div>';
+        }
+
+        html += '</div>';
+
+        html += '<div class="notif-footer">';
+        html += '<a href="#" onclick="viewAllNotifications(); return false;">عرض كل الإشعارات <span class="arrow">‹</span></a>';
+        html += '</div>';
+
+        dropdown.innerHTML = html;
+
+    } catch (error) {
+        dropdown.innerHTML = '<div class="notif-error">خطأ في تحميل الإشعارات</div>';
+    }
+}
+
+// الانتقال للمعاملة
+function goToTransaction(id) {
+    document.getElementById('notifications-dropdown')?.classList.remove('show');
+    viewTransaction(id);
+}
+
+// عرض كل الإشعارات
+function viewAllNotifications() {
+    document.getElementById('notifications-dropdown')?.classList.remove('show');
+    // يمكنك إضافة صفحة كاملة للإشعارات هنا
+    showToast('قريباً - صفحة كل الإشعارات', 'info');
+}
+
+// تعيين الكل كمقروء
+function markAllAsRead() {
+    const badge = document.getElementById('notification-badge');
+    if (badge) {
+        badge.style.display = 'none';
+        badge.textContent = '0';
+    }
+    showToast('تم تعيين جميع الإشعارات كمقروءة', 'success');
+}
+
+// دالة حساب الوقت المنقضي
+function formatTimeAgo(datetime) {
+    if (!datetime) return '';
+
+    const now = new Date();
+    const past = new Date(datetime);
+    const diffMs = now - past;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffMins < 1) return 'الآن';
+    if (diffMins < 60) return `منذ ${diffMins} دقيقة`;
+    if (diffHours < 24) return `منذ ${diffHours} ساعة`;
+    if (diffDays === 1) return 'أمس';
+    if (diffDays < 7) return `منذ ${diffDays} أيام`;
+
+    // تنسيق التاريخ
+    const day = past.getDate().toString().padStart(2, '0');
+    const month = (past.getMonth() + 1).toString().padStart(2, '0');
+    const year = past.getFullYear();
+    const hours = past.getHours().toString().padStart(2, '0');
+    const mins = past.getMinutes().toString().padStart(2, '0');
+    const ampm = past.getHours() >= 12 ? 'م' : 'ص';
+
+    return `${hours}:${mins} ${ampm} , ${year}/${month}/${day}`;
+}
+
+// دالة حساب الوقت المنقضي
+function formatTimeAgo(datetime) {
+    if (!datetime) return '';
+
+    const now = new Date();
+    const past = new Date(datetime);
+    const diffMs = now - past;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffMins < 1) return 'الآن';
+    if (diffMins < 60) return `منذ ${diffMins} دقيقة`;
+    if (diffHours < 24) return `منذ ${diffHours} ساعة`;
+    if (diffDays < 7) return `منذ ${diffDays} يوم`;
+
+    return past.toLocaleDateString('ar-SA');
+}
 // تبديل التبويبات
 function switchTab(tab) {
     App.currentTab = tab;
@@ -63,10 +238,533 @@ function switchTab(tab) {
         loadDashboard();
     } else if (tab === 'transactions') {
         loadTransactions();
+    } else if (tab === 'correspondence') {
+        loadCorrespondencePage(); // ← إضافة هذا السطر
     } else if (tab === 'settings') {
         loadSettingsPage();
     }
 }
+/**
+ * نظام إدارة معاملات القطاع المالي - JavaScript
+ * Workflow Management System
+ * 
+ * ملاحظة: هذا الملف يحتوي على التعديلات المطلوبة
+ * يجب دمجه مع ملف app.js الأصلي
+ */
+
+// ========== نظام الترجمة (i18n) ==========
+
+// قاموس الترجمة
+const translations = {
+    ar: {
+        // العنوان
+        app_title: "نظام إدارة معاملات القطاع المالي",
+        app_subtitle: "Workflow Management System",
+
+        // التنقل الرئيسي
+        dashboard: "لوحة التحكم",
+        transactions: "المعاملات",
+        settings: "الإعدادات",
+
+        // أزرار الشريط العلوي
+        toggle_theme: "تبديل الوضع",
+        change_language: "تغيير اللغة",
+        notifications: "التنبيهات",
+        logout: "تسجيل الخروج",
+
+        // لوحة التحكم
+        system_overview: "نظرة عامة على النظام",
+        total_transactions: "إجمالي المعاملات",
+        completed: "المكتملة",
+        needs_followup: "تحتاج متابعة",
+        total_amount: "إجمالي المبالغ",
+        urgent_transactions: "المعاملات العاجلة",
+        all: "الكل",
+        urgent: "عاجل",
+        followup: "متابعة",
+
+        // جدول المعاملات
+        transaction_number: "رقم المعاملة",
+        transaction_type: "نوع المعاملة",
+        amount: "المبلغ",
+        status: "الحالة",
+        date: "التاريخ",
+        actions: "الإجراءات",
+
+        // الحالات
+        new_status: "جديد",
+        received: "مستلم",
+        in_budget: "في الموازنة",
+        in_payment: "في الدفع",
+        paid: "مدفوع",
+        rejected: "مرفوض",
+
+        // صفحة الإعدادات
+        system_settings: "إعدادات النظام",
+        manage_employees_transactions: "إدارة الموظفين والمعاملات وإعدادات النظام",
+        resource_management: "إدارة الموارد",
+        employees: "الموظفين",
+        manage_employee_accounts: "إدارة حسابات الموظفين",
+        employee_performance: "أداء الموظفين",
+        reports_tracking: "تقارير ومتابعة الأداء",
+        transactions_section: "المعاملات",
+        transaction_types: "أنواع المعاملات",
+        transaction_categories: "تصنيفات المعاملات",
+        all_transactions: "جميع المعاملات",
+        view_manage_transactions: "عرض وإدارة المعاملات",
+        system_section: "النظام",
+        system_settings_desc: "إعدادات النظام",
+        system_info_tools: "معلومات وأدوات النظام",
+
+        // إدارة الموظفين
+        employee_management: "إدارة الموظفين",
+        add_employee: "إضافة موظف",
+        edit_employee: "تعديل موظف",
+        delete_employee: "حذف موظف",
+        employee_name: "اسم الموظف",
+        email: "البريد الإلكتروني",
+        phone: "رقم الهاتف",
+        department: "القسم",
+
+        // الأقسام/الأدوار
+        admin: "مدير النظام",
+        receiver: "الاستلام",
+        budget: "الموازنة",
+        payment: "الدفع",
+        invoice: "الفوترة",
+
+        // أزرار عامة
+        save: "حفظ",
+        cancel: "إلغاء",
+        edit: "تعديل",
+        delete: "حذف",
+        add: "إضافة",
+        search: "بحث",
+        filter: "فلترة",
+        export: "تصدير",
+        print: "طباعة",
+        close: "إغلاق",
+        confirm: "تأكيد",
+
+        // رسائل
+        success: "نجاح",
+        error: "خطأ",
+        warning: "تحذير",
+        info: "معلومة",
+        loading: "جاري التحميل...",
+        no_data: "لا توجد بيانات",
+        no_employees: "لا يوجد موظفين",
+        confirm_delete: "هل أنت متأكد من الحذف؟",
+        saved_successfully: "تم الحفظ بنجاح",
+        deleted_successfully: "تم الحذف بنجاح",
+        error_occurred: "حدث خطأ",
+
+        // إضافة معاملة
+        add_transaction: "إضافة معاملة",
+        transaction_details: "تفاصيل المعاملة",
+        attachments: "المرفقات",
+        notes: "ملاحظات",
+
+        // إعدادات النظام
+        system_info: "معلومات النظام",
+        system_name: "اسم النظام",
+        version: "الإصدار",
+        database: "قاعدة البيانات",
+        danger_zone: "منطقة الخطر",
+        clear_all_transactions: "حذف جميع المعاملات",
+        this_action_irreversible: "هذا الإجراء لا يمكن التراجع عنه",
+        system_stats: "إحصائيات النظام",
+
+        // العملة
+        currency: "ر.س",
+
+        // الوقت
+        minutes: "دقيقة",
+        hours: "ساعة",
+        days: "يوم",
+        avg: "متوسط"
+    },
+
+    en: {
+        // Title
+        app_title: "Workflow Management System",
+        app_subtitle: "نظام إدارة معاملات القطاع المالي",
+
+        // Main navigation
+        dashboard: "Dashboard",
+        transactions: "Transactions",
+        settings: "Settings",
+
+        // Top bar buttons
+        toggle_theme: "Toggle Theme",
+        change_language: "Change Language",
+        notifications: "Notifications",
+        logout: "Logout",
+
+        // Dashboard
+        system_overview: "System Overview",
+        total_transactions: "Total Transactions",
+        completed: "Completed",
+        needs_followup: "Needs Follow-up",
+        total_amount: "Total Amount",
+        urgent_transactions: "Urgent Transactions",
+        all: "All",
+        urgent: "Urgent",
+        followup: "Follow-up",
+
+        // Transaction table
+        transaction_number: "Transaction #",
+        transaction_type: "Type",
+        amount: "Amount",
+        status: "Status",
+        date: "Date",
+        actions: "Actions",
+
+        // Statuses
+        new_status: "New",
+        received: "Received",
+        in_budget: "In Budget",
+        in_payment: "In Payment",
+        paid: "Paid",
+        rejected: "Rejected",
+
+        // Settings page
+        system_settings: "System Settings",
+        manage_employees_transactions: "Manage employees, transactions and system settings",
+        resource_management: "Resource Management",
+        employees: "Employees",
+        manage_employee_accounts: "Manage employee accounts",
+        employee_performance: "Employee Performance",
+        reports_tracking: "Reports and performance tracking",
+        transactions_section: "Transactions",
+        transaction_types: "Transaction Types",
+        transaction_categories: "Transaction categories",
+        all_transactions: "All Transactions",
+        view_manage_transactions: "View and manage transactions",
+        system_section: "System",
+        system_settings_desc: "System Settings",
+        system_info_tools: "System info and tools",
+
+        // Employee management
+        employee_management: "Employee Management",
+        add_employee: "Add Employee",
+        edit_employee: "Edit Employee",
+        delete_employee: "Delete Employee",
+        employee_name: "Employee Name",
+        email: "Email",
+        phone: "Phone",
+        department: "Department",
+
+        // Departments/Roles
+        admin: "System Admin",
+        receiver: "Receiving",
+        budget: "Budget",
+        payment: "Payment",
+        invoice: "Invoice",
+
+        // General buttons
+        save: "Save",
+        cancel: "Cancel",
+        edit: "Edit",
+        delete: "Delete",
+        add: "Add",
+        search: "Search",
+        filter: "Filter",
+        export: "Export",
+        print: "Print",
+        close: "Close",
+        confirm: "Confirm",
+
+        // Messages
+        success: "Success",
+        error: "Error",
+        warning: "Warning",
+        info: "Info",
+        loading: "Loading...",
+        no_data: "No data available",
+        no_employees: "No employees",
+        confirm_delete: "Are you sure you want to delete?",
+        saved_successfully: "Saved successfully",
+        deleted_successfully: "Deleted successfully",
+        error_occurred: "An error occurred",
+
+        // Add transaction
+        add_transaction: "Add Transaction",
+        transaction_details: "Transaction Details",
+        attachments: "Attachments",
+        notes: "Notes",
+
+        // System settings
+        system_info: "System Info",
+        system_name: "System Name",
+        version: "Version",
+        database: "Database",
+        danger_zone: "Danger Zone",
+        clear_all_transactions: "Clear All Transactions",
+        this_action_irreversible: "This action is irreversible",
+        system_stats: "System Statistics",
+
+        // Currency
+        currency: "SAR",
+
+        // Time
+        minutes: "min",
+        hours: "hr",
+        days: "day",
+        avg: "avg"
+    }
+};
+
+// اللغة الحالية
+let currentLang = localStorage.getItem('app_language') || 'ar';
+
+// دالة الحصول على الترجمة
+function t(key) {
+    return translations[currentLang][key] || translations['ar'][key] || key;
+}
+
+// دالة تبديل اللغة
+function toggleLanguage() {
+    currentLang = currentLang === 'ar' ? 'en' : 'ar';
+    localStorage.setItem('app_language', currentLang);
+    applyLanguage();
+}
+
+// دالة تطبيق اللغة
+function applyLanguage() {
+    const html = document.documentElement;
+
+    // تغيير اتجاه الصفحة
+    if (currentLang === 'ar') {
+        html.setAttribute('dir', 'rtl');
+        html.setAttribute('lang', 'ar');
+    } else {
+        html.setAttribute('dir', 'ltr');
+        html.setAttribute('lang', 'en');
+    }
+
+    html.setAttribute('data-lang', currentLang);
+
+    // تحديث نص زر اللغة
+    // const langText = document.querySelector('.lang-text');
+    // if (langText) {
+    //     langText.textContent = currentLang === 'ar' ? 'EN' : 'ع';
+    // }
+
+    // تحديث جميع العناصر التي تحتوي على data-i18n
+    document.querySelectorAll('[data-i18n]').forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        if (translations[currentLang][key]) {
+            el.textContent = translations[currentLang][key];
+        }
+    });
+
+    // تحديث العناصر التي تحتوي على data-i18n-title
+    document.querySelectorAll('[data-i18n-title]').forEach(el => {
+        const key = el.getAttribute('data-i18n-title');
+        if (translations[currentLang][key]) {
+            el.setAttribute('title', translations[currentLang][key]);
+        }
+    });
+
+    // تحديث العناصر التي تحتوي على data-i18n-placeholder
+    document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+        const key = el.getAttribute('data-i18n-placeholder');
+        if (translations[currentLang][key]) {
+            el.setAttribute('placeholder', translations[currentLang][key]);
+        }
+    });
+
+    // إعادة تحميل المحتوى الحالي
+    refreshCurrentContent();
+}
+
+// دالة إعادة تحميل المحتوى الحالي
+function refreshCurrentContent() {
+    if (typeof App !== 'undefined' && App.currentTab) {
+        if (App.currentTab === 'dashboard') {
+            if (typeof loadDashboard === 'function') loadDashboard();
+        } else if (App.currentTab === 'transactions') {
+            if (typeof loadTransactions === 'function') loadTransactions();
+        } else if (App.currentTab === 'settings') {
+            if (typeof loadSettingsPage === 'function') loadSettingsPage();
+        }
+    }
+}
+
+// تهيئة اللغة عند تحميل الصفحة
+function initLanguage() {
+    currentLang = localStorage.getItem('app_language') || 'ar';
+    const html = document.documentElement;
+
+    if (currentLang === 'en') {
+        html.setAttribute('dir', 'ltr');
+        html.setAttribute('lang', 'en');
+    }
+
+    html.setAttribute('data-lang', currentLang);
+
+    // const langText = document.querySelector('.lang-text');
+    // if (langText) {
+    //     langText.textContent = currentLang === 'ar' ? 'EN' : 'ع';
+    // }
+
+    // تحديث العناصر الثابتة
+    document.querySelectorAll('[data-i18n]').forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        if (translations[currentLang][key]) {
+            el.textContent = translations[currentLang][key];
+        }
+    });
+
+    document.querySelectorAll('[data-i18n-title]').forEach(el => {
+        const key = el.getAttribute('data-i18n-title');
+        if (translations[currentLang][key]) {
+            el.setAttribute('title', translations[currentLang][key]);
+        }
+    });
+}
+
+// تصدير الدوال للاستخدام العام
+window.t = t;
+window.toggleLanguage = toggleLanguage;
+window.applyLanguage = applyLanguage;
+window.initLanguage = initLanguage;
+
+// ========== نهاية نظام الترجمة ==========
+
+
+// ========== دالة loadSettingsPage المحدثة ==========
+
+async function loadSettingsPage() {
+    DOM.mainContent.innerHTML = `
+        <div class="settings-page-wrapper">
+            <!-- رأس صفحة الإعدادات -->
+            <div class="settings-page-header">
+                <div class="settings-header-info">
+                    <div class="settings-header-icon">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="3"></circle>
+                            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                        </svg>
+                    </div>
+                    <div>
+                        <h1>${t('system_settings')}</h1>
+                        <p>${t('manage_employees_transactions')}</p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- محتوى الإعدادات -->
+            <div class="settings-page">
+                <div class="settings-sidebar">
+                    <div class="settings-sidebar-card">
+                        <div class="settings-nav-group">
+                            <span class="settings-nav-label">${t('resource_management')}</span>
+                            <button class="settings-nav-btn active" onclick="showSettingsSection('employees', this)">
+                                <div class="nav-btn-icon blue">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                                        <circle cx="9" cy="7" r="4"></circle>
+                                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                                        <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                                    </svg>
+                                </div>
+                                <div class="nav-btn-text">
+                                    <span class="nav-btn-title">${t('employees')}</span>
+                                    <span class="nav-btn-desc">${t('manage_employee_accounts')}</span>
+                                </div>
+                            </button>
+                            <button class="settings-nav-btn" onclick="showSettingsSection('performance', this)">
+                                <div class="nav-btn-icon green">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <line x1="18" y1="20" x2="18" y2="10"></line>
+                                        <line x1="12" y1="20" x2="12" y2="4"></line>
+                                        <line x1="6" y1="20" x2="6" y2="14"></line>
+                                    </svg>
+                                </div>
+                                <div class="nav-btn-text">
+                                    <span class="nav-btn-title">${t('employee_performance')}</span>
+                                    <span class="nav-btn-desc">${t('reports_tracking')}</span>
+                                </div>
+                            </button>
+                        </div>
+                        
+                        <div class="settings-nav-divider"></div>
+                        
+                        <div class="settings-nav-group">
+                            <span class="settings-nav-label">${t('transactions_section')}</span>
+                            <button class="settings-nav-btn" onclick="showSettingsSection('types', this)">
+                                <div class="nav-btn-icon cyan">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+                                        <polyline points="2 17 12 22 22 17"></polyline>
+                                        <polyline points="2 12 12 17 22 12"></polyline>
+                                    </svg>
+                                </div>
+                                <div class="nav-btn-text">
+                                    <span class="nav-btn-title">${t('transaction_types')}</span>
+                                    <span class="nav-btn-desc">${t('transaction_categories')}</span>
+                                </div>
+                            </button>
+                            <button class="settings-nav-btn" onclick="showSettingsSection('all-transactions', this)">
+                                <div class="nav-btn-icon orange">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                        <polyline points="14 2 14 8 20 8"></polyline>
+                                        <line x1="16" y1="13" x2="8" y2="13"></line>
+                                        <line x1="16" y1="17" x2="8" y2="17"></line>
+                                    </svg>
+                                </div>
+                                <div class="nav-btn-text">
+                                    <span class="nav-btn-title">${t('all_transactions')}</span>
+                                    <span class="nav-btn-desc">${t('view_manage_transactions')}</span>
+                                </div>
+                            </button>
+                        </div>
+                        
+                        <div class="settings-nav-divider"></div>
+                        
+                        <div class="settings-nav-group">
+                            <span class="settings-nav-label">${t('system_section')}</span>
+                            <button class="settings-nav-btn" onclick="showSettingsSection('system', this)">
+                                <div class="nav-btn-icon purple">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                                        <line x1="8" y1="21" x2="16" y2="21"></line>
+                                        <line x1="12" y1="17" x2="12" y2="21"></line>
+                                    </svg>
+                                </div>
+                                <div class="nav-btn-text">
+                                    <span class="nav-btn-title">${t('system_settings_desc')}</span>
+                                    <span class="nav-btn-desc">${t('system_info_tools')}</span>
+                                </div>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="settings-content" id="settingsContent">
+                    <!-- سيتم تحميل المحتوى هنا -->
+                </div>
+            </div>
+        </div>
+    `;
+
+    // تحميل الموظفين افتراضياً
+    await loadSettingsEmployees();
+    showSettingsSection('employees', document.querySelector('.settings-nav-btn'));
+}
+
+// ========== نهاية دالة loadSettingsPage ==========
+
+
+// ========== تعديل تهيئة التطبيق ==========
+// أضف هذا في دالة DOMContentLoaded أو في initDOM
+
+// تهيئة اللغة عند تحميل الصفحة
+document.addEventListener('DOMContentLoaded', function () {
+    initLanguage();
+});
 
 // تحميل لوحة التحكم
 async function loadDashboard() {
@@ -97,155 +795,394 @@ async function loadDashboard() {
 // عرض لوحة التحكم
 function renderDashboard(urgentTransactions) {
     const html = `
-        <div class="stats-overview-card">
-            <div class="stats-header">
-                <h3>📊 نظرة عامة على النظام</h3>
-                <span class="stats-date">${new Date().toLocaleDateString('ar-SA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
+        <div class="dashboard-split">
+            <!-- القسم الأيمن: نظرة عامة + المعاملات العاجلة -->
+            <div class="dashboard-right">
+                <div class="urgent-section">
+                    <div class="urgent-header">
+                        <div class="urgent-title">
+                            <span class="urgent-icon">⚠️</span>
+                            <h3>المعاملات العاجلة</h3>
+                            <span class="urgent-count">${urgentTransactions.length}</span>
+                        </div>
+                        <div class="urgent-filters">
+                            <button class="urgent-filter-btn active" onclick="filterUrgent('all', this)">الكل</button>
+                            <button class="urgent-filter-btn" onclick="filterUrgent('عاجل', this)">🔴 عاجل</button>
+                            <button class="urgent-filter-btn" onclick="filterUrgent('متابعة', this)">⚠️ متابعة</button>
+                        </div>
+                    </div>
+                    <div class="urgent-table-container">
+                        ${urgentTransactions.length > 0 ? `
+                        <table class="urgent-table">
+                            <thead>
+                                <tr>
+                                    <th>الحالة</th>
+                                    <th>رقم المعاملة</th>
+                                    <th>الوصف</th>
+                                    <th>المبلغ</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody id="urgentTableBody">
+                                ${urgentTransactions.slice(0, 8).map(tx => `
+                                <tr class="urgent-row" data-type="${tx.alert_type || 'عاجل'}">
+                                    <td>
+                                        <span class="alert-badge alert-${tx.alert_type === 'عاجل' ? 'danger' : tx.alert_type === 'متابعة' ? 'warning' : 'info'}">
+                                            ${tx.alert_type === 'عاجل' ? '🔴' : tx.alert_type === 'متابعة' ? '⚠️' : '⏳'}
+                                        </span>
+                                    </td>
+                                    <td><span class="tx-number">${tx.transaction_number}</span></td>
+                                    <td><span class="tx-desc-text">${tx.description?.substring(0, 30) || ''}${tx.description?.length > 30 ? '...' : ''}</span></td>
+                                    <td><span class="tx-amount">${formatMoney(tx.amount)}</span></td>
+                                    <td>
+                                        <button class="btn-action btn-view" onclick="viewTransaction(${tx.id})" title="عرض">
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                                <circle cx="12" cy="12" r="3"></circle>
+                                            </svg>
+                                        </button>
+                                    </td>
+                                </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                        ${urgentTransactions.length > 8 ? `<div class="urgent-more">و ${urgentTransactions.length - 8} معاملات أخرى...</div>` : ''}
+                        ` : `
+                        <div class="urgent-empty">
+                            <div class="empty-icon">✅</div>
+                            <h4>لا توجد معاملات عاجلة</h4>
+                            <p>جميع المعاملات تسير بشكل طبيعي</p>
+                        </div>
+                        `}
+                    </div>
+                </div>
+                <div class="stats-overview-card">
+                    <div class="stats-header">
+                        <h3>📊 نظرة عامة على النظام</h3>
+                        <span class="stats-date">${new Date().toLocaleDateString('ar-SA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
+                    </div>
+                    <div class="stats-content">
+                        <div class="stat-item">
+                            <div class="stat-icon-sm blue">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                    <polyline points="14 2 14 8 20 8"></polyline>
+                                    <line x1="16" y1="13" x2="8" y2="13"></line>
+                                    <line x1="16" y1="17" x2="8" y2="17"></line>
+                                </svg>
+                            </div>
+                            <div class="stat-details">
+                                <span class="stat-number">${App.stats.total || 0}</span>
+                                <span class="stat-text">إجمالي المعاملات</span>
+                            </div>
+                        </div>
+                        <div class="stat-divider"></div>
+                        <div class="stat-item">
+                            <div class="stat-icon-sm green">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                                    <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                                </svg>
+                            </div>
+                            <div class="stat-details">
+                                <span class="stat-number">${App.stats.paid || 0}</span>
+                                <span class="stat-text">المكتملة</span>
+                            </div>
+                        </div>
+                        <div class="stat-divider"></div>
+                        <div class="stat-item">
+                            <div class="stat-icon-sm orange">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="10"></circle>
+                                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                                </svg>
+                            </div>
+                            <div class="stat-details">
+                                <span class="stat-number urgent">${App.stats.urgent || 0}</span>
+                                <span class="stat-text">تحتاج متابعة</span>
+                            </div>
+                        </div>
+                        <div class="stat-divider"></div>
+                        <div class="stat-item">
+                            <div class="stat-icon-sm purple">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <line x1="12" y1="1" x2="12" y2="23"></line>
+                                    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                                </svg>
+                            </div>
+                            <div class="stat-details">
+                                <span class="stat-number">${formatMoney(App.stats.total_amount || 0)}</span>
+                                <span class="stat-text">إجمالي المبالغ</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                
             </div>
-            <div class="stats-content">
-                <div class="stat-item">
-                    <div class="stat-icon-sm blue">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                            <polyline points="14 2 14 8 20 8"></polyline>
-                            <line x1="16" y1="13" x2="8" y2="13"></line>
-                            <line x1="16" y1="17" x2="8" y2="17"></line>
-                        </svg>
+            
+            <!-- القسم الأيسر: متابعة الأداء -->
+            <div class="dashboard-left">
+                <div class="performance-dashboard-section">
+                    <div class="perf-dash-header">
+                        <div class="perf-dash-title">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <polyline points="12 6 12 12 16 14"></polyline>
+                            </svg>
+                            <h3>متابعة الأداء</h3>
+                        </div>
+                        <div class="perf-dash-tabs">
+                            <button class="perf-dash-tab active" onclick="switchDashPerfTab('employees', this)">الموظفين</button>
+                            <button class="perf-dash-tab" onclick="switchDashPerfTab('events', this)">الأحداث</button>
+                        </div>
                     </div>
-                    <div class="stat-details">
-                        <span class="stat-number">${App.stats.total || 0}</span>
-                        <span class="stat-text">إجمالي المعاملات</span>
+                    
+                    <!-- قسم الموظفين -->
+                    <div id="dashPerfEmployees" class="perf-dash-content active">
+                        <div id="dashEmployeeCards" class="dash-employee-cards">
+                            <div class="loading-placeholder">جاري التحميل...</div>
+                        </div>
                     </div>
-                </div>
-                <div class="stat-divider"></div>
-                <div class="stat-item">
-                    <div class="stat-icon-sm green">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-                            <polyline points="22 4 12 14.01 9 11.01"></polyline>
-                        </svg>
-                    </div>
-                    <div class="stat-details">
-                        <span class="stat-number">${App.stats.paid || 0}</span>
-                        <span class="stat-text">المكتملة</span>
-                    </div>
-                </div>
-                <div class="stat-divider"></div>
-                <div class="stat-item">
-                    <div class="stat-icon-sm orange">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <circle cx="12" cy="12" r="10"></circle>
-                            <line x1="12" y1="8" x2="12" y2="12"></line>
-                            <line x1="12" y1="16" x2="12.01" y2="16"></line>
-                        </svg>
-                    </div>
-                    <div class="stat-details">
-                        <span class="stat-number urgent">${App.stats.urgent || 0}</span>
-                        <span class="stat-text">تحتاج متابعة</span>
+                    
+                    <!-- قسم الأحداث -->
+                    <div id="dashPerfEvents" class="perf-dash-content">
+                        <div id="dashEventsTimeline" class="dash-events-timeline">
+                            <div class="loading-placeholder">جاري التحميل...</div>
+                        </div>
                     </div>
                 </div>
-                <div class="stat-divider"></div>
-                <div class="stat-item">
-                    <div class="stat-icon-sm purple">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <line x1="12" y1="1" x2="12" y2="23"></line>
-                            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
-                        </svg>
-                    </div>
-                    <div class="stat-details">
-                        <span class="stat-number">${formatMoney(App.stats.total_amount || 0)}</span>
-                        <span class="stat-text">إجمالي المبالغ</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <div class="urgent-section">
-            <div class="urgent-header">
-                <div class="urgent-title">
-                    <span class="urgent-icon">⚠️</span>
-                    <h3>المعاملات العاجلة</h3>
-                    <span class="urgent-count">${urgentTransactions.length}</span>
-                </div>
-                <div class="urgent-filters">
-                    <button class="urgent-filter-btn active" onclick="filterUrgent('all', this)">الكل</button>
-                    <button class="urgent-filter-btn" onclick="filterUrgent('عاجل', this)">🔴 عاجل</button>
-                    <button class="urgent-filter-btn" onclick="filterUrgent('متابعة', this)">⚠️ متابعة</button>
-                </div>
-            </div>
-            <div class="urgent-table-container">
-                ${urgentTransactions.length > 0 ? `
-                <table class="urgent-table">
-                    <thead>
-                        <tr>
-                            <th>الحالة</th>
-                            <th>رقم المعاملة</th>
-                            <th>الوصف</th>
-                            <th>التاريخ</th>
-                            <th>المبلغ</th>
-                            <th>الإجراءات</th>
-                        </tr>
-                    </thead>
-                    <tbody id="urgentTableBody">
-                        ${urgentTransactions.map(tx => `
-                        <tr class="urgent-row" data-type="${tx.alert_type || 'عاجل'}">
-                            <td>
-                                <span class="alert-badge alert-${tx.alert_type === 'عاجل' ? 'danger' : tx.alert_type === 'متابعة' ? 'warning' : 'info'}">
-                                    ${tx.alert_type === 'عاجل' ? '🔴' : tx.alert_type === 'متابعة' ? '⚠️' : '⏳'} ${tx.alert_type || 'انتظار'}
-                                </span>
-                            </td>
-                            <td>
-                                <span class="tx-number">${tx.transaction_number}</span>
-                            </td>
-                            <td>
-                                <div class="tx-desc">
-                                    <span class="tx-desc-text">${tx.description}</span>
-                                    <span class="tx-type">${tx.type_name || ''}</span>
-                                </div>
-                            </td>
-                            <td>
-                                <span class="tx-date">${tx.transaction_date}</span>
-                            </td>
-                            <td>
-                                <span class="tx-amount">${formatMoney(tx.amount)}</span>
-                            </td>
-                            <td>
-                                <div class="tx-actions">
-                                    <button class="btn-action btn-view" onclick="viewTransaction(${tx.id})" title="عرض">
-                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                                            <circle cx="12" cy="12" r="3"></circle>
-                                        </svg>
-                                    </button>
-                                    <button class="btn-action btn-edit" onclick="editTransaction(${tx.id})" title="تعديل">
-                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                                        </svg>
-                                    </button>
-                                </div>
-                            </td>
-                        </tr>
-                        `).join('')}
-                    </tbody>
-                </table>
-                ` : `
-                <div class="urgent-empty">
-                    <div class="empty-icon">✅</div>
-                    <h4>لا توجد معاملات عاجلة</h4>
-                    <p>جميع المعاملات تسير بشكل طبيعي</p>
-                </div>
-                `}
             </div>
         </div>
     `;
 
     DOM.mainContent.innerHTML = html;
 
+    // تحميل بيانات الأداء
+    loadDashboardPerformance();
+
     if (DOM.notificationBadge) {
         DOM.notificationBadge.textContent = App.stats.urgent || 0;
         DOM.notificationBadge.style.display = App.stats.urgent > 0 ? 'flex' : 'none';
     }
+}
+
+// تبديل تبويبات الأداء في لوحة التحكم
+function switchDashPerfTab(tab, btn) {
+    document.querySelectorAll('.perf-dash-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.perf-dash-content').forEach(c => c.classList.remove('active'));
+
+    btn.classList.add('active');
+
+    if (tab === 'employees') {
+        document.getElementById('dashPerfEmployees').classList.add('active');
+    } else {
+        document.getElementById('dashPerfEvents').classList.add('active');
+        loadDashboardEvents();
+    }
+}
+
+// تحميل بيانات الأداء في لوحة التحكم
+async function loadDashboardPerformance() {
+    try {
+        const res = await fetch('api/?action=performance_summary');
+        const result = await res.json();
+
+        if (result.success) {
+            renderDashboardEmployees(result.data);
+        }
+    } catch (e) {
+        console.error('Error loading performance:', e);
+    }
+
+
+    // إضافة إحصائيات الخطابات
+    fetch('api/correspondence_api.php?action=stats')
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                displayCorrespondenceStatsInDashboard(data.data);
+            }
+        });
+}
+
+function displayCorrespondenceStatsInDashboard(stats) {
+    // إضافة قسم جديد في لوحة التحكم
+    const corrSection = `
+        <div class="dashboard-section">
+            <h3>📨 الخطابات والمراسلات</h3>
+            <div class="mini-stats">
+                <div class="mini-stat">
+                    <span class="mini-stat-value">${stats.total}</span>
+                    <span class="mini-stat-label">إجمالي الخطابات</span>
+                </div>
+                <div class="mini-stat">
+                    <span class="mini-stat-value">${stats.pending}</span>
+                    <span class="mini-stat-label">قيد المعالجة</span>
+                </div>
+                <div class="mini-stat">
+                    <span class="mini-stat-value">${stats.urgent}</span>
+                    <span class="mini-stat-label">عاجلة</span>
+                </div>
+            </div>
+        </div>
+    `;
+
+    // إدراجه في المكان المناسب
+}
+// عرض بطاقات الموظفين في لوحة التحكم
+function renderDashboardEmployees(data) {
+    const container = document.getElementById('dashEmployeeCards');
+    if (!container) return;
+
+    // تجميع البيانات حسب الموظف
+    const employeeStats = {};
+    data.forEach(item => {
+        if (!employeeStats[item.employee_id]) {
+            employeeStats[item.employee_id] = {
+                name: item.employee_name,
+                role: item.employee_role,
+                total: 0,
+                totalDuration: 0
+            };
+        }
+        employeeStats[item.employee_id].total += parseInt(item.total_transactions) || 0;
+        employeeStats[item.employee_id].totalDuration += parseInt(item.total_duration) || 0;
+    });
+
+    const roleColors = {
+        'admin': '#667eea',
+        'receiver': '#69db7c',
+        'budget': '#3bc9db',
+        'payment': '#ffa94d',
+        'invoice': '#b197fc'
+    };
+
+    const roleNames = {
+        'admin': 'مدير',
+        'receiver': 'استلام',
+        'budget': 'موازنة',
+        'payment': 'دفع',
+        'invoice': 'فوترة'
+    };
+
+    let html = '';
+
+    Object.values(employeeStats).forEach(emp => {
+        const avgTime = emp.total > 0 ? Math.round(emp.totalDuration / emp.total) : 0;
+        const color = roleColors[emp.role] || '#667eea';
+        const roleName = roleNames[emp.role] || emp.role;
+
+        html += `
+        <div class="dash-emp-card">
+            <div class="dash-emp-avatar" style="background: ${color}20; color: ${color};">
+                ${emp.name ? emp.name.charAt(0) : '؟'}
+            </div>
+            <div class="dash-emp-info">
+                <span class="dash-emp-name">${emp.name}</span>
+                <span class="dash-emp-role" style="color: ${color};">${roleName}</span>
+            </div>
+            <div class="dash-emp-stats">
+                <span class="dash-emp-count">${emp.total}</span>
+                <span class="dash-emp-time">${avgTime > 0 ? avgTime + ' د' : '-'}</span>
+            </div>
+        </div>`;
+    });
+
+    if (Object.keys(employeeStats).length === 0) {
+        html = '<div class="empty-placeholder">لا توجد بيانات</div>';
+    }
+
+    container.innerHTML = html;
+}
+
+// تحميل أحداث لوحة التحكم
+async function loadDashboardEvents() {
+    const container = document.getElementById('dashEventsTimeline');
+    if (!container) return;
+
+    container.innerHTML = '<div class="loading-placeholder">جاري التحميل...</div>';
+
+    try {
+        const res = await fetch('api/?action=all_events&limit=15');
+        const result = await res.json();
+
+        if (result.success && result.data && result.data.length > 0) {
+            const stageInfo = {
+                'creation': { name: 'إنشاء', color: '#4dabf7', icon: '➕' },
+                'receiving': { name: 'استلام', color: '#69db7c', icon: '📥' },
+                'budget': { name: 'موازنة', color: '#3bc9db', icon: '💰' },
+                'payment': { name: 'دفع', color: '#ffa94d', icon: '💳' },
+                'invoice': { name: 'فوترة', color: '#b197fc', icon: '🧾' }
+            };
+
+            let html = '<div class="dash-timeline">';
+
+            result.data.forEach(event => {
+                const info = stageInfo[event.stage] || { name: event.stage, color: '#888', icon: '📋' };
+                const duration = event.duration_from_previous;
+
+                html += `
+                <div class="dash-event-item">
+                    <div class="dash-event-icon" style="background: ${info.color}20; color: ${info.color};">${info.icon}</div>
+                    <div class="dash-event-content">
+                        <div class="dash-event-header">
+                            <span class="dash-event-tx">${event.transaction_number || '-'}</span>
+                            <span class="dash-event-tx">${event.transaction_date || '-'}</span>
+                            <span class="dash-event-stage" style="color: ${info.color};">${info.name}</span>
+                        </div>
+                        <div class="dash-event-status">
+                            ${event.old_status ? `<span class="old">${event.old_status}</span> ← ` : ''}
+                            <span class="new">${event.new_status || '-'}</span>
+                            ${duration > 0 ? `<span class="duration">${formatDuration(duration)} </span>` : ''}
+                        </div>
+                        <div class="dash-event-footer">
+                            <span>${event.employee_name || 'النظام'}</span>
+                            <span>${formatTimeAgo(event.event_time)}</span>
+                        </div>
+                    </div>
+                </div>`;
+            });
+
+            html += '</div>';
+            container.innerHTML = html;
+        } else {
+            container.innerHTML = '<div class="empty-placeholder">لا توجد أحداث</div>';
+        }
+    } catch (e) {
+        container.innerHTML = '<div class="empty-placeholder">خطأ في التحميل</div>';
+    }
+}
+
+function formatDuration(minutes) {
+    if (!minutes || minutes <= 0) return 'الآن';
+
+    const days = Math.floor(minutes / 1440);
+    const hours = Math.floor((minutes % 1440) / 60);
+    const mins = minutes % 60;
+
+    let parts = [];
+
+    if (days > 0) parts.push(`${days} يوم`);
+    if (hours > 0) parts.push(`${hours} ساعة`);
+    if (mins > 0 && days === 0) parts.push(`${mins} دقيقة`);
+
+    return 'منذ ' + parts.join(' و ');
+}
+
+
+// تنسيق الوقت النسبي
+function formatTimeAgo(datetime) {
+    if (!datetime) return '';
+    const date = new Date(datetime);
+    const now = new Date();
+    const diff = Math.floor((now - date) / 1000);
+
+    if (diff < 60) return 'الآن';
+    if (diff < 3600) return Math.floor(diff / 60) + ' د';
+    if (diff < 86400) return Math.floor(diff / 3600) + ' س';
+    return Math.floor(diff / 86400) + ' ي';
 }
 
 // فلترة المعاملات العاجلة
@@ -1126,50 +2063,43 @@ async function editTransaction(id) {
         }
 
         // تبويب الدفع
+        // تبويب الدفع
         if (showPayment) {
             contentHtml += `
-            <div id="tab-payment" class="tab-content" style="${activeTab === 'payment' ? '' : 'display: none;'}">
-                <form id="paymentForm" onsubmit="submitUpdateForm(event, 'payment')">
-                    <input type="hidden" name="transaction_id" value="${tx.id}">
-                    <div class="auto-employee-info">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-                        <span>سيتم تسجيل التحديث باسمك وبالوقت الحالي تلقائياً</span>
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label class="form-label">طريقة الدفع</label>
-                            <select class="form-select" name="method">
-                                <option value="">اختر الطريقة</option>
-                                <option value="تحويل بنكي" ${tx.payment_method === 'تحويل بنكي' ? 'selected' : ''}>تحويل بنكي</option>
-                                <option value="شيك" ${tx.payment_method === 'شيك' ? 'selected' : ''}>شيك</option>
-                                <option value="نقدي" ${tx.payment_method === 'نقدي' ? 'selected' : ''}>نقدي</option>
-                                <option value="بطاقة ائتمان" ${tx.payment_method === 'بطاقة ائتمان' ? 'selected' : ''}>بطاقة ائتمان</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">الحالة</label>
-                            <select class="form-select" name="status">
-                                <option value="معلق" ${tx.payment_status === 'معلق' ? 'selected' : ''}>معلق</option>
-                                <option value="قيد المعالجة" ${tx.payment_status === 'قيد المعالجة' ? 'selected' : ''}>قيد المعالجة</option>
-                                <option value="تم الدفع" ${tx.payment_status === 'تم الدفع' ? 'selected' : ''}>تم الدفع</option>
-                                <option value="مرفوض" ${tx.payment_status === 'مرفوض' ? 'selected' : ''}>مرفوض</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">رقم المرجع</label>
-                        <input type="text" class="form-input" name="reference" value="${tx.reference_number || ''}" placeholder="REF-XXXX">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">ملاحظات</label>
-                        <textarea class="form-textarea" name="notes">${tx.payment_notes || ''}</textarea>
-                    </div>
-                    <div class="modal-footer" style="padding: 0; border: none; margin-top: 1.5rem;">
-                        <button type="button" class="btn btn-secondary" onclick="closeModal()">إلغاء</button>
-                        <button type="submit" class="btn btn-primary">حفظ التغييرات</button>
-                    </div>
-                </form>
-            </div>`;
+    <div id="tab-payment" class="tab-content" style="${activeTab === 'payment' ? '' : 'display: none;'}">
+        <form id="paymentForm" onsubmit="submitUpdateForm(event, 'payment')">
+            <input type="hidden" name="transaction_id" value="${tx.id}">
+            <div class="auto-employee-info">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                <span>سيتم تسجيل التحديث باسمك وبالوقت الحالي تلقائياً</span>
+            </div>
+            <div class="payment-method-info" style="background: linear-gradient(135deg, var(--accent-orange), #ff8c00); color: #000; padding: 0.75rem 1rem; border-radius: 8px; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 4H3a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h18a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"></path><path d="M1 10h22"></path></svg>
+                <span><strong>طريقة الدفع:</strong> تحويل بنكي</span>
+            </div>
+            <div class="form-group">
+                <label class="form-label">الحالة</label>
+                <select class="form-select" name="status">
+                    <option value="معلق" ${tx.payment_status === 'معلق' ? 'selected' : ''}>معلق</option>
+                    <option value="قيد المعالجة" ${tx.payment_status === 'قيد المعالجة' ? 'selected' : ''}>قيد المعالجة</option>
+                    <option value="تم الدفع" ${tx.payment_status === 'تم الدفع' ? 'selected' : ''}>تم الدفع</option>
+                    <option value="مرفوض" ${tx.payment_status === 'مرفوض' ? 'selected' : ''}>مرفوض</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">رقم المرجع</label>
+                <input type="text" class="form-input" name="reference" value="${tx.reference_number || ''}" placeholder="REF-XXXX">
+            </div>
+            <div class="form-group">
+                <label class="form-label">ملاحظات</label>
+                <textarea class="form-textarea" name="notes">${tx.payment_notes || ''}</textarea>
+            </div>
+            <div class="modal-footer" style="padding: 0; border: none; margin-top: 1.5rem;">
+                <button type="button" class="btn btn-secondary" onclick="closeModal()">إلغاء</button>
+                <button type="submit" class="btn btn-primary">حفظ التغييرات</button>
+            </div>
+        </form>
+    </div>`;
         }
 
         // تبويب الفوترة
@@ -1535,11 +2465,10 @@ function renderEmployeesSection() {
         for (var i = 0; i < filtered.length; i++) {
             var emp = filtered[i];
             html += '<div class="employee-card">';
-            html += '<div class="employee-avatar">' + emp.employee_number + '</div>';
+            html += '<div class="employee-avatar">' + emp.name.charAt(0) + '</div>';
             html += '<div class="employee-info">';
             html += '<h4>' + emp.name + '</h4>';
             html += '<span class="role-badge role-' + emp.role + '">' + getRoleName(emp.role) + '</span>';
-
             html += '<p class="employee-contact">' + (emp.email || '—') + '</p>';
             html += '<p class="employee-contact">' + (emp.phone || '—') + '</p>';
             html += '</div>';
@@ -2661,7 +3590,7 @@ async function renderSystemSection() {
     html += '<div class="system-card">';
     html += '<h3>ℹ️ معلومات النظام</h3>';
     html += '<div class="info-list">';
-    html += '<div class="info-item"><span>اسم النظام:</span><span>نظام إدارة المعاملات</span></div>';
+    html += '<div class="info-item"><span>اسم النظام:</span><span>نظام إدارة معاملات القطاع المالي</span></div>';
     html += '<div class="info-item"><span>الإصدار:</span><span>1.0.0</span></div>';
     html += '<div class="info-item"><span>قاعدة البيانات:</span><span>MySQL</span></div>';
     html += '</div>';
@@ -2702,4 +3631,9 @@ async function clearAllTransactions() {
     } catch (err) {
         showToast('خطأ في الاتصال', 'error');
     }
+}
+
+
+function openUserGuide() {
+    window.open('User_Guide.html', '_blank', 'width=1200,height=800');
 }
