@@ -636,3 +636,144 @@ function formatDateTime(datetime) {
         minute: '2-digit'
     });
 }
+
+
+
+
+// في صفحة الإعدادات - إضافة قسم العملات
+
+function loadCurrencySettings() {
+    fetch('api/?action=currencies')
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                displayCurrencySettings(data.data);
+            }
+        });
+}
+
+function displayCurrencySettings(currencies) {
+    const html = `
+        <div class="settings-section">
+            <h3 style="margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.75rem;">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="1" x2="12" y2="23"></line>
+                    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                </svg>
+                إدارة العملات وأسعار الصرف
+            </h3>
+            
+            <div class="currencies-grid">
+                ${currencies.map(currency => `
+                    <div class="currency-settings-card ${!currency.is_active ? 'disabled' : ''}">
+                        <div class="currency-header">
+                            <div class="currency-info">
+                                <span class="currency-symbol">${currency.symbol}</span>
+                                <div>
+                                    <div class="currency-code">${currency.code}</div>
+                                    <div class="currency-name">${currency.name_ar}</div>
+                                </div>
+                            </div>
+                            <label class="toggle-switch">
+                                <input type="checkbox" ${currency.is_active ? 'checked' : ''} 
+                                       onchange="toggleCurrency('${currency.code}', this.checked)">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                        
+                        <div class="exchange-rate-input">
+                            <label>سعر الصرف مقابل الريال السعودي</label>
+                            <div class="rate-input-group">
+                                <span class="rate-prefix">1 ${currency.code} =</span>
+                                <input type="number" 
+                                       value="${currency.exchange_rate_to_sar}" 
+                                       step="0.0001" 
+                                       min="0"
+                                       ${currency.code === 'SAR' ? 'readonly' : ''}
+                                       id="rate-${currency.code}"
+                                       onchange="updateExchangeRate('${currency.code}', this.value)">
+                                <span class="rate-suffix">ر.س</span>
+                            </div>
+                            <div class="rate-example">
+                                مثال: ${(100 * currency.exchange_rate_to_sar).toFixed(2)} ر.س = 100 ${currency.code}
+                            </div>
+                        </div>
+                        
+                        <div class="last-update">
+                            آخر تحديث: ${new Date(currency.updated_at).toLocaleString('ar-SA')}
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+            
+            <div class="info-box" style="margin-top: 2rem;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="16" x2="12" y2="12"></line>
+                    <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                </svg>
+                <div>
+                    <strong>ملاحظة هامة:</strong>
+                    <p>• سعر الصرف يمثل كم ريال سعودي يساوي وحدة واحدة من العملة</p>
+                    <p>• التغييرات تطبق على المعاملات الجديدة فقط</p>
+                    <p>• المعاملات القديمة تحتفظ بسعر الصرف وقت إنشائها</p>
+                </div>
+            </div>
+        </div>
+    `;
+
+    document.getElementById('currency-settings-container').innerHTML = html;
+}
+
+// تحديث سعر صرف عملة
+function updateExchangeRate(currencyCode, newRate) {
+    if (currencyCode === 'SAR') return;
+
+    fetch('api/?action=update_currency_rate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            currency_code: currencyCode,
+            exchange_rate: parseFloat(newRate)
+        })
+    })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                showToast(`تم تحديث سعر صرف ${currencyCode} ✅`, 'success');
+                loadCurrencySettings();
+            } else {
+                showToast(data.message || 'فشل التحديث', 'error');
+            }
+        })
+        .catch(err => {
+            console.error('Error:', err);
+            showToast('حدث خطأ', 'error');
+        });
+}
+
+// تفعيل/تعطيل عملة
+function toggleCurrency(currencyCode, isActive) {
+    if (currencyCode === 'SAR') {
+        showToast('لا يمكن تعطيل الريال السعودي', 'error');
+        return;
+    }
+
+    fetch('api/?action=toggle_currency', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            currency_code: currencyCode,
+            is_active: isActive
+        })
+    })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                showToast(isActive ? `تم تفعيل ${currencyCode}` : `تم تعطيل ${currencyCode}`, 'success');
+                loadCurrencySettings();
+            } else {
+                showToast(data.message || 'فشل التحديث', 'error');
+            }
+        });
+}
