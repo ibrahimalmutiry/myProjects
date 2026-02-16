@@ -2469,7 +2469,7 @@ function renderEmployeesSection() {
             html += '<div class="employee-info">';
             html += '<h4>' + emp.name + '</h4>';
             html += '<span class="role-badge role-' + emp.role + '">' + getRoleName(emp.role) + '</span>';
-            html += '<p class="employee-contact">' + (emp.email || '—') + '</p>';
+            html += '<p class="employee-contact">' + (emp.employee_number || '—') + '</p>';
             html += '<p class="employee-contact">' + (emp.phone || '—') + '</p>';
             html += '</div>';
             html += '<div class="employee-actions">';

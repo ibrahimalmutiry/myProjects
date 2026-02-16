@@ -231,7 +231,7 @@ function displayCorrespondenceDetails(corr) {
     }
     html += `</div>`;
 
-    html += `<div class="expanded-content">`;
+    html += `<div class="expanded-content-correspondence">`;
 
     // قسم المحتوى
     html += `<div class="detail-section" style="grid-column: 1 / -1; background: rgba(74, 171, 247, 0.03); border-color: rgba(74, 171, 247, 0.2);">`;

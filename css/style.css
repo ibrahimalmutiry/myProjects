@@ -1664,6 +1664,14 @@ body {
     animation: slideDown 0.3s ease;
 }
 
+.expanded-content-correspondence {
+    padding: 1.5rem;
+    display: block;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
+    animation: slideDown 0.3s ease;
+}
+
 .expanded-content.four-columns {
     grid-template-columns: repeat(4, 1fr);
 }
@@ -1693,6 +1701,7 @@ body {
     border-radius: 12px;
     border: 1px solid;
     transition: transform 0.2s ease, box-shadow 0.2s ease;
+    margin: 1.5rem;
 }
 
 
