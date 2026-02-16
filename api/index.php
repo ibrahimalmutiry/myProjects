@@ -329,37 +329,134 @@ try {
             jsonResponse(['success' => true, 'data' => $events]);
             break;
         
-  case 'notifications':
-    $limit = (int)($_GET['limit'] ?? 5);
-    echo json_encode(['success' => true, 'data' => getRecentNotifications($limit)]);
+          // الحصول على الإشعارات
+        case 'notifications':
+            $limit = (int)($_GET['limit'] ?? 20);
+            $notifications = getRecentNotifications($limit);
+            
+            // حساب غير المقروء
+            $unread = 0;
+            foreach ($notifications as $n) {
+                if (!isset($n['is_read']) || !$n['is_read']) {
+                    $unread++;
+                }
+            }
+            
+            jsonResponse([
+                'success' => true, 
+                'data' => $notifications,
+                'unread_count' => $unread
+            ]);
+            break;
+
+        // تحديد كمقروء
+        case 'mark_notification_read':
+            $data = json_decode(file_get_contents('php://input'), true);
+            $notifId = (int)($data['notification_id'] ?? 0);
+            
+            // هنا تحديث في قاعدة البيانات
+            // مثال: UPDATE notifications SET is_read = 1 WHERE id = $notifId
+            
+            jsonResponse(['success' => true]);
+            break;
+
+        // تحديد الكل كمقروء
+        case 'mark_all_notifications_read':
+            // UPDATE notifications SET is_read = 1 WHERE user_id = $_SESSION['user_id']
+            
+            jsonResponse(['success' => true]);
+            break;
+
+                case 'update_payment':
+                    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+                        echo json_encode(['success' => false, 'message' => 'طريقة غير صحيحة']);
+                        break;
+                    }
+                    
+                    $data = json_decode(file_get_contents('php://input'), true);
+                    // تعيين طريقة الدفع تلقائياً كتحويل بنكي
+                    $data['method'] = 'تحويل بنكي';
+                    $transactionId = isset($data['transaction_id']) ? (int)$data['transaction_id'] : 0;
+                    if ($transactionId <= 0) {
+                        echo json_encode(['success' => false, 'message' => 'معرف المعاملة غير صالح']);
+                        break;
+                    }
+                    $result = updatePaymentData($transactionId, $data);
+                    echo json_encode($result);
+                    break;
+                    // جميع الأحداث
+        case 'all_events':
+                    $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 50;
+                    $stage = $_GET['stage'] ?? null;
+                    $employeeId = isset($_GET['employee_id']) ? (int)$_GET['employee_id'] : null;
+                    
+                    $events = getAllEvents($limit, $stage, $employeeId);
+                    jsonResponse(['success' => true, 'data' => $events]);
+            break;
+        
+        
+        // ===== Bank Deposits APIs =====
+case 'bank_accounts':
+    require_once __DIR__ . '/../includes/bank_functions.php';
+    $accounts = getAllBankAccounts();
+    jsonResponse(['success' => true, 'data' => $accounts]);
     break;
 
-case 'update_payment':
-    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-        echo json_encode(['success' => false, 'message' => 'طريقة غير صحيحة']);
-        break;
-    }
-    
-    $data = json_decode(file_get_contents('php://input'), true);
-    // تعيين طريقة الدفع تلقائياً كتحويل بنكي
-    $data['method'] = 'تحويل بنكي';
-    $transactionId = isset($data['transaction_id']) ? (int)$data['transaction_id'] : 0;
-    if ($transactionId <= 0) {
-        echo json_encode(['success' => false, 'message' => 'معرف المعاملة غير صالح']);
-        break;
-    }
-    $result = updatePaymentData($transactionId, $data);
-    echo json_encode($result);
+case 'bank_deposits':
+    require_once __DIR__ . '/../includes/bank_functions.php';
+    $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : null;
+    $deposits = getAllDeposits($limit);
+    jsonResponse(['success' => true, 'data' => $deposits]);
     break;
-            // جميع الأحداث
-        case 'all_events':
-            $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 50;
-            $stage = $_GET['stage'] ?? null;
-            $employeeId = isset($_GET['employee_id']) ? (int)$_GET['employee_id'] : null;
-            
-            $events = getAllEvents($limit, $stage, $employeeId);
-            jsonResponse(['success' => true, 'data' => $events]);
-            break;
+
+
+case 'daily_balances':
+    require_once __DIR__ . '/../includes/bank_functions.php';
+    $balances = getDailyBalances();
+    jsonResponse(['success' => true, 'data' => $balances]);
+    break;
+
+case 'add_deposit':
+    require_once __DIR__ . '/../includes/bank_functions.php';
+    $input = json_decode(file_get_contents('php://input'), true);
+    $result = addDeposit($input);
+    jsonResponse($result);
+    break;
+
+case 'add_bank_account':
+    require_once __DIR__ . '/../includes/bank_functions.php';
+    $input = json_decode(file_get_contents('php://input'), true);
+    $result = addBankAccount($input);
+    jsonResponse($result);
+    break;
+
+case 'confirm_deposit':
+    require_once __DIR__ . '/../includes/bank_functions.php';
+    $input = json_decode(file_get_contents('php://input'), true);
+    $result = confirmDeposit($input['id']);
+    jsonResponse($result);
+    break;
+
+case 'record_daily_balance':
+    require_once __DIR__ . '/../includes/bank_functions.php';
+    $input = json_decode(file_get_contents('php://input'), true);
+    $result = recordDailyBalance($input);
+    jsonResponse($result);
+    break;
+
+case 'bank_stats':
+    require_once __DIR__ . '/../includes/bank_functions.php';
+    $stats = getBankStats();
+    jsonResponse(['success' => true, 'data' => $stats]);
+    break;
+        
+        
+        
+        
+        
+        
+        
+        
         
         default:
             jsonResponse(['success' => false, 'message' => 'إجراء غير معروف: ' . $action], 400);

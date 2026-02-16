@@ -52,10 +52,12 @@ $userRole = $_SESSION['user_role'] ?? '';
             </div>
 
             <!-- استبدل القسم الحالي بهذا -->
+            <!-- ابحث عن هذا القسم وأضف السطر الجديد -->
             <div class="nav-tabs">
                 <button class="nav-tab active" data-tab="dashboard">📊 لوحة التحكم</button>
                 <button class="nav-tab" data-tab="transactions">💰 المعاملات المالية</button>
                 <button class="nav-tab" data-tab="correspondence">📨 الخطابات</button>
+                <button class="nav-tab" data-tab="bank-deposits">🏦 الودائع البنكية</button> <!-- جديد -->
                 <button class="nav-tab" data-tab="settings">⚙️ الإعدادات</button>
             </div>
 
