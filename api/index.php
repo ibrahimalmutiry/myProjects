@@ -10,7 +10,7 @@ session_start();
 // تعطيل عرض الأخطاء في الإخراج (سيتم إرسالها كـ JSON)
 error_reporting(E_ALL);
 ini_set('display_errors', 0);
-
+require_once dirname(__DIR__) . '/includes/permissions_functions.php';
 // معالج الأخطاء
 set_error_handler(function($severity, $message, $file, $line) {
     throw new ErrorException($message, 0, $severity, $file, $line);
@@ -46,32 +46,32 @@ $action = $_GET['action'] ?? '';
 // معالجة الطلبات
 try {
     switch ($action) {
-        
-        // الحصول على الإحصائيات
+
+        // ─── الإحصائيات ───────────────────────────────────────
         case 'stats':
             $stats = getStats();
             jsonResponse(['success' => true, 'data' => $stats]);
             break;
-        
-        // الحصول على بيانات الرسم البياني
+
+        // ─── بيانات الرسم البياني ──────────────────────────────
         case 'chart':
             $data = getChartData();
             jsonResponse(['success' => true, 'data' => $data]);
             break;
-        
-        // الحصول على جميع المعاملات
+
+        // ─── جميع المعاملات ────────────────────────────────────
         case 'transactions':
             $filters = [
-                'search' => $_GET['search'] ?? '',
-                'status' => $_GET['status'] ?? '',
+                'search'    => $_GET['search']    ?? '',
+                'status'    => $_GET['status']    ?? '',
                 'date_from' => $_GET['date_from'] ?? '',
-                'date_to' => $_GET['date_to'] ?? ''
+                'date_to'   => $_GET['date_to']   ?? ''
             ];
             $transactions = getAllTransactions($filters);
             jsonResponse(['success' => true, 'data' => $transactions]);
             break;
-        
-        // الحصول على معاملة واحدة
+
+        // ─── معاملة واحدة ──────────────────────────────────────
         case 'transaction':
             $id = (int)($_GET['id'] ?? 0);
             if ($id <= 0) {
@@ -84,49 +84,42 @@ try {
                 jsonResponse(['success' => false, 'message' => 'المعاملة غير موجودة'], 404);
             }
             break;
-        
-        // الحصول على المعاملات العاجلة
+
+        // ─── المعاملات العاجلة ─────────────────────────────────
         case 'urgent':
             $transactions = getUrgentTransactions();
             jsonResponse(['success' => true, 'data' => $transactions]);
             break;
-        
-        // الحصول على الموظفين
+
+        // ─── الموظفين ──────────────────────────────────────────
         case 'employees':
-            $role = $_GET['role'] ?? null;
+            $role      = $_GET['role'] ?? null;
             $employees = getEmployees($role);
             jsonResponse(['success' => true, 'data' => $employees]);
             break;
-        
-        // الحصول على أنواع المعاملات
+
+        // ─── أنواع المعاملات ────────────────────────────────────
         case 'types':
             $types = getTransactionTypes();
             jsonResponse(['success' => true, 'data' => $types]);
             break;
-        
-        // إضافة معاملة جديدة
+
+        // ─── إضافة معاملة ──────────────────────────────────────
         case 'add':
             if ($method !== 'POST') {
                 jsonResponse(['success' => false, 'message' => 'طريقة الطلب غير صحيحة'], 405);
             }
-            
-            // التحقق من نوع المحتوى
             $contentType = $_SERVER['CONTENT_TYPE'] ?? '';
-            
             if (strpos($contentType, 'multipart/form-data') !== false) {
-                // رفع ملف مع البيانات
                 $input = $_POST;
-                $file = $_FILES['attachment'] ?? null;
+                $file  = $_FILES['attachment'] ?? null;
             } else {
-                // JSON فقط
                 $input = json_decode(file_get_contents('php://input'), true);
-                $file = null;
+                $file  = null;
             }
-            
             if (empty($input['type_id']) || empty($input['description']) || empty($input['amount'])) {
                 jsonResponse(['success' => false, 'message' => 'جميع الحقول مطلوبة'], 400);
             }
-            
             $id = addTransaction($input, $file);
             if ($id) {
                 jsonResponse(['success' => true, 'message' => 'تم إضافة المعاملة بنجاح', 'id' => $id]);
@@ -134,330 +127,762 @@ try {
                 jsonResponse(['success' => false, 'message' => 'فشل في إضافة المعاملة'], 500);
             }
             break;
-        
-        // رفع/تحديث مرفق
+
+        // ─── رفع/تحديث مرفق ────────────────────────────────────
         case 'upload_attachment':
             if ($method !== 'POST') {
                 jsonResponse(['success' => false, 'message' => 'طريقة الطلب غير صحيحة'], 405);
             }
-            
             $transactionId = (int)($_POST['transaction_id'] ?? 0);
-            $file = $_FILES['attachment'] ?? null;
-            
+            $file          = $_FILES['attachment'] ?? null;
             if ($transactionId <= 0) {
                 jsonResponse(['success' => false, 'message' => 'معرف المعاملة غير صالح'], 400);
             }
-            
             if (!$file || !$file['tmp_name']) {
                 jsonResponse(['success' => false, 'message' => 'لم يتم اختيار ملف'], 400);
             }
-            
             $result = updateAttachment($transactionId, $file);
             jsonResponse($result);
             break;
-        
-        // حذف مرفق
+
+        // ─── حذف مرفق ──────────────────────────────────────────
         case 'delete_attachment':
             if ($method !== 'POST') {
                 jsonResponse(['success' => false, 'message' => 'طريقة الطلب غير صحيحة'], 405);
             }
-            
-            $input = json_decode(file_get_contents('php://input'), true);
+            $input         = json_decode(file_get_contents('php://input'), true);
             $transactionId = (int)($input['transaction_id'] ?? 0);
-            
             if ($transactionId <= 0) {
                 jsonResponse(['success' => false, 'message' => 'معرف المعاملة غير صالح'], 400);
             }
-            
             if (deleteAttachment($transactionId)) {
                 jsonResponse(['success' => true, 'message' => 'تم حذف المرفق']);
             } else {
                 jsonResponse(['success' => false, 'message' => 'فشل في حذف المرفق'], 500);
             }
             break;
-        
-        // تحديث بيانات الاستلام
+
+        // ─── تحديث بيانات الاستلام ─────────────────────────────
         case 'update_receiving':
             if ($method !== 'POST') {
                 jsonResponse(['success' => false, 'message' => 'طريقة الطلب غير صحيحة'], 405);
             }
-            
             $input = json_decode(file_get_contents('php://input'), true);
-            $id = (int)($input['transaction_id'] ?? 0);
-            
+            $id    = (int)($input['transaction_id'] ?? 0);
             if ($id <= 0) {
                 jsonResponse(['success' => false, 'message' => 'معرف غير صالح'], 400);
             }
-            
             if (updateReceivingData($id, $input)) {
                 jsonResponse(['success' => true, 'message' => 'تم تحديث بيانات الاستلام']);
             } else {
                 jsonResponse(['success' => false, 'message' => 'فشل في التحديث'], 500);
             }
             break;
-        
-        // تحديث بيانات الموازنة
+
+        // ─── تحديث بيانات الموازنة ─────────────────────────────
         case 'update_budget':
             if ($method !== 'POST') {
                 jsonResponse(['success' => false, 'message' => 'طريقة الطلب غير صحيحة'], 405);
             }
-            
             $input = json_decode(file_get_contents('php://input'), true);
-            $id = (int)($input['transaction_id'] ?? 0);
-            
+            $id    = (int)($input['transaction_id'] ?? 0);
             if ($id <= 0) {
                 jsonResponse(['success' => false, 'message' => 'معرف غير صالح'], 400);
             }
-            
             if (updateBudgetData($id, $input)) {
                 jsonResponse(['success' => true, 'message' => 'تم تحديث بيانات الموازنة']);
             } else {
                 jsonResponse(['success' => false, 'message' => 'فشل في التحديث'], 500);
             }
             break;
-        
-        // تحديث بيانات الدفع
+
+        // ─── تحديث بيانات الدفع ────────────────────────────────
         case 'update_payment':
             if ($method !== 'POST') {
                 jsonResponse(['success' => false, 'message' => 'طريقة الطلب غير صحيحة'], 405);
             }
-            
             $input = json_decode(file_get_contents('php://input'), true);
+            // تعيين طريقة الدفع تلقائياً
+            $input['method'] = $input['method'] ?? 'تحويل بنكي';
             $id = (int)($input['transaction_id'] ?? 0);
-            
             if ($id <= 0) {
                 jsonResponse(['success' => false, 'message' => 'معرف غير صالح'], 400);
             }
-            
             if (updatePaymentData($id, $input)) {
                 jsonResponse(['success' => true, 'message' => 'تم تحديث بيانات الدفع']);
             } else {
                 jsonResponse(['success' => false, 'message' => 'فشل في التحديث'], 500);
             }
             break;
-        
-        // تحديث بيانات الفوترة
+
+        // ─── تحديث بيانات الفوترة ──────────────────────────────
         case 'update_invoice':
             if ($method !== 'POST') {
                 jsonResponse(['success' => false, 'message' => 'طريقة الطلب غير صحيحة'], 405);
             }
-            
             $input = json_decode(file_get_contents('php://input'), true);
-            $id = (int)($input['transaction_id'] ?? 0);
-            
+            $id    = (int)($input['transaction_id'] ?? 0);
             if ($id <= 0) {
                 jsonResponse(['success' => false, 'message' => 'معرف غير صالح'], 400);
             }
-            
             if (updateInvoiceData($id, $input)) {
                 jsonResponse(['success' => true, 'message' => 'تم تحديث بيانات الفوترة']);
             } else {
                 jsonResponse(['success' => false, 'message' => 'فشل في التحديث'], 500);
             }
             break;
-        
-        // حذف معاملة
+
+        // ─── حذف معاملة ────────────────────────────────────────
         case 'delete':
             if ($method !== 'POST' && $method !== 'DELETE') {
                 jsonResponse(['success' => false, 'message' => 'طريقة الطلب غير صحيحة'], 405);
             }
-            
             $input = json_decode(file_get_contents('php://input'), true);
-            $id = (int)($input['id'] ?? $_GET['id'] ?? 0);
-            
+            $id    = (int)($input['id'] ?? $_GET['id'] ?? 0);
             if ($id <= 0) {
                 jsonResponse(['success' => false, 'message' => 'معرف غير صالح'], 400);
             }
-            
             if (deleteTransaction($id)) {
                 jsonResponse(['success' => true, 'message' => 'تم حذف المعاملة']);
             } else {
                 jsonResponse(['success' => false, 'message' => 'فشل في الحذف'], 500);
             }
             break;
-        
-        // سجل النشاطات
+
+        // ─── سجل النشاطات ──────────────────────────────────────
         case 'activity':
             $transactionId = isset($_GET['transaction_id']) ? (int)$_GET['transaction_id'] : null;
-            $logs = getActivityLog($transactionId);
+            $logs          = getActivityLog($transactionId);
             jsonResponse(['success' => true, 'data' => $logs]);
             break;
-        
-        // تقرير أوقات الموظفين
+
+        // ─── تقرير أوقات الموظفين ──────────────────────────────
         case 'employee_times':
             $employeeId = isset($_GET['employee_id']) ? (int)$_GET['employee_id'] : null;
-            $stage = $_GET['stage'] ?? null;
-            $dateFrom = $_GET['date_from'] ?? null;
-            $dateTo = $_GET['date_to'] ?? null;
-            
-            $data = getEmployeeTimeReport($employeeId, $stage, $dateFrom, $dateTo);
+            $stage      = $_GET['stage']     ?? null;
+            $dateFrom   = $_GET['date_from'] ?? null;
+            $dateTo     = $_GET['date_to']   ?? null;
+            $data       = getEmployeeTimeReport($employeeId, $stage, $dateFrom, $dateTo);
             jsonResponse(['success' => true, 'data' => $data]);
             break;
-        
-        // ملخص أداء الموظفين
+
+        // ─── ملخص أداء الموظفين ────────────────────────────────
         case 'performance_summary':
             $dateFrom = $_GET['date_from'] ?? null;
-            $dateTo = $_GET['date_to'] ?? null;
-            
-            $data = getEmployeePerformanceSummary($dateFrom, $dateTo);
+            $dateTo   = $_GET['date_to']   ?? null;
+            $data     = getEmployeePerformanceSummary($dateFrom, $dateTo);
             jsonResponse(['success' => true, 'data' => $data]);
             break;
-        
-        // تفاصيل أداء موظف
+
+        // ─── تفاصيل أداء موظف ──────────────────────────────────
         case 'employee_performance':
             $employeeId = isset($_GET['employee_id']) ? (int)$_GET['employee_id'] : 0;
             if ($employeeId <= 0) {
                 jsonResponse(['success' => false, 'message' => 'معرف الموظف غير صالح'], 400);
             }
-            
             $dateFrom = $_GET['date_from'] ?? null;
-            $dateTo = $_GET['date_to'] ?? null;
-            
-            $data = getEmployeePerformanceDetails($employeeId, $dateFrom, $dateTo);
+            $dateTo   = $_GET['date_to']   ?? null;
+            $data     = getEmployeePerformanceDetails($employeeId, $dateFrom, $dateTo);
             jsonResponse(['success' => true, 'data' => $data]);
             break;
-        
-        // أحداث المعاملة (سجل التغييرات)
+
+        // ─── أحداث المعاملة ────────────────────────────────────
         case 'transaction_events':
             $transactionId = isset($_GET['transaction_id']) ? (int)$_GET['transaction_id'] : 0;
             if ($transactionId <= 0) {
                 jsonResponse(['success' => false, 'message' => 'معرف المعاملة غير صالح'], 400);
             }
-            
-            $stage = $_GET['stage'] ?? null;
+            $stage  = $_GET['stage'] ?? null;
             $events = getTransactionEvents($transactionId, $stage);
             jsonResponse(['success' => true, 'data' => $events]);
             break;
-        
-          // الحصول على الإشعارات
+
+        // ─── جميع الأحداث ──────────────────────────────────────
+        case 'all_events':
+            $limit      = isset($_GET['limit'])       ? (int)$_GET['limit'] : 50;
+            $stage      = $_GET['stage']              ?? null;
+            $employeeId = isset($_GET['employee_id']) ? (int)$_GET['employee_id'] : null;
+            $events     = getAllEvents($limit, $stage, $employeeId);
+            jsonResponse(['success' => true, 'data' => $events]);
+            break;
+
+        // ─── الإشعارات ─────────────────────────────────────────
         case 'notifications':
-            $limit = (int)($_GET['limit'] ?? 20);
+            $limit         = (int)($_GET['limit'] ?? 20);
             $notifications = getRecentNotifications($limit);
-            
-            // حساب غير المقروء
-            $unread = 0;
+            $unread        = 0;
             foreach ($notifications as $n) {
-                if (!isset($n['is_read']) || !$n['is_read']) {
-                    $unread++;
-                }
+                if (!isset($n['is_read']) || !$n['is_read']) $unread++;
             }
-            
             jsonResponse([
-                'success' => true, 
-                'data' => $notifications,
+                'success'      => true,
+                'data'         => $notifications,
                 'unread_count' => $unread
             ]);
             break;
 
-        // تحديد كمقروء
+        // ─── تحديد إشعار كمقروء ────────────────────────────────
         case 'mark_notification_read':
-            $data = json_decode(file_get_contents('php://input'), true);
+            $data   = json_decode(file_get_contents('php://input'), true);
             $notifId = (int)($data['notification_id'] ?? 0);
-            
-            // هنا تحديث في قاعدة البيانات
-            // مثال: UPDATE notifications SET is_read = 1 WHERE id = $notifId
-            
+            // UPDATE notifications SET is_read = 1 WHERE id = $notifId
             jsonResponse(['success' => true]);
             break;
 
-        // تحديد الكل كمقروء
-        case 'mark_all_notifications_read':
-            // UPDATE notifications SET is_read = 1 WHERE user_id = $_SESSION['user_id']
-            
+        // ─── تحديد الكل كمقروء ─────────────────────────────────
+      case 'mark_all_notifications_read':
+            $userId = (int)$_SESSION['user_id'];
+            $conn   = db();
+            $conn->query("UPDATE system_notifications SET is_read=1, read_at=NOW() WHERE user_id=$userId AND is_read=0");
             jsonResponse(['success' => true]);
             break;
 
-                case 'update_payment':
-                    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-                        echo json_encode(['success' => false, 'message' => 'طريقة غير صحيحة']);
-                        break;
-                    }
-                    
-                    $data = json_decode(file_get_contents('php://input'), true);
-                    // تعيين طريقة الدفع تلقائياً كتحويل بنكي
-                    $data['method'] = 'تحويل بنكي';
-                    $transactionId = isset($data['transaction_id']) ? (int)$data['transaction_id'] : 0;
-                    if ($transactionId <= 0) {
-                        echo json_encode(['success' => false, 'message' => 'معرف المعاملة غير صالح']);
-                        break;
-                    }
-                    $result = updatePaymentData($transactionId, $data);
-                    echo json_encode($result);
-                    break;
-                    // جميع الأحداث
-        case 'all_events':
-                    $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 50;
-                    $stage = $_GET['stage'] ?? null;
-                    $employeeId = isset($_GET['employee_id']) ? (int)$_GET['employee_id'] : null;
-                    
-                    $events = getAllEvents($limit, $stage, $employeeId);
-                    jsonResponse(['success' => true, 'data' => $events]);
+        // ═══════════════════════════════════════════════════════
+        //  APIs الودائع البنكية
+        // ═══════════════════════════════════════════════════════
+
+        // ─── الحسابات البنكية ───────────────────────────────────
+        case 'bank_accounts':
+            require_once __DIR__ . '/../includes/bank_functions.php';
+            $accounts = getAllBankAccounts();
+            jsonResponse(['success' => true, 'data' => $accounts]);
             break;
-        
-        
-        // ===== Bank Deposits APIs =====
-case 'bank_accounts':
-    require_once __DIR__ . '/../includes/bank_functions.php';
-    $accounts = getAllBankAccounts();
-    jsonResponse(['success' => true, 'data' => $accounts]);
-    break;
 
-case 'bank_deposits':
-    require_once __DIR__ . '/../includes/bank_functions.php';
-    $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : null;
-    $deposits = getAllDeposits($limit);
-    jsonResponse(['success' => true, 'data' => $deposits]);
-    break;
+        // ─── جميع الودائع البنكية ──────────────────────────────
+        case 'bank_deposits':
+            require_once __DIR__ . '/../includes/bank_functions.php';
+            $limit    = isset($_GET['limit']) ? (int)$_GET['limit'] : null;
+            $deposits = getAllDeposits($limit);
+            jsonResponse(['success' => true, 'data' => $deposits]);
+            break;
+
+        // ─── الأرصدة اليومية ───────────────────────────────────
+        case 'daily_balances':
+            require_once __DIR__ . '/../includes/bank_functions.php';
+            $limit    = isset($_GET['limit']) ? (int)$_GET['limit'] : 30;
+            $accountId = isset($_GET['account_id']) ? (int)$_GET['account_id'] : null;
+            $balances = getDailyBalances($limit, $accountId);
+            jsonResponse(['success' => true, 'data' => $balances]);
+            break;
+
+        // ─── إضافة إيداع بنكي ──────────────────────────────────
+        case 'add_deposit':
+            if ($method !== 'POST') {
+                jsonResponse(['success' => false, 'message' => 'طريقة الطلب غير صحيحة'], 405);
+            }
+            require_once __DIR__ . '/../includes/bank_functions.php';
+            $input  = json_decode(file_get_contents('php://input'), true);
+            $result = addDeposit($input);
+            jsonResponse($result);
+            break;
+
+        // ─── إضافة حساب بنكي ───────────────────────────────────
+        case 'add_bank_account':
+            if ($method !== 'POST') {
+                jsonResponse(['success' => false, 'message' => 'طريقة الطلب غير صحيحة'], 405);
+            }
+            require_once __DIR__ . '/../includes/bank_functions.php';
+            $input  = json_decode(file_get_contents('php://input'), true);
+            $result = addBankAccount($input);
+            jsonResponse($result);
+            break;
+
+        // ─── تعديل حساب بنكي ───────────────────────────────────
+        case 'update_bank_account':
+            if ($method !== 'POST') {
+                jsonResponse(['success' => false, 'message' => 'طريقة الطلب غير صحيحة'], 405);
+            }
+            require_once __DIR__ . '/../includes/bank_functions.php';
+            $input = json_decode(file_get_contents('php://input'), true);
+            $id    = (int)($input['id'] ?? 0);
+            if ($id <= 0) {
+                jsonResponse(['success' => false, 'message' => 'معرف الحساب غير صالح'], 400);
+            }
+            $result = updateBankAccount($id, $input);
+            jsonResponse($result);
+            break;
+
+        // ─── تأكيد إيداع بنكي ──────────────────────────────────
+        case 'confirm_deposit':
+            if ($method !== 'POST') {
+                jsonResponse(['success' => false, 'message' => 'طريقة الطلب غير صحيحة'], 405);
+            }
+            require_once __DIR__ . '/../includes/bank_functions.php';
+            $input  = json_decode(file_get_contents('php://input'), true);
+            $result = confirmDeposit((int)($input['id'] ?? 0));
+            jsonResponse($result);
+            break;
+
+        // ─── تسجيل رصيد يومي ───────────────────────────────────
+        case 'record_daily_balance':
+            if ($method !== 'POST') {
+                jsonResponse(['success' => false, 'message' => 'طريقة الطلب غير صحيحة'], 405);
+            }
+            require_once __DIR__ . '/../includes/bank_functions.php';
+            $input  = json_decode(file_get_contents('php://input'), true);
+            $result = recordDailyBalance($input);
+            jsonResponse($result);
+            break;
+
+        // ─── إحصاءات البنوك ────────────────────────────────────
+        case 'bank_stats':
+            require_once __DIR__ . '/../includes/bank_functions.php';
+            $stats = getBankStats();
+            jsonResponse(['success' => true, 'data' => $stats]);
+            break;
+
+        // ═══════════════════════════════════════════════════════
+        //  APIs الودائع الشهرية المجدولة  ← جديد
+        // ═══════════════════════════════════════════════════════
+
+        // ─── جلب ودائع الشهر ───────────────────────────────────
+        case 'monthly_deposits':
+            require_once __DIR__ . '/../includes/bank_functions.php';
+            require_once __DIR__ . '/../includes/bank_monthly_functions.php';
+            $month    = (int)($_GET['month'] ?? date('m'));
+            $year     = (int)($_GET['year']  ?? date('Y'));
+            $deposits = getMonthlyDeposits($month, $year);
+            jsonResponse(['success' => true, 'data' => $deposits]);
+            break;
+
+        // ─── إحصاءات ودائع الشهر ───────────────────────────────
+        case 'monthly_deposit_stats':
+            require_once __DIR__ . '/../includes/bank_functions.php';
+            require_once __DIR__ . '/../includes/bank_monthly_functions.php';
+            $month = (int)($_GET['month'] ?? date('m'));
+            $year  = (int)($_GET['year']  ?? date('Y'));
+            $stats = getMonthlyDepositStats($month, $year);
+            jsonResponse(['success' => true, 'data' => $stats]);
+            break;
+
+        // ─── إضافة وديعة شهرية مجدولة ─────────────────────────
+        case 'add_monthly_deposit':
+            if ($method !== 'POST') {
+                jsonResponse(['success' => false, 'message' => 'طريقة الطلب غير صحيحة'], 405);
+            }
+            require_once __DIR__ . '/../includes/bank_functions.php';
+            require_once __DIR__ . '/../includes/bank_monthly_functions.php';
+            $input  = json_decode(file_get_contents('php://input'), true);
+            $result = addMonthlyDeposit($input);
+            jsonResponse($result);
+            break;
+
+        // ─── تأكيد وديعة شهرية ─────────────────────────────────
+        case 'confirm_monthly_deposit':
+            if ($method !== 'POST') {
+                jsonResponse(['success' => false, 'message' => 'طريقة الطلب غير صحيحة'], 405);
+            }
+            require_once __DIR__ . '/../includes/bank_functions.php';
+            require_once __DIR__ . '/../includes/bank_monthly_functions.php';
+            $input  = json_decode(file_get_contents('php://input'), true);
+            $id     = (int)($input['id'] ?? 0);
+            if ($id <= 0) {
+                jsonResponse(['success' => false, 'message' => 'معرف الوديعة غير صالح'], 400);
+            }
+            $result = confirmMonthlyDeposit($id);
+            jsonResponse($result);
+            break;
+
+        // ─── حذف وديعة شهرية ───────────────────────────────────
+        case 'delete_monthly_deposit':
+            if ($method !== 'POST') {
+                jsonResponse(['success' => false, 'message' => 'طريقة الطلب غير صحيحة'], 405);
+            }
+            require_once __DIR__ . '/../includes/bank_functions.php';
+            require_once __DIR__ . '/../includes/bank_monthly_functions.php';
+            $input  = json_decode(file_get_contents('php://input'), true);
+            $id     = (int)($input['id'] ?? 0);
+            if ($id <= 0) {
+                jsonResponse(['success' => false, 'message' => 'معرف الوديعة غير صالح'], 400);
+            }
+            $result = deleteMonthlyDeposit($id);
+            jsonResponse($result);
+            break;
+
+        // ═══════════════════════════════════════════════════════
+        //  APIs السجل اليومي
+        // ═══════════════════════════════════════════════════════
+
+        // ─── إحصاءات يوم ───────────────────────────────────────
+        case 'daily_register_stats':
+            require_once __DIR__ . '/../includes/daily_register_functions.php';
+            $date  = $_GET['date'] ?? date('Y-m-d');
+            $stats = getTodayFullStats($date);
+            jsonResponse(['success' => true, 'data' => $stats]);
+            break;
+
+        // ─── تاريخ السجلات ─────────────────────────────────────
+        case 'daily_register_history':
+            require_once __DIR__ . '/../includes/daily_register_functions.php';
+            $history = getDailyRegisterHistory(30);
+            jsonResponse(['success' => true, 'data' => $history]);
+            break;
+
+        // ─── حفظ أرصدة اليوم ───────────────────────────────────
+        case 'save_daily_register':
+            if ($method !== 'POST') {
+                jsonResponse(['success' => false, 'message' => 'طريقة الطلب غير صحيحة'], 405);
+            }
+            require_once __DIR__ . '/../includes/daily_register_functions.php';
+            $input  = json_decode(file_get_contents('php://input'), true);
+            $result = saveDailyRegister(
+                $input['date'],
+                $input['bank1_balance'] ?? 0,
+                $input['bank2_balance'] ?? 0,
+                $input['notes']         ?? ''
+            );
+            jsonResponse($result);
+            break;
+
+        // ─── تحميل المصروفات ────────────────────────────────────
+        case 'daily_expenses':
+            require_once __DIR__ . '/../includes/daily_register_functions.php';
+            $date     = $_GET['date'] ?? date('Y-m-d');
+            $expenses = getDailyExpenses($date);
+            jsonResponse(['success' => true, 'data' => $expenses]);
+            break;
+
+        // ─── إضافة مصروف ───────────────────────────────────────
+        case 'add_daily_expense':
+            if ($method !== 'POST') {
+                jsonResponse(['success' => false, 'message' => 'طريقة الطلب غير صحيحة'], 405);
+            }
+            require_once __DIR__ . '/../includes/daily_register_functions.php';
+            $input  = json_decode(file_get_contents('php://input'), true);
+            $result = addDailyExpense(
+                $input['date'],
+                $input['supplier_name'],
+                $input['amount'],
+                $input['description'] ?? ''
+            );
+            jsonResponse($result);
+            break;
+
+        // ─── حذف مصروف ─────────────────────────────────────────
+        case 'delete_daily_expense':
+            if ($method !== 'POST') {
+                jsonResponse(['success' => false, 'message' => 'طريقة الطلب غير صحيحة'], 405);
+            }
+            require_once __DIR__ . '/../includes/daily_register_functions.php';
+            $input  = json_decode(file_get_contents('php://input'), true);
+            $result = deleteDailyExpense((int)($input['id'] ?? 0));
+            jsonResponse($result);
+            break;
+
+        // ─── الودائع النشطة ────────────────────────────────────
+        case 'active_deposits':
+            require_once __DIR__ . '/../includes/daily_register_functions.php';
+            $deposits = getActiveDeposits();
+            jsonResponse(['success' => true, 'data' => $deposits]);
+            break;
 
 
-case 'daily_balances':
-    require_once __DIR__ . '/../includes/bank_functions.php';
-    $balances = getDailyBalances();
-    jsonResponse(['success' => true, 'data' => $balances]);
-    break;
+        // ═══════════════════════════════════════════════════════
+        //  APIs الودائع الاستثمارية
+        // ═══════════════════════════════════════════════════════
 
-case 'add_deposit':
-    require_once __DIR__ . '/../includes/bank_functions.php';
-    $input = json_decode(file_get_contents('php://input'), true);
-    $result = addDeposit($input);
-    jsonResponse($result);
-    break;
+        case 'investments':
+            require_once __DIR__ . '/../includes/bank_investment_functions.php';
+            $status = $_GET['status'] ?? null;
+            $data   = getAllInvestments($status);
+            jsonResponse(['success' => true, 'data' => $data]);
+            break;
 
-case 'add_bank_account':
-    require_once __DIR__ . '/../includes/bank_functions.php';
-    $input = json_decode(file_get_contents('php://input'), true);
-    $result = addBankAccount($input);
-    jsonResponse($result);
-    break;
+        case 'investment':
+            require_once __DIR__ . '/../includes/bank_investment_functions.php';
+            $id  = (int)($_GET['id'] ?? 0);
+            if ($id <= 0) jsonResponse(['success' => false, 'message' => 'معرف غير صالح'], 400);
+            $inv = getInvestment($id);
+            $inv ? jsonResponse(['success' => true, 'data' => $inv])
+                 : jsonResponse(['success' => false, 'message' => 'الوديعة غير موجودة'], 404);
+            break;
 
-case 'confirm_deposit':
-    require_once __DIR__ . '/../includes/bank_functions.php';
-    $input = json_decode(file_get_contents('php://input'), true);
-    $result = confirmDeposit($input['id']);
-    jsonResponse($result);
-    break;
+        case 'investment_stats':
+            require_once __DIR__ . '/../includes/bank_investment_functions.php';
+            jsonResponse(['success' => true, 'data' => getInvestmentStats()]);
+            break;
 
-case 'record_daily_balance':
-    require_once __DIR__ . '/../includes/bank_functions.php';
-    $input = json_decode(file_get_contents('php://input'), true);
-    $result = recordDailyBalance($input);
-    jsonResponse($result);
-    break;
+        case 'investment_transactions':
+            require_once __DIR__ . '/../includes/bank_investment_functions.php';
+            $id = (int)($_GET['id'] ?? 0);
+            if ($id <= 0) jsonResponse(['success' => false, 'message' => 'معرف غير صالح'], 400);
+            jsonResponse(['success' => true, 'data' => getInvestmentTransactions($id)]);
+            break;
 
-case 'bank_stats':
-    require_once __DIR__ . '/../includes/bank_functions.php';
-    $stats = getBankStats();
-    jsonResponse(['success' => true, 'data' => $stats]);
-    break;
-        
-        
-        
-        
-        
-        
-        
-        
-        
+        case 'create_investment':
+            if ($method !== 'POST') jsonResponse(['success' => false, 'message' => 'طريقة غير صحيحة'], 405);
+            require_once __DIR__ . '/../includes/bank_investment_functions.php';
+            $input  = json_decode(file_get_contents('php://input'), true);
+            $result = createInvestment($input);
+            jsonResponse($result);
+            break;
+
+        case 'mature_investment':
+            if ($method !== 'POST') jsonResponse(['success' => false, 'message' => 'طريقة غير صحيحة'], 405);
+            require_once __DIR__ . '/../includes/bank_investment_functions.php';
+            $input  = json_decode(file_get_contents('php://input'), true);
+            $id     = (int)($input['id'] ?? 0);
+            if ($id <= 0) jsonResponse(['success' => false, 'message' => 'معرف غير صالح'], 400);
+            jsonResponse(matureInvestment($id, $input['actual_profit'] ?? null));
+            break;
+
+        case 'cancel_investment':
+            if ($method !== 'POST') jsonResponse(['success' => false, 'message' => 'طريقة غير صحيحة'], 405);
+            require_once __DIR__ . '/../includes/bank_investment_functions.php';
+            $input  = json_decode(file_get_contents('php://input'), true);
+            $id     = (int)($input['id'] ?? 0);
+            if ($id <= 0) jsonResponse(['success' => false, 'message' => 'معرف غير صالح'], 400);
+            jsonResponse(cancelInvestment($id, $input['notes'] ?? ''));
+            break;
+
+
+        // ═══════════════════════════════════════════════════════
+        //  APIs  نظام SLA / OLA
+        // ═══════════════════════════════════════════════════════
+
+        // ─── إحصاءات SLA السريعة ────────────────────────────────
+        case 'sla_stats':
+            require_once __DIR__ . '/../includes/sla_functions.php';
+            jsonResponse(['success' => true, 'data' => getSlaStats()]);
+            break;
+
+        // ─── لوحة SLA الكاملة ────────────────────────────────────
+        case 'sla_dashboard':
+            require_once __DIR__ . '/../includes/sla_functions.php';
+            $filters = [
+                'sla_status' => $_GET['sla_status'] ?? '',
+            ];
+            jsonResponse(['success' => true, 'data' => getSlaDashboard($filters)]);
+            break;
+
+        // ─── حالة SLA لمعاملة واحدة ─────────────────────────────
+        case 'sla_transaction':
+            require_once __DIR__ . '/../includes/sla_functions.php';
+            $id = (int)($_GET['id'] ?? 0);
+            if ($id <= 0) jsonResponse(['success' => false, 'message' => 'معرف غير صالح'], 400);
+            jsonResponse(['success' => true, 'data' => getTransactionSlaStatus($id)]);
+            break;
+
+        // ─── سجل التجاوزات ────────────────────────────────────────
+        case 'sla_breaches':
+            require_once __DIR__ . '/../includes/sla_functions.php';
+            $filters = [
+                'type'        => $_GET['type'] ?? '',
+                'employee_id' => $_GET['employee_id'] ?? '',
+                'resolved'    => $_GET['resolved'] ?? '',
+            ];
+            $limit = (int)($_GET['limit'] ?? 50);
+            jsonResponse(['success' => true, 'data' => getSlaBreachLog($limit, $filters)]);
+            break;
+
+        // ─── تشغيل فحص دوري يدوي ─────────────────────────────────
+        case 'sla_run_check':
+            require_once __DIR__ . '/../includes/sla_functions.php';
+            require_once __DIR__ . '/../includes/notification_functions.php';
+            $result = runSlaBatchCheckFull();
+            jsonResponse(['success' => true, 'data' => $result]);
+            break;
+
+        // ─── حل تجاوز──────────────────────────────────────────────
+        case 'sla_resolve_breach':
+            if ($method !== 'POST') jsonResponse(['success' => false, 'message' => 'طريقة غير صحيحة'], 405);
+            require_once __DIR__ . '/../includes/sla_functions.php';
+            $input = json_decode(file_get_contents('php://input'), true);
+            jsonResponse(resolveSlaBreachById((int)($input['id'] ?? 0)));
+            break;
+
+        // ─── جلب سياسات SLA ──────────────────────────────────────
+        case 'sla_policies':
+            require_once __DIR__ . '/../includes/sla_functions.php';
+            jsonResponse(['success' => true, 'data' => getAllSlaPolicies()]);
+            break;
+
+        // ─── حفظ سياسة SLA ───────────────────────────────────────
+        case 'sla_save_policy':
+            if ($method !== 'POST') jsonResponse(['success' => false, 'message' => 'طريقة غير صحيحة'], 405);
+            require_once __DIR__ . '/../includes/sla_functions.php';
+            $input = json_decode(file_get_contents('php://input'), true);
+            jsonResponse(saveSlaPolicy($input));
+            break;
+
+        // ─── حفظ قاعدة OLA ───────────────────────────────────────
+        case 'sla_save_ola_rule':
+            if ($method !== 'POST') jsonResponse(['success' => false, 'message' => 'طريقة غير صحيحة'], 405);
+            require_once __DIR__ . '/../includes/sla_functions.php';
+            $input = json_decode(file_get_contents('php://input'), true);
+            jsonResponse(saveOlaRule($input));
+            break;
+
+        // ─── تشغيل فحص معاملة واحدة ──────────────────────────────
+        case 'sla_check_transaction':
+            if ($method !== 'POST') jsonResponse(['success' => false, 'message' => 'طريقة غير صحيحة'], 405);
+            require_once __DIR__ . '/../includes/sla_functions.php';
+            $input = json_decode(file_get_contents('php://input'), true);
+            $id    = (int)($input['id'] ?? 0);
+            if ($id <= 0) jsonResponse(['success' => false, 'message' => 'معرف غير صالح'], 400);
+            jsonResponse(['success' => true, 'data' => checkTransactionSla($id)]);
+            break;
+
+        case 'sla_timeline':
+            $data = getTransactionTimeline((int)($_GET['id']??0));
+            jsonResponse(['success'=>true,'data'=>$data]);
+            break;
+
+        case 'sla_advanced_stats':
+            $data = getSlaAdvancedStats($_GET);
+            jsonResponse(['success'=>true,'data'=>$data]);
+            break;
+            
+      
+            // ═══════════════════════════════════════════════════════
+        //  APIs الإشعارات ونظام الإعدادات
+        // ═══════════════════════════════════════════════════════
+
+        // ─── جلب الإشعارات الداخلية ──────────────────────────────
+        case 'system_notifications':
+            require_once __DIR__ . '/../includes/notification_functions.php';
+            $userId     = (int)($_SESSION['user_id'] ?? 0);
+            $limit      = (int)($_GET['limit'] ?? 50);
+            $unreadOnly = ($_GET['unread'] ?? '0') === '1';
+            jsonResponse(['success' => true, 'data' => getSystemNotifications($userId, $limit, $unreadOnly)]);
+            break;
+
+        // ─── عدد الإشعارات غير المقروءة ──────────────────────────
+        case 'unread_count':
+            require_once __DIR__ . '/../includes/notification_functions.php';
+            $userId = (int)($_SESSION['user_id'] ?? 0);
+            jsonResponse(['success' => true, 'count' => getUnreadNotificationCount($userId)]);
+            break;
+
+        // ─── تعليم إشعار كمقروء ──────────────────────────────────
+        case 'read_notification':
+            if ($method !== 'POST') jsonResponse(['success' => false, 'message' => 'طريقة غير صحيحة'], 405);
+            require_once __DIR__ . '/../includes/notification_functions.php';
+            $input  = json_decode(file_get_contents('php://input'), true);
+            $userId = (int)($_SESSION['user_id'] ?? 0);
+            jsonResponse(markNotificationRead((int)($input['id'] ?? 0), $userId));
+            break;
+
+        // ─── تعليم كل الإشعارات كمقروءة ─────────────────────────
+        case 'read_all_notifications':
+            if ($method !== 'POST') jsonResponse(['success' => false, 'message' => 'طريقة غير صحيحة'], 405);
+            require_once __DIR__ . '/../includes/notification_functions.php';
+            $userId = (int)($_SESSION['user_id'] ?? 0);
+            jsonResponse(markAllNotificationsRead($userId));
+            break;
+
+        // ─── جلب إعدادات الإشعارات ───────────────────────────────
+        case 'notification_settings':
+            require_once __DIR__ . '/../includes/notification_functions.php';
+            $settings = getNotificationSettings();
+            // إخفاء كلمات المرور في الاستجابة
+            foreach (['smtp_pass','ms_client_secret'] as $k) {
+                if (!empty($settings[$k])) $settings[$k] = '••••••••';
+            }
+            jsonResponse(['success' => true, 'data' => $settings]);
+            break;
+
+        // ─── حفظ إعدادات الإشعارات ───────────────────────────────
+        case 'save_notification_settings':
+            if ($method !== 'POST') jsonResponse(['success' => false, 'message' => 'طريقة غير صحيحة'], 405);
+            require_once __DIR__ . '/../includes/notification_functions.php';
+            $input = json_decode(file_get_contents('php://input'), true);
+            // لا نعيد كتابة كلمة المرور لو كانت نجوم
+            foreach (['smtp_pass','ms_client_secret'] as $k) {
+                if (isset($input[$k]) && strpos($input[$k], '•') !== false) unset($input[$k]);
+            }
+            jsonResponse(saveNotificationSettings($input));
+            break;
+
+        // ─── اختبار SMTP ──────────────────────────────────────────
+        case 'test_smtp':
+            if ($method !== 'POST') jsonResponse(['success' => false, 'message' => 'طريقة غير صحيحة'], 405);
+            require_once __DIR__ . '/../includes/notification_functions.php';
+            $input = json_decode(file_get_contents('php://input'), true);
+            $email = $input['test_email'] ?? '';
+            if (!filter_var($email, FILTER_VALIDATE_EMAIL))
+                jsonResponse(['success' => false, 'message' => 'بريد إلكتروني غير صالح'], 400);
+            jsonResponse(testSmtpConnection($email));
+            break;
+
+        // ─── اختبار Exchange ──────────────────────────────────────
+        case 'test_exchange':
+            if ($method !== 'POST') jsonResponse(['success' => false, 'message' => 'طريقة غير صحيحة'], 405);
+            require_once __DIR__ . '/../includes/notification_functions.php';
+            $input = json_decode(file_get_contents('php://input'), true);
+            $email = $input['test_email'] ?? '';
+            if (!filter_var($email, FILTER_VALIDATE_EMAIL))
+                jsonResponse(['success' => false, 'message' => 'بريد إلكتروني غير صالح'], 400);
+            jsonResponse(testExchangeConnection($email));
+            break;
+
+        // ─── SLA للمراسلات ────────────────────────────────────────
+        case 'sla_check_correspondence':
+            if ($method !== 'POST') jsonResponse(['success' => false, 'message' => 'طريقة غير صحيحة'], 405);
+            require_once __DIR__ . '/../includes/sla_functions.php';
+            $input = json_decode(file_get_contents('php://input'), true);
+            $id    = (int)($input['id'] ?? 0);
+            if ($id <= 0) jsonResponse(['success' => false, 'message' => 'معرف غير صالح'], 400);
+            jsonResponse(['success' => true, 'data' => checkCorrespondenceSla($id)]);
+            break;
+
+        case 'sla_email_escalations':
+            require_once __DIR__ . '/../includes/sla_functions.php';
+            $params = ['type'=>$_GET['type']??'', 'date_from'=>$_GET['date_from']??'', 
+                    'date_to'=>$_GET['date_to']??'', 'limit'=>(int)($_GET['limit']??100)];
+            jsonResponse(['success'=>true, 'data'=>getSlaEmailEscalations($params)]);
+            break;
+
+      
+
+        // ─── جلب صلاحيات موظف ─────────────────────────────────────────
+        case 'get_employee_permissions':
+            $empId = (int)($_GET['employee_id'] ?? 0);
+            if (!$empId) {
+                jsonResponse(['success' => false, 'error' => 'employee_id مطلوب']);
+                break;
+            }
+            // فقط مدير النظام يمكنه رؤية صلاحيات الآخرين
+            if (($_SESSION['permission_level'] ?? '') !== 'system_admin' && $_SESSION['user_id'] != $empId) {
+                jsonResponse(['success' => false, 'error' => 'غير مصرح']);
+                break;
+            }
+            $perms = getEmployeePermissions($empId);
+            jsonResponse(['success' => true, 'data' => $perms]);
+            break;
+
+        // ─── حفظ صلاحيات موظف ────────────────────────────────────────
+        case 'save_employee_permissions':
+            if ($_SESSION['permission_level'] !== 'system_admin') {
+                jsonResponse(['success' => false, 'error' => 'غير مصرح — مدير النظام فقط']);
+                break;
+            }
+            $body  = json_decode(file_get_contents('php://input'), true) ?? [];
+            $empId = (int)($body['employee_id'] ?? 0);
+            if (!$empId) {
+                jsonResponse(['success' => false, 'error' => 'employee_id مطلوب']);
+                break;
+            }
+            $ok = saveEmployeePermissions($empId, $body);
+            jsonResponse(['success' => $ok, 'error' => $ok ? null : 'خطأ في الحفظ']);
+            break;
+
+        // ─── جلب صلاحيات المستخدم الحالي (يُستخدم عند تحديث الجلسة) ─
+        case 'my_permissions':
+            $userId = (int)($_SESSION['user_id'] ?? 0);
+            if (!$userId) {
+                jsonResponse(['success' => false, 'error' => 'غير مسجل']);
+                break;
+            }
+            loadUserPermissionsToSession($userId);
+            jsonResponse([
+                'success'          => true,
+                'permission_level' => $_SESSION['permission_level'],
+                'can_delete'       => $_SESSION['can_delete'],
+                'page_permissions' => $_SESSION['page_permissions'],
+            ]);
+            break;
+        // ─── غير معروف ─────────────────────────────────────────
         default:
             jsonResponse(['success' => false, 'message' => 'إجراء غير معروف: ' . $action], 400);
     }

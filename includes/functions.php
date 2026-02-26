@@ -856,9 +856,14 @@ function ensureStageTimesTable() {
                 transaction_id INT NOT NULL,
                 stage ENUM('creation', 'receiving', 'budget', 'payment', 'invoice') NOT NULL,
                 employee_id INT,
-                started_at DATETIME,
+                started_at DATETIME COMMENT 'وقت وصول المعاملة للمرحلة (بداية الانتظار)',
+                received_at DATETIME DEFAULT NULL COMMENT 'وقت الاستلام الفعلي (بداية OLA)',
                 completed_at DATETIME,
-                duration_minutes INT DEFAULT NULL,
+                waiting_minutes INT DEFAULT NULL COMMENT 'مدة الانتظار قبل الاستلام الفعلي',
+                ola_minutes INT DEFAULT NULL COMMENT 'مدة العمل الفعلي (OLA)',
+                duration_minutes INT DEFAULT NULL COMMENT 'إجمالي المدة (للتوافق)',
+                escalated_at DATETIME DEFAULT NULL COMMENT 'وقت التصعيد (يوقف OLA)',
+                post_escalation_minutes INT DEFAULT NULL COMMENT 'مدة ما بعد التصعيد حتى الإكمال',
                 status VARCHAR(50),
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -871,6 +876,20 @@ function ensureStageTimesTable() {
         if ($result && $row = $result->fetch_assoc()) {
             if (strpos($row['Type'], 'creation') === false) {
                 $conn->query("ALTER TABLE stage_times MODIFY COLUMN stage ENUM('creation', 'receiving', 'budget', 'payment', 'invoice') NOT NULL");
+            }
+        }
+        // إضافة الأعمدة الجديدة إن لم تكن موجودة
+        $newCols = [
+            'received_at'            => "ALTER TABLE stage_times ADD COLUMN received_at DATETIME DEFAULT NULL AFTER started_at",
+            'waiting_minutes'        => "ALTER TABLE stage_times ADD COLUMN waiting_minutes INT DEFAULT NULL AFTER received_at",
+            'ola_minutes'            => "ALTER TABLE stage_times ADD COLUMN ola_minutes INT DEFAULT NULL AFTER waiting_minutes",
+            'escalated_at'           => "ALTER TABLE stage_times ADD COLUMN escalated_at DATETIME DEFAULT NULL AFTER ola_minutes",
+            'post_escalation_minutes'=> "ALTER TABLE stage_times ADD COLUMN post_escalation_minutes INT DEFAULT NULL AFTER escalated_at",
+        ];
+        foreach ($newCols as $col => $sql) {
+            $check = $conn->query("SHOW COLUMNS FROM stage_times LIKE '$col'");
+            if (!$check || $check->num_rows == 0) {
+                $conn->query($sql);
             }
         }
     }
@@ -1186,98 +1205,128 @@ function recordStageTime($transactionId, $stage, $employeeId, $status, $isStart 
 }
 
 /**
- * تسجيل وقت المرحلة مع حساب المدة من آخر تحديث على المعاملة
- * يحسب الوقت بين التحديث السابق والتحديث الحالي
+ * تسجيل وقت المرحلة مع الفصل بين وقت الانتظار و OLA
+ *
+ * المنطق:
+ *   - started_at   = وقت وصول المعاملة للمرحلة (بداية الانتظار)
+ *   - received_at  = لحظة الاستلام الفعلي (بداية OLA)
+ *   - completed_at = لحظة الاكتمال (نهاية OLA)
+ *   - waiting_minutes       = received_at - started_at
+ *   - ola_minutes           = (escalated_at أو completed_at) - received_at
+ *   - post_escalation_minutes = completed_at - escalated_at (إن وُجد)
+ *
+ * حالات "الاستلام الفعلي" حسب كل مرحلة:
+ *   receiving → مستلم  (لحظية: الاستلام = الاكتمال)
+ *   budget    → قيد المراجعة
+ *   payment   → قيد المراجعة
+ *   invoice   → قيد الإصدار
  */
 function recordStageTimeFromLastUpdate($transactionId, $stage, $employeeId, $status) {
     $conn = db();
     ensureStageTimesTable();
     
     $transactionId = (int)$transactionId;
-    $stage = $conn->real_escape_string($stage);
-    $employeeId = $employeeId ? (int)$employeeId : 'NULL';
-    $status = $conn->real_escape_string($status);
-    $now = date('Y-m-d H:i:s');
-    
-    // الحصول على وقت بدء هذه المرحلة من stage_times
-    $startedAt = null;
-    $result = $conn->query("SELECT started_at FROM stage_times WHERE transaction_id = $transactionId AND stage = '$stage'");
-    if ($result && $result->num_rows > 0 && $row = $result->fetch_assoc()) {
-        $startedAt = $row['started_at'];
-    }
-    
-    // حساب المدة من وقت بدء المرحلة
-    $durationMinutes = 0;
-    if ($startedAt) {
-        $startTime = strtotime($startedAt);
-        $currentTime = strtotime($now);
-        $diffSeconds = $currentTime - $startTime;
-        
-        if ($diffSeconds > 0 && $diffSeconds < 60) {
-            $durationMinutes = 1;
-        } elseif ($diffSeconds >= 60) {
-            $durationMinutes = round($diffSeconds / 60);
-        }
-    }
-    
-    // الحالات التي تعني اكتمال المرحلة
-    $completedStatuses = [
-        'creation' => ['تم الإنشاء'],
+    $stageSafe     = $conn->real_escape_string($stage);
+    $employeeIdSql = $employeeId ? (int)$employeeId : 'NULL';
+    $statusSafe    = $conn->real_escape_string($status);
+    $now           = date('Y-m-d H:i:s');
+
+    // ── تعريف الحالات ──────────────────────────────────────────
+    // حالة "استلام فعلي" (بداية OLA) لكل مرحلة
+    $receivedStatuses = [
         'receiving' => ['مستلم'],
-        'budget' => ['معتمد'],
-        'payment' => ['تم الدفع'],
-        'invoice' => ['صدرت الفاتورة', 'مكتمل']
+        'budget'    => ['قيد المراجعة'],
+        'payment'   => ['قيد المراجعة'],
+        'invoice'   => ['قيد الإصدار'],
     ];
-    
+    // حالة "اكتمال" لكل مرحلة
+    $completedStatuses = [
+        'creation'  => ['تم الإنشاء'],
+        'receiving' => ['مستلم'],
+        'budget'    => ['معتمد'],
+        'payment'   => ['تم الدفع'],
+        'invoice'   => ['صدرت الفاتورة', 'مكتمل'],
+    ];
+
+    $isReceived  = in_array($status, $receivedStatuses[$stage]  ?? []);
     $isCompleted = in_array($status, $completedStatuses[$stage] ?? []);
-    
-    // التحقق من وجود سجل
-    $result = $conn->query("SELECT * FROM stage_times WHERE transaction_id = $transactionId AND stage = '$stage'");
-    
-    if ($result && $result->num_rows > 0) {
-        $row = $result->fetch_assoc();
-        
-        // تحديث المدة دائماً (سواء مكتملة أو لا)
-        $sql = "UPDATE stage_times SET 
-                employee_id = $employeeId,
-                started_at = COALESCE(started_at, '$now'),
-                duration_minutes = $durationMinutes,
-                status = '$status'";
-        
-        if ($isCompleted) {
-            $sql .= ", completed_at = '$now'";
+
+    // ── جلب السجل الحالي ──────────────────────────────────────
+    $res = $conn->query("SELECT * FROM stage_times WHERE transaction_id = $transactionId AND stage = '$stageSafe'");
+    $row = ($res && $res->num_rows > 0) ? $res->fetch_assoc() : null;
+
+    if (!$row) {
+        // إنشاء سجل جديد (حالة نادرة)
+        $conn->query("INSERT INTO stage_times (transaction_id, stage, employee_id, started_at, status)
+                      VALUES ($transactionId, '$stageSafe', $employeeIdSql, '$now', '$statusSafe')");
+        $row = ['started_at' => $now, 'received_at' => null, 'escalated_at' => null, 'completed_at' => null];
+    }
+
+    $startedAt   = $row['started_at']   ?? $now;
+    $receivedAt  = $row['received_at']  ?? null;
+    $escalatedAt = $row['escalated_at'] ?? null;
+
+    // ── دالة مساعدة لحساب الفرق بالدقائق ─────────────────────
+    $diffMin = function($from, $to) {
+        if (!$from || !$to) return null;
+        $diff = strtotime($to) - strtotime($from);
+        if ($diff <= 0) return 0;
+        return $diff < 60 ? 1 : (int)round($diff / 60);
+    };
+
+    // ── بناء جملة UPDATE ───────────────────────────────────────
+    $sets = ["employee_id = $employeeIdSql", "status = '$statusSafe'"];
+
+    // 1) استلام فعلي → سجّل received_at وحساب waiting_minutes
+    if ($isReceived && !$receivedAt) {
+        $sets[] = "received_at = '$now'";
+        $wMin   = $diffMin($startedAt, $now);
+        if ($wMin !== null) $sets[] = "waiting_minutes = $wMin";
+        $receivedAt = $now; // للحساب التالي
+    }
+
+    // 2) اكتمال → سجّل completed_at وحساب ola_minutes و post_escalation_minutes
+    if ($isCompleted && !$row['completed_at']) {
+        $sets[] = "completed_at = '$now'";
+
+        // إذا لم يُسجَّل received_at بعد (مثل receiving اللحظية) → سجّله الآن
+        if (!$receivedAt) {
+            $sets[] = "received_at = '$now'";
+            $wMin   = $diffMin($startedAt, $now);
+            if ($wMin !== null) $sets[] = "waiting_minutes = $wMin";
+            $receivedAt = $now;
         }
-        
-        $sql .= " WHERE transaction_id = $transactionId AND stage = '$stage'";
-        $conn->query($sql);
-        
-        // تسجيل وقت بدء المرحلة التالية
-        if ($isCompleted) {
-            $nextStage = getNextStage($stage);
-            if ($nextStage) {
-                startNextStage($transactionId, $nextStage, $now);
-            }
+
+        // ola_minutes = من received_at حتى (escalated_at إن وُجد، وإلا now)
+        $olaEnd  = $escalatedAt ?? $now;
+        $olaMin  = $diffMin($receivedAt, $olaEnd);
+        if ($olaMin !== null) $sets[] = "ola_minutes = $olaMin";
+
+        // post_escalation_minutes = من escalated_at حتى now
+        if ($escalatedAt) {
+            $postMin = $diffMin($escalatedAt, $now);
+            if ($postMin !== null) $sets[] = "post_escalation_minutes = $postMin";
         }
-    } else {
-        // إنشاء سجل جديد
-        $completedAt = $isCompleted ? "'$now'" : "NULL";
-        
-        $sql = "INSERT INTO stage_times (transaction_id, stage, employee_id, started_at, completed_at, duration_minutes, status) 
-                VALUES ($transactionId, '$stage', $employeeId, '$now', $completedAt, $durationMinutes, '$status')";
-        $conn->query($sql);
-        
-        // إذا تم اكتمال المرحلة، سجل بدء المرحلة التالية
-        if ($isCompleted) {
-            $nextStage = getNextStage($stage);
-            if ($nextStage) {
-                startNextStage($transactionId, $nextStage, $now);
-            }
+
+        // duration_minutes للتوافق مع الكود القديم = ola_minutes
+        if ($olaMin !== null) $sets[] = "duration_minutes = $olaMin";
+    }
+
+    // تنفيذ التحديث
+    $conn->query("UPDATE stage_times SET " . implode(', ', $sets) . "
+                  WHERE transaction_id = $transactionId AND stage = '$stageSafe'");
+
+    // ── إن اكتملت: ابدأ المرحلة التالية ──────────────────────
+    if ($isCompleted) {
+        $nextStage = getNextStage($stage);
+        if ($nextStage) {
+            startNextStage($transactionId, $nextStage, $now);
         }
     }
-    
-    // تحديث وقت آخر تعديل على المعاملة
+
+    // تحديث updated_at على المعاملة
     $conn->query("UPDATE transactions SET updated_at = '$now' WHERE id = $transactionId");
-    
+
     return true;
 }
 
@@ -1307,11 +1356,15 @@ function startNextStage($transactionId, $stage, $startTime) {
     $result = $conn->query("SELECT id FROM stage_times WHERE transaction_id = $transactionId AND stage = '$stage'");
     
     if ($result && $result->num_rows > 0) {
-        $conn->query("UPDATE stage_times SET started_at = COALESCE(started_at, '$startTime') 
+        // ✅ سجّل started_at و received_at معاً — OLA يبدأ فوراً
+        $conn->query("UPDATE stage_times
+                      SET started_at  = COALESCE(started_at, '$startTime'),
+                          received_at = COALESCE(received_at, '$startTime')
                       WHERE transaction_id = $transactionId AND stage = '$stage'");
     } else {
-        $conn->query("INSERT INTO stage_times (transaction_id, stage, started_at, status) 
-                      VALUES ($transactionId, '$stage', '$startTime', 'في الانتظار')");
+        // ✅ أضف received_at من البداية
+        $conn->query("INSERT INTO stage_times (transaction_id, stage, started_at, received_at, status)
+                      VALUES ($transactionId, '$stage', '$startTime', '$startTime', 'في الانتظار')");
     }
 }
 

@@ -5,8 +5,9 @@
  */
 
 session_start();
-require_once 'includes/config.php';
-require_once 'includes/functions.php';
+require_once 'config.php';
+require_once 'functions.php';
+require_once 'bank_functions.php';
 
 // التحقق من تسجيل الدخول
 if (!isset($_SESSION['user_id'])) {
@@ -362,17 +363,22 @@ $currentPage = 'bank_deposits';
     </main>
 
     <!-- Modal Container -->
-    <div id="modal-overlay" class="modal-overlay" onclick="closeModal()"></div>
-    <div id="modal-container" class="modal-container">
-        <!-- سيتم ملؤه ديناميكياً -->
+    <div id="modal-overlay" class="modal-overlay" onclick="handleModalOverlayClick(event)">
+        <div id="modal-container" class="modal-container">
+            <!-- سيتم ملؤه ديناميكياً -->
+        </div>
     </div>
 
     <!-- Toast Container -->
     <div id="toast-container" class="toast-container"></div>
 
     <!-- Scripts -->
-    <script src="app.js"></script>
-    <script src="bank_deposits.js"></script>
+
+    <script src="app-common.js"></script> <!-- أولاً دائماً -->
+    <script src="app-notifications.js"></script>
+    <script src="app-dashboard.js"></script>
+    <script src="app-transactions.js"></script>
+    <script src="app-sla.js"></script>
 </body>
 
 </html>

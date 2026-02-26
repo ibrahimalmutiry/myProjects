@@ -1,1784 +1,40 @@
 /**
- * نظام إدارة معاملات القطاع المالي - JavaScript
- * Workflow Management System
+ * ╔══════════════════════════════════════════════════════════════╗
+ * ║      app-transactions.js — المعاملات المالية                 ║
+ * ║  يتطلب: app-common.js                                        ║
+ * ╚══════════════════════════════════════════════════════════════╝
+ *
+ * يحتوي هذا الملف على:
+ *  • تحميل وعرض قائمة المعاملات (loadTransactions, renderTransactions)
+ *  • عرض صفوف المعاملات مع تفاصيل كل مرحلة
+ *  • نافذة إضافة معاملة جديدة (openAddModal, submitAddForm)
+ *  • نافذة تعديل معاملة (editTransaction, submitUpdateForm)
+ *  • إدارة المرفقات: رفع، حذف (uploadAttachment, deleteAttachment)
+ *  • سجل أحداث المعاملة (loadTransactionEvents)
+ *  • فلترة وبحث المعاملات (filterTransactions)
+ *  • عرض تفاصيل معاملة (viewTransaction)
+ *  • قسم الإعدادات — الموظفون وأنواع المعاملات والنظام
  */
 
-// الحالة العامة للتطبيق
-const App = {
-    currentTab: 'dashboard',
-    transactions: [],
-    stats: {},
-    chartData: [],
-    expandedRow: null,
-    editingTransaction: null
+// ═══════════════════════════════════════════════════════════
+//  بيانات الإعدادات
+// ═══════════════════════════════════════════════════════════
+
+/** بيانات قسم الإعدادات — الموظفون وأنواع المعاملات */
+var SettingsData = {
+    employees: [],
+    types: [],
+    currentFilter: 'all'
 };
 
-// عناصر DOM
-const DOM = {};
+// ═══════════════════════════════════════════════════════════
+//  تحميل وعرض المعاملات
+// ═══════════════════════════════════════════════════════════
 
-// تهيئة التطبيق
-document.addEventListener('DOMContentLoaded', () => {
-    initDOM();
-    initEventListeners();
-    loadDashboard();
-});
-
-// تهيئة عناصر DOM
-function initDOM() {
-    DOM.mainContent = document.getElementById('main-content');
-    DOM.navTabs = document.querySelectorAll('.nav-tab');
-    DOM.notificationBadge = document.getElementById('notification-badge');
-    DOM.modal = document.getElementById('modal');
-    DOM.modalTitle = document.getElementById('modal-title');
-    DOM.modalBody = document.getElementById('modal-body');
-    DOM.toast = document.getElementById('toast');
-}
-
-// تهيئة مستمعات الأحداث
-function initEventListeners() {
-    DOM.navTabs.forEach(tab => {
-        tab.addEventListener('click', () => switchTab(tab.dataset.tab));
-    });
-
-    document.querySelector('.modal-close')?.addEventListener('click', closeModal);
-    document.querySelector('.modal-overlay')?.addEventListener('click', (e) => {
-        if (e.target.classList.contains('modal-overlay')) closeModal();
-    });
-
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') closeModal();
-    });
-}
-// ========== نظام الإشعارات - إصلاح التكرار ==========
-
-let notificationsData = [];
-let unreadNotificationsCount = 0;
-let readNotifications = new Set();
-let isProcessingClick = false; // منع النقرات المتعددة
-
-// تحميل الإشعارات المقروءة من localStorage
-function loadReadNotifications() {
-    try {
-        const saved = localStorage.getItem('readNotifications');
-        if (saved) {
-            readNotifications = new Set(JSON.parse(saved));
-        }
-    } catch (e) {
-        console.error('Error loading read notifications:', e);
-    }
-}
-
-// حفظ الإشعارات المقروءة في localStorage
-function saveReadNotifications() {
-    try {
-        localStorage.setItem('readNotifications', JSON.stringify([...readNotifications]));
-    } catch (e) {
-        console.error('Error saving read notifications:', e);
-    }
-}
-
-// تحميل عدد الإشعارات عند بداية التشغيل
-async function loadInitialNotificationCount() {
-    try {
-        const res = await fetch('api/?action=notifications&limit=50');
-        const result = await res.json();
-
-        if (result.success && result.data) {
-            notificationsData = result.data.map(n => ({
-                ...n,
-                is_read: readNotifications.has(n.id) || n.is_read
-            }));
-
-            unreadNotificationsCount = notificationsData.filter(n => !n.is_read).length;
-            updateNotificationBadge();
-        }
-    } catch (error) {
-        console.error('Error loading notification count:', error);
-    }
-}
-
-// فتح/إغلاق قائمة التنبيهات
-function toggleNotificationsDropdown(e) {
-    e.stopPropagation();
-
-    let dropdown = document.getElementById('notifications-dropdown');
-
-    if (!dropdown) {
-        dropdown = document.createElement('div');
-        dropdown.id = 'notifications-dropdown';
-        dropdown.className = 'notifications-dropdown';
-        document.querySelector('.notification-btn').appendChild(dropdown);
-
-        // إضافة event listener مرة واحدة فقط
-        dropdown.addEventListener('click', handleDropdownClick);
-    }
-
-    if (dropdown.classList.contains('show')) {
-        dropdown.classList.remove('show');
-        return;
-    }
-
-    dropdown.innerHTML = '<div class="notif-loading"><div class="spinner-small"></div><span>جاري التحميل...</span></div>';
-    dropdown.classList.add('show');
-
-    loadNotifications(dropdown);
-}
-
-// معالجة النقر داخل القائمة (Event Delegation)
-function handleDropdownClick(e) {
-    e.stopPropagation();
-
-    // البحث عن الإشعار المنقور
-    const notifItem = e.target.closest('.notif-item');
-    if (notifItem && !isProcessingClick) {
-        const notifId = parseInt(notifItem.dataset.notifId);
-        if (notifId) {
-            handleNotificationClick(notifId);
-        }
-    }
-
-    // التحقق من زر "تعيين الكل كمقروء"
-    if (e.target.classList.contains('mark-all-read') || e.target.closest('.mark-all-read')) {
-        markAllAsRead();
-    }
-}
-
-// تحميل التنبيهات
-async function loadNotifications(dropdown) {
-    try {
-        const res = await fetch('api/?action=notifications&limit=50');
-        const result = await res.json();
-
-        if (result.success && result.data) {
-            notificationsData = result.data.map(n => ({
-                ...n,
-                is_read: readNotifications.has(n.id) || n.is_read
-            }));
-
-            unreadNotificationsCount = notificationsData.filter(n => !n.is_read).length;
-            updateNotificationBadge();
-            renderNotifications(dropdown);
-        } else {
-            dropdown.innerHTML = '<div class="notif-error">خطأ في تحميل الإشعارات</div>';
-        }
-    } catch (error) {
-        console.error('Error loading notifications:', error);
-        dropdown.innerHTML = '<div class="notif-error">خطأ في تحميل الإشعارات</div>';
-    }
-}
-
-// عرض الإشعارات (فقط غير المقروءة) - بدون onclick في HTML
-function renderNotifications(dropdown) {
-    const unreadNotifications = notificationsData.filter(n => !n.is_read);
-
-    let html = '<div class="notif-header">';
-    html += '<h4>الإشعارات</h4>';
-    html += '<button class="mark-all-read">تعيين الكل كمقروء</button>';
-    html += '</div>';
-
-    html += '<div class="notif-list">';
-
-    if (unreadNotifications.length > 0) {
-        const stageNames = {
-            'receiving': 'الاستلام',
-            'budget': 'الموازنة',
-            'payment': 'الدفع',
-            'invoice': 'الفوترة'
-        };
-
-        unreadNotifications.forEach(notification => {
-            const stageName = stageNames[notification.stage] || notification.stage;
-            const timeAgo = formatTimeAgo(notification.update_time);
-            const stage = notification.stage || 'receiving';
-            const notifId = notification.id;
-
-            // لاحظ: لا يوجد onclick في HTML
-            html += `
-            <div class="notif-item unread" data-notif-id="${notifId}">
-                <div class="notif-card-content">
-                    <div class="notif-icon ${stage}">
-                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-                            ${getStageIconSVG(stage)}
-                        </svg>
-                    </div>
-                    <div class="notif-content">
-                        <div class="notif-title">
-                            <span class="notif-number">${notification.transaction_number || 'TX-0000'}</span>
-                        </div>
-                        <div class="notif-desc">
-                            ${notification.transaction_type || 'معاملة'} - ${notification.status || 'تحديث'}
-                            ${notification.employee_name ? '<br><small style="color: var(--text-muted);">👤 ' + notification.employee_name + '</small>' : ''}
-                        </div>
-                        <div class="notif-meta">
-                            <div class="notif-time">${timeAgo}</div>
-                            <span class="stage-badge ${stage}">${stageName}</span>
-                        </div>
-                    </div>
-                </div>
-            </div>`;
-        });
-    } else {
-        html += `
-        <div class="notif-empty">
-            <div class="empty-icon">✓</div>
-            <p>لا توجد إشعارات جديدة</p>
-            <small>جميع الإشعارات قد تم قراءتها</small>
-        </div>`;
-    }
-
-    html += '</div>';
-    html += '<div class="notif-footer">';
-    html += '<a href="#" class="view-all-link">عرض كل الإشعارات <span class="arrow">‹</span></a>';
-    html += '</div>';
-
-    dropdown.innerHTML = html;
-
-    // إضافة event listener لرابط "عرض الكل"
-    dropdown.querySelector('.view-all-link')?.addEventListener('click', (e) => {
-        e.preventDefault();
-        viewAllNotifications();
-    });
-}
-
-// الحصول على أيقونة SVG حسب المرحلة
-function getStageIconSVG(stage) {
-    const icons = {
-        'receiving': '<path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>',
-        'budget': '<path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>',
-        'payment': '<path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/>',
-        'invoice': '<path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>'
-    };
-    return icons[stage] || icons['receiving'];
-}
-
-// معالجة الضغط على الإشعار
-function handleNotificationClick(notifId) {
-    // منع النقرات المتعددة
-    if (isProcessingClick) {
-        console.log('Already processing, ignoring click');
-        return;
-    }
-
-    isProcessingClick = true;
-    console.log('Processing notification:', notifId);
-
-    // التحقق إذا كان مقروء مسبقاً
-    if (readNotifications.has(notifId)) {
-        console.log('Already read, ignoring');
-        isProcessingClick = false;
-        return;
-    }
-
-    // إضافة للمقروءة محلياً
-    readNotifications.add(notifId);
-    saveReadNotifications();
-
-    // تحديث البيانات المحلية
-    const notif = notificationsData.find(n => n.id === notifId);
-    if (notif) {
-        notif.is_read = true;
-    }
-
-    // تقليل العدد فوراً
-    if (unreadNotificationsCount > 0) {
-        unreadNotificationsCount--;
-        updateNotificationBadge();
-        console.log('Updated count to:', unreadNotificationsCount);
-    }
-
-    // إزالة الإشعار من القائمة بـ animation
-    const clickedItem = document.querySelector(`[data-notif-id="${notifId}"]`);
-    if (clickedItem) {
-        clickedItem.style.transition = 'all 0.3s ease';
-        clickedItem.style.opacity = '0';
-        clickedItem.style.transform = 'translateX(-20px)';
-
-        setTimeout(() => {
-            clickedItem.remove();
-
-            // تحديث العرض إذا لم يتبق إشعارات
-            const remainingItems = document.querySelectorAll('.notif-item');
-            if (remainingItems.length === 0) {
-                const dropdown = document.getElementById('notifications-dropdown');
-                if (dropdown) {
-                    renderNotifications(dropdown);
-                }
-            }
-
-            isProcessingClick = false;
-        }, 300);
-    } else {
-        isProcessingClick = false;
-    }
-
-    // إرسال للخادم في الخلفية (اختياري)
-    fetch('api/?action=mark_notification_read', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ notification_id: notifId })
-    }).catch(err => console.error('Error syncing:', err));
-
-    // إغلاق القائمة
-    setTimeout(() => {
-        document.getElementById('notifications-dropdown')?.classList.remove('show');
-    }, 400);
-
-    // فتح المعاملة
-    const transactionId = notif ? (notif.transaction_id || notif.id) : notifId;
-    setTimeout(() => {
-        goToTransaction(transactionId);
-    }, 100);
-}
-
-// الانتقال للمعاملة
-function goToTransaction(id) {
-    viewTransaction(id);
-}
-
-// عرض كل الإشعارات
-function viewAllNotifications() {
-    document.getElementById('notifications-dropdown')?.classList.remove('show');
-    showToast('قريباً - صفحة كل الإشعارات', 'info');
-}
-
-// تعيين الكل كمقروء
-function markAllAsRead() {
-    if (isProcessingClick) return;
-    isProcessingClick = true;
-
-    // إضافة كل الإشعارات للمقروءة
-    notificationsData.forEach(n => {
-        if (!n.is_read) {
-            readNotifications.add(n.id);
-            n.is_read = true;
-        }
-    });
-
-    saveReadNotifications();
-
-    // تصفير العدد فوراً
-    unreadNotificationsCount = 0;
-    updateNotificationBadge();
-
-    // تحديث العرض
-    const dropdown = document.getElementById('notifications-dropdown');
-    if (dropdown && dropdown.classList.contains('show')) {
-        renderNotifications(dropdown);
-    }
-
-    showToast('تم تعيين جميع الإشعارات كمقروءة ✓', 'success');
-
-    // إرسال للخادم في الخلفية
-    fetch('api/?action=mark_all_notifications_read', {
-        method: 'POST'
-    }).catch(err => console.error('Error:', err));
-
-    setTimeout(() => {
-        isProcessingClick = false;
-    }, 500);
-}
-
-// تحديث شارة العدد
-function updateNotificationBadge() {
-    let badge = document.getElementById('notification-badge');
-
-    if (unreadNotificationsCount > 0) {
-        if (!badge) {
-            badge = document.createElement('span');
-            badge.id = 'notification-badge';
-            badge.className = 'notification-badge';
-            document.querySelector('.notification-btn').appendChild(badge);
-        }
-        badge.textContent = unreadNotificationsCount > 99 ? '99+' : unreadNotificationsCount;
-        badge.style.display = 'flex';
-    } else {
-        if (badge) {
-            badge.style.display = 'none';
-        }
-    }
-}
-
-// تنسيق الوقت
-function formatTimeAgo(dateString) {
-    if (!dateString) return 'الآن';
-
-    const date = new Date(dateString);
-    const now = new Date();
-    const seconds = Math.floor((now - date) / 1000);
-
-    if (seconds < 60) return 'الآن';
-    if (seconds < 3600) return `منذ ${Math.floor(seconds / 60)} دقيقة`;
-    if (seconds < 86400) return `منذ ${Math.floor(seconds / 3600)} ساعة`;
-    if (seconds < 2592000) return `منذ ${Math.floor(seconds / 86400)} يوم`;
-
-    return date.toLocaleDateString('ar-SA', {
-        month: 'short',
-        day: 'numeric'
-    });
-}
-
-// تحديث دوري كل 30 ثانية
-setInterval(() => {
-    const dropdown = document.getElementById('notifications-dropdown');
-
-    if (!dropdown || !dropdown.classList.contains('show')) {
-        loadInitialNotificationCount();
-    }
-}, 30000);
-
-// إغلاق القائمة عند النقر خارجها
-document.addEventListener('click', (e) => {
-    const dropdown = document.getElementById('notifications-dropdown');
-    const btn = document.querySelector('.notification-btn');
-    if (dropdown && !dropdown.contains(e.target) && !btn.contains(e.target)) {
-        dropdown.classList.remove('show');
-    }
-});
-
-// تهيئة عند تحميل الصفحة
-document.addEventListener('DOMContentLoaded', () => {
-    loadReadNotifications();
-    loadInitialNotificationCount();
-    document.querySelector('.notification-btn')?.addEventListener('click', toggleNotificationsDropdown);
-});
-
-
-
-
-// دالة حساب الوقت المنقضي
-function formatTimeAgo(datetime) {
-    if (!datetime) return '';
-
-    const now = new Date();
-    const past = new Date(datetime);
-    const diffMs = now - past;
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMins / 60);
-    const diffDays = Math.floor(diffHours / 24);
-
-    if (diffMins < 1) return 'الآن';
-    if (diffMins < 60) return `منذ ${diffMins} دقيقة`;
-    if (diffHours < 24) return `منذ ${diffHours} ساعة`;
-    if (diffDays === 1) return 'أمس';
-    if (diffDays < 7) return `منذ ${diffDays} أيام`;
-
-    // تنسيق التاريخ
-    const day = past.getDate().toString().padStart(2, '0');
-    const month = (past.getMonth() + 1).toString().padStart(2, '0');
-    const year = past.getFullYear();
-    const hours = past.getHours().toString().padStart(2, '0');
-    const mins = past.getMinutes().toString().padStart(2, '0');
-    const ampm = past.getHours() >= 12 ? 'م' : 'ص';
-
-    return `${hours}:${mins} ${ampm} , ${year}/${month}/${day}`;
-}
-
-// دالة حساب الوقت المنقضي
-function formatTimeAgo(datetime) {
-    if (!datetime) return '';
-
-    const now = new Date();
-    const past = new Date(datetime);
-    const diffMs = now - past;
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMins / 60);
-    const diffDays = Math.floor(diffHours / 24);
-
-    if (diffMins < 1) return 'الآن';
-    if (diffMins < 60) return `منذ ${diffMins} دقيقة`;
-    if (diffHours < 24) return `منذ ${diffHours} ساعة`;
-    if (diffDays < 7) return `منذ ${diffDays} يوم`;
-
-    return past.toLocaleDateString('ar-SA');
-}
-function switchTab(tab) {
-    App.currentTab = tab;
-    App.expandedRow = null;
-
-    DOM.navTabs.forEach(t => {
-        t.classList.toggle('active', t.dataset.tab === tab);
-    });
-
-    if (tab === 'dashboard') {
-        loadDashboard();
-    } else if (tab === 'transactions') {
-        loadTransactions();
-    } else if (tab === 'correspondence') {
-        loadCorrespondencePage();
-    } else if (tab === 'bank-deposits') {
-        loadBankDepositsPage(); // ← جديد
-    } else if (tab === 'settings') {
-        loadSettingsPage();
-    }
-}
 /**
- * نظام إدارة معاملات القطاع المالي - JavaScript
- * Workflow Management System
- * 
- * ملاحظة: هذا الملف يحتوي على التعديلات المطلوبة
- * يجب دمجه مع ملف app.js الأصلي
+ * تحميل قائمة المعاملات من الخادم
+ * تُنشئ الجدول الرئيسي للمعاملات مع الفلاتر
  */
-
-// ========== نظام الترجمة (i18n) ==========
-
-// قاموس الترجمة
-const translations = {
-    ar: {
-        // العنوان
-        app_title: "نظام إدارة معاملات القطاع المالي",
-        app_subtitle: "Workflow Management System",
-
-        // التنقل الرئيسي
-        dashboard: "لوحة التحكم",
-        transactions: "المعاملات",
-        settings: "الإعدادات",
-
-        // أزرار الشريط العلوي
-        toggle_theme: "تبديل الوضع",
-        change_language: "تغيير اللغة",
-        notifications: "التنبيهات",
-        logout: "تسجيل الخروج",
-
-        // لوحة التحكم
-        system_overview: "نظرة عامة على النظام",
-        total_transactions: "إجمالي المعاملات",
-        completed: "المكتملة",
-        needs_followup: "تحتاج متابعة",
-        total_amount: "إجمالي المبالغ",
-        urgent_transactions: "المعاملات العاجلة",
-        all: "الكل",
-        urgent: "عاجل",
-        followup: "متابعة",
-
-        // جدول المعاملات
-        transaction_number: "رقم المعاملة",
-        transaction_type: "نوع المعاملة",
-        amount: "المبلغ",
-        status: "الحالة",
-        date: "التاريخ",
-        actions: "الإجراءات",
-
-        // الحالات
-        new_status: "جديد",
-        received: "مستلم",
-        in_budget: "في الموازنة",
-        in_payment: "في الدفع",
-        paid: "مدفوع",
-        rejected: "مرفوض",
-
-        // صفحة الإعدادات
-        system_settings: "إعدادات النظام",
-        manage_employees_transactions: "إدارة الموظفين والمعاملات وإعدادات النظام",
-        resource_management: "إدارة الموارد",
-        employees: "الموظفين",
-        manage_employee_accounts: "إدارة حسابات الموظفين",
-        employee_performance: "أداء الموظفين",
-        reports_tracking: "تقارير ومتابعة الأداء",
-        transactions_section: "المعاملات",
-        transaction_types: "أنواع المعاملات",
-        transaction_categories: "تصنيفات المعاملات",
-        all_transactions: "جميع المعاملات",
-        view_manage_transactions: "عرض وإدارة المعاملات",
-        system_section: "النظام",
-        system_settings_desc: "إعدادات النظام",
-        system_info_tools: "معلومات وأدوات النظام",
-
-        // إدارة الموظفين
-        employee_management: "إدارة الموظفين",
-        add_employee: "إضافة موظف",
-        edit_employee: "تعديل موظف",
-        delete_employee: "حذف موظف",
-        employee_name: "اسم الموظف",
-        email: "البريد الإلكتروني",
-        phone: "رقم الهاتف",
-        department: "القسم",
-
-        // الأقسام/الأدوار
-        admin: "مدير النظام",
-        receiver: "الاستلام",
-        budget: "الموازنة",
-        payment: "الدفع",
-        invoice: "الفوترة",
-
-        // أزرار عامة
-        save: "حفظ",
-        cancel: "إلغاء",
-        edit: "تعديل",
-        delete: "حذف",
-        add: "إضافة",
-        search: "بحث",
-        filter: "فلترة",
-        export: "تصدير",
-        print: "طباعة",
-        close: "إغلاق",
-        confirm: "تأكيد",
-
-        // رسائل
-        success: "نجاح",
-        error: "خطأ",
-        warning: "تحذير",
-        info: "معلومة",
-        loading: "جاري التحميل...",
-        no_data: "لا توجد بيانات",
-        no_employees: "لا يوجد موظفين",
-        confirm_delete: "هل أنت متأكد من الحذف؟",
-        saved_successfully: "تم الحفظ بنجاح",
-        deleted_successfully: "تم الحذف بنجاح",
-        error_occurred: "حدث خطأ",
-
-        // إضافة معاملة
-        add_transaction: "إضافة معاملة",
-        transaction_details: "تفاصيل المعاملة",
-        attachments: "المرفقات",
-        notes: "ملاحظات",
-
-        // إعدادات النظام
-        system_info: "معلومات النظام",
-        system_name: "اسم النظام",
-        version: "الإصدار",
-        database: "قاعدة البيانات",
-        danger_zone: "منطقة الخطر",
-        clear_all_transactions: "حذف جميع المعاملات",
-        this_action_irreversible: "هذا الإجراء لا يمكن التراجع عنه",
-        system_stats: "إحصائيات النظام",
-
-        // العملة
-        currency: "ر.س",
-
-        // الوقت
-        minutes: "دقيقة",
-        hours: "ساعة",
-        days: "يوم",
-        avg: "متوسط"
-    },
-
-    en: {
-        // Title
-        app_title: "Workflow Management System",
-        app_subtitle: "نظام إدارة معاملات القطاع المالي",
-
-        // Main navigation
-        dashboard: "Dashboard",
-        transactions: "Transactions",
-        settings: "Settings",
-
-        // Top bar buttons
-        toggle_theme: "Toggle Theme",
-        change_language: "Change Language",
-        notifications: "Notifications",
-        logout: "Logout",
-
-        // Dashboard
-        system_overview: "System Overview",
-        total_transactions: "Total Transactions",
-        completed: "Completed",
-        needs_followup: "Needs Follow-up",
-        total_amount: "Total Amount",
-        urgent_transactions: "Urgent Transactions",
-        all: "All",
-        urgent: "Urgent",
-        followup: "Follow-up",
-
-        // Transaction table
-        transaction_number: "Transaction #",
-        transaction_type: "Type",
-        amount: "Amount",
-        status: "Status",
-        date: "Date",
-        actions: "Actions",
-
-        // Statuses
-        new_status: "New",
-        received: "Received",
-        in_budget: "In Budget",
-        in_payment: "In Payment",
-        paid: "Paid",
-        rejected: "Rejected",
-
-        // Settings page
-        system_settings: "System Settings",
-        manage_employees_transactions: "Manage employees, transactions and system settings",
-        resource_management: "Resource Management",
-        employees: "Employees",
-        manage_employee_accounts: "Manage employee accounts",
-        employee_performance: "Employee Performance",
-        reports_tracking: "Reports and performance tracking",
-        transactions_section: "Transactions",
-        transaction_types: "Transaction Types",
-        transaction_categories: "Transaction categories",
-        all_transactions: "All Transactions",
-        view_manage_transactions: "View and manage transactions",
-        system_section: "System",
-        system_settings_desc: "System Settings",
-        system_info_tools: "System info and tools",
-
-        // Employee management
-        employee_management: "Employee Management",
-        add_employee: "Add Employee",
-        edit_employee: "Edit Employee",
-        delete_employee: "Delete Employee",
-        employee_name: "Employee Name",
-        email: "Email",
-        phone: "Phone",
-        department: "Department",
-
-        // Departments/Roles
-        admin: "System Admin",
-        receiver: "Receiving",
-        budget: "Budget",
-        payment: "Payment",
-        invoice: "Invoice",
-
-        // General buttons
-        save: "Save",
-        cancel: "Cancel",
-        edit: "Edit",
-        delete: "Delete",
-        add: "Add",
-        search: "Search",
-        filter: "Filter",
-        export: "Export",
-        print: "Print",
-        close: "Close",
-        confirm: "Confirm",
-
-        // Messages
-        success: "Success",
-        error: "Error",
-        warning: "Warning",
-        info: "Info",
-        loading: "Loading...",
-        no_data: "No data available",
-        no_employees: "No employees",
-        confirm_delete: "Are you sure you want to delete?",
-        saved_successfully: "Saved successfully",
-        deleted_successfully: "Deleted successfully",
-        error_occurred: "An error occurred",
-
-        // Add transaction
-        add_transaction: "Add Transaction",
-        transaction_details: "Transaction Details",
-        attachments: "Attachments",
-        notes: "Notes",
-
-        // System settings
-        system_info: "System Info",
-        system_name: "System Name",
-        version: "Version",
-        database: "Database",
-        danger_zone: "Danger Zone",
-        clear_all_transactions: "Clear All Transactions",
-        this_action_irreversible: "This action is irreversible",
-        system_stats: "System Statistics",
-
-        // Currency
-        currency: "SAR",
-
-        // Time
-        minutes: "min",
-        hours: "hr",
-        days: "day",
-        avg: "avg"
-    }
-};
-
-// اللغة الحالية
-let currentLang = localStorage.getItem('app_language') || 'ar';
-
-// دالة الحصول على الترجمة
-function t(key) {
-    return translations[currentLang][key] || translations['ar'][key] || key;
-}
-
-// دالة تبديل اللغة
-function toggleLanguage() {
-    currentLang = currentLang === 'ar' ? 'en' : 'ar';
-    localStorage.setItem('app_language', currentLang);
-    applyLanguage();
-}
-
-// دالة تطبيق اللغة
-function applyLanguage() {
-    const html = document.documentElement;
-
-    // تغيير اتجاه الصفحة
-    if (currentLang === 'ar') {
-        html.setAttribute('dir', 'rtl');
-        html.setAttribute('lang', 'ar');
-    } else {
-        html.setAttribute('dir', 'ltr');
-        html.setAttribute('lang', 'en');
-    }
-
-    html.setAttribute('data-lang', currentLang);
-
-    // تحديث نص زر اللغة
-    // const langText = document.querySelector('.lang-text');
-    // if (langText) {
-    //     langText.textContent = currentLang === 'ar' ? 'EN' : 'ع';
-    // }
-
-    // تحديث جميع العناصر التي تحتوي على data-i18n
-    document.querySelectorAll('[data-i18n]').forEach(el => {
-        const key = el.getAttribute('data-i18n');
-        if (translations[currentLang][key]) {
-            el.textContent = translations[currentLang][key];
-        }
-    });
-
-    // تحديث العناصر التي تحتوي على data-i18n-title
-    document.querySelectorAll('[data-i18n-title]').forEach(el => {
-        const key = el.getAttribute('data-i18n-title');
-        if (translations[currentLang][key]) {
-            el.setAttribute('title', translations[currentLang][key]);
-        }
-    });
-
-    // تحديث العناصر التي تحتوي على data-i18n-placeholder
-    document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
-        const key = el.getAttribute('data-i18n-placeholder');
-        if (translations[currentLang][key]) {
-            el.setAttribute('placeholder', translations[currentLang][key]);
-        }
-    });
-
-    // إعادة تحميل المحتوى الحالي
-    refreshCurrentContent();
-}
-
-// دالة إعادة تحميل المحتوى الحالي
-function refreshCurrentContent() {
-    if (typeof App !== 'undefined' && App.currentTab) {
-        if (App.currentTab === 'dashboard') {
-            if (typeof loadDashboard === 'function') loadDashboard();
-        } else if (App.currentTab === 'transactions') {
-            if (typeof loadTransactions === 'function') loadTransactions();
-        } else if (App.currentTab === 'settings') {
-            if (typeof loadSettingsPage === 'function') loadSettingsPage();
-        }
-    }
-}
-
-// تهيئة اللغة عند تحميل الصفحة
-function initLanguage() {
-    currentLang = localStorage.getItem('app_language') || 'ar';
-    const html = document.documentElement;
-
-    if (currentLang === 'en') {
-        html.setAttribute('dir', 'ltr');
-        html.setAttribute('lang', 'en');
-    }
-
-    html.setAttribute('data-lang', currentLang);
-
-    // const langText = document.querySelector('.lang-text');
-    // if (langText) {
-    //     langText.textContent = currentLang === 'ar' ? 'EN' : 'ع';
-    // }
-
-    // تحديث العناصر الثابتة
-    document.querySelectorAll('[data-i18n]').forEach(el => {
-        const key = el.getAttribute('data-i18n');
-        if (translations[currentLang][key]) {
-            el.textContent = translations[currentLang][key];
-        }
-    });
-
-    document.querySelectorAll('[data-i18n-title]').forEach(el => {
-        const key = el.getAttribute('data-i18n-title');
-        if (translations[currentLang][key]) {
-            el.setAttribute('title', translations[currentLang][key]);
-        }
-    });
-}
-
-// تصدير الدوال للاستخدام العام
-window.t = t;
-window.toggleLanguage = toggleLanguage;
-window.applyLanguage = applyLanguage;
-window.initLanguage = initLanguage;
-
-
-async function loadBankDepositsPage() {
-    DOM.mainContent.innerHTML = `
-        <div class="page-container">
-            <div class="page-header">
-                <h1 class="page-title">
-                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <rect x="2" y="5" width="20" height="14" rx="2"></rect>
-                        <path d="M2 10h20"></path>
-                    </svg>
-                    الودائع البنكية والأرصدة
-                </h1>
-            </div>
-
-            <!-- التبويبات الفرعية -->
-            <div class="sub-tabs-container">
-                <div class="sub-tabs">
-                    <button class="sub-tab active" data-bank-tab="balances">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <line x1="12" y1="1" x2="12" y2="23"></line>
-                            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
-                        </svg>
-                        <span>الأرصدة اليومية</span>
-                    </button>
-                    <button class="sub-tab" data-bank-tab="deposits">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <polyline points="17 11 12 6 7 11"></polyline>
-                            <line x1="12" y1="18" x2="12" y2="6"></line>
-                        </svg>
-                        <span>الودائع</span>
-                    </button>
-             
-                    <button class="sub-tab" data-bank-tab="accounts">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <rect x="2" y="5" width="20" height="14" rx="2"></rect>
-                            <path d="M2 10h20"></path>
-                        </svg>
-                        <span>الحسابات البنكية</span>
-                    </button>
-                </div>
-            </div>
-
-            <!-- محتوى الأرصدة - الافتراضي -->
-            <div id="bank-balances-content" class="bank-tab-content active">
-                <div class="section-header">
-                    <h2>💰 متابعة الأرصدة اليومية</h2>
-                    <button class="btn-primary" onclick="openRecordBalanceModal()">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <line x1="12" y1="5" x2="12" y2="19"></line>
-                            <line x1="5" y1="12" x2="19" y2="12"></line>
-                        </svg>
-                        تسجيل رصيد يومي
-                    </button>
-                </div>
-
-                <!-- بطاقات الأرصدة -->
-                <div class="balance-cards-grid" id="balance-cards">
-                    <div class="loading">جاري التحميل...</div>
-                </div>
-
-                <!-- جدول الأرصدة -->
-                <div class="card">
-                    <div class="card-header">
-                        <h3>📊 سجل الأرصدة اليومية</h3>
-                    </div>
-                    <div class="card-body">
-                        <table class="data-table">
-                            <thead>
-                                <tr>
-                                    <th>التاريخ</th>
-                                    <th>الحساب</th>
-                                    <th>رصيد افتتاحي</th>
-                                    <th>الودائع</th>
-                                    <th>السحوبات</th>
-                                    <th>رصيد ختامي</th>
-                                    <th>الفرق</th>
-                                    <th>إجراءات</th>
-                                </tr>
-                            </thead>
-                            <tbody id="daily-balances-table">
-                                <tr><td colspan="8" class="text-center">جاري التحميل...</td></tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-
-            <!-- محتوى الودائع -->
-            <div id="bank-deposits-content" class="bank-tab-content">
-                <div class="section-header">
-                    <h2>📥 الودائع البنكية</h2>
-                    <button class="btn-primary" onclick="openAddDepositModal()">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <line x1="12" y1="5" x2="12" y2="19"></line>
-                            <line x1="5" y1="12" x2="19" y2="12"></line>
-                        </svg>
-                        إضافة إيداع
-                    </button>
-                </div>
-
-                <div class="card">
-                    <div class="card-body">
-                        <table class="data-table">
-                            <thead>
-                                <tr>
-                                    <th>رقم الإيداع</th>
-                                    <th>التاريخ</th>
-                                    <th>الحساب</th>
-                                    <th>المبلغ</th>
-                                    <th>النوع</th>
-                                    <th>الحالة</th>
-                                    <th>إجراءات</th>
-                                </tr>
-                            </thead>
-                            <tbody id="deposits-table">
-                                <tr><td colspan="7" class="text-center">جاري التحميل...</td></tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-
-            <!-- محتوى السحوبات -->
-            <div id="bank-withdrawals-content" class="bank-tab-content">
-                <div class="section-header">
-                    <h2>📤 السحوبات البنكية</h2>
-                    <button class="btn-primary" onclick="openAddWithdrawalModal()">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <line x1="12" y1="5" x2="12" y2="19"></line>
-                            <line x1="5" y1="12" x2="19" y2="12"></line>
-                        </svg>
-                        إضافة سحب
-                    </button>
-                </div>
-
-                <div class="card">
-                    <div class="card-body">
-                        <table class="data-table">
-                            <thead>
-                                <tr>
-                                    <th>رقم السحب</th>
-                                    <th>التاريخ</th>
-                                    <th>الحساب</th>
-                                    <th>المبلغ</th>
-                                    <th>النوع</th>
-                                    <th>الحالة</th>
-                                    <th>إجراءات</th>
-                                </tr>
-                            </thead>
-                            <tbody id="withdrawals-table">
-                                <tr><td colspan="7" class="text-center">جاري التحميل...</td></tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-
-            <!-- محتوى الحسابات -->
-            <div id="bank-accounts-content" class="bank-tab-content">
-                <div class="section-header">
-                    <h2>🏦 الحسابات البنكية</h2>
-                    <button class="btn-primary" onclick="openAddAccountModal()">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <line x1="12" y1="5" x2="12" y2="19"></line>
-                            <line x1="5" y1="12" x2="19" y2="12"></line>
-                        </svg>
-                        إضافة حساب
-                    </button>
-                </div>
-
-                <div class="card">
-                    <div class="card-body">
-                        <table class="data-table">
-                            <thead>
-                                <tr>
-                                    <th>رقم الحساب</th>
-                                    <th>اسم الحساب</th>
-                                    <th>البنك</th>
-                                    <th>النوع</th>
-                                    <th>الرصيد الحالي</th>
-                                    <th>الحالة</th>
-                                    <th>إجراءات</th>
-                                </tr>
-                            </thead>
-                            <tbody id="accounts-table">
-                                <tr><td colspan="7" class="text-center">جاري التحميل...</td></tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-    `;
-
-    // إضافة Event Listeners للتبويبات
-    document.querySelectorAll('[data-bank-tab]').forEach(btn => {
-        btn.addEventListener('click', () => {
-            switchBankTab(btn.dataset.bankTab);
-        });
-    });
-
-    // تحميل البيانات الافتراضية (الأرصدة)
-    await loadBankAccounts();
-    await loadBalanceCards();
-    await loadDailyBalances();
-}
-// ========== دالة loadSettingsPage المحدثة ==========
-
-async function loadSettingsPage() {
-    DOM.mainContent.innerHTML = `
-        <div class="settings-page-wrapper">
-            <!-- رأس صفحة الإعدادات -->
-            <div class="settings-page-header">
-                <div class="settings-header-info">
-                    <div class="settings-header-icon">
-                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <circle cx="12" cy="12" r="3"></circle>
-                            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-                        </svg>
-                    </div>
-                    <div>
-                        <h1>${t('system_settings')}</h1>
-                        <p>${t('manage_employees_transactions')}</p>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- محتوى الإعدادات -->
-            <div class="settings-page">
-                <div class="settings-sidebar">
-                    <div class="settings-sidebar-card">
-                        <div class="settings-nav-group">
-                            <span class="settings-nav-label">${t('resource_management')}</span>
-                            <button class="settings-nav-btn active" onclick="showSettingsSection('employees', this)">
-                                <div class="nav-btn-icon blue">
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                                        <circle cx="9" cy="7" r="4"></circle>
-                                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-                                        <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-                                    </svg>
-                                </div>
-                                <div class="nav-btn-text">
-                                    <span class="nav-btn-title">${t('employees')}</span>
-                                    <span class="nav-btn-desc">${t('manage_employee_accounts')}</span>
-                                </div>
-                            </button>
-                            <button class="settings-nav-btn" onclick="showSettingsSection('performance', this)">
-                                <div class="nav-btn-icon green">
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <line x1="18" y1="20" x2="18" y2="10"></line>
-                                        <line x1="12" y1="20" x2="12" y2="4"></line>
-                                        <line x1="6" y1="20" x2="6" y2="14"></line>
-                                    </svg>
-                                </div>
-                                <div class="nav-btn-text">
-                                    <span class="nav-btn-title">${t('employee_performance')}</span>
-                                    <span class="nav-btn-desc">${t('reports_tracking')}</span>
-                                </div>
-                            </button>
-                        </div>
-                        
-                        <div class="settings-nav-divider"></div>
-                        
-                        <div class="settings-nav-group">
-                            <span class="settings-nav-label">${t('transactions_section')}</span>
-                            <button class="settings-nav-btn" onclick="showSettingsSection('types', this)">
-                                <div class="nav-btn-icon cyan">
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
-                                        <polyline points="2 17 12 22 22 17"></polyline>
-                                        <polyline points="2 12 12 17 22 12"></polyline>
-                                    </svg>
-                                </div>
-                                <div class="nav-btn-text">
-                                    <span class="nav-btn-title">${t('transaction_types')}</span>
-                                    <span class="nav-btn-desc">${t('transaction_categories')}</span>
-                                </div>
-                            </button>
-                            <button class="settings-nav-btn" onclick="showSettingsSection('all-transactions', this)">
-                                <div class="nav-btn-icon orange">
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                                        <polyline points="14 2 14 8 20 8"></polyline>
-                                        <line x1="16" y1="13" x2="8" y2="13"></line>
-                                        <line x1="16" y1="17" x2="8" y2="17"></line>
-                                    </svg>
-                                </div>
-                                <div class="nav-btn-text">
-                                    <span class="nav-btn-title">${t('all_transactions')}</span>
-                                    <span class="nav-btn-desc">${t('view_manage_transactions')}</span>
-                                </div>
-                            </button>
-                        </div>
-                        
-                        <div class="settings-nav-divider"></div>
-                        
-                        <div class="settings-nav-group">
-                            <span class="settings-nav-label">${t('system_section')}</span>
-                            <button class="settings-nav-btn" onclick="showSettingsSection('system', this)">
-                                <div class="nav-btn-icon purple">
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
-                                        <line x1="8" y1="21" x2="16" y2="21"></line>
-                                        <line x1="12" y1="17" x2="12" y2="21"></line>
-                                    </svg>
-                                </div>
-                                <div class="nav-btn-text">
-                                    <span class="nav-btn-title">${t('system_settings_desc')}</span>
-                                    <span class="nav-btn-desc">${t('system_info_tools')}</span>
-                                </div>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-                <div class="settings-content" id="settingsContent">
-                    <!-- سيتم تحميل المحتوى هنا -->
-                </div>
-            </div>
-        </div>
-    `;
-
-    // تحميل الموظفين افتراضياً
-    await loadSettingsEmployees();
-    showSettingsSection('employees', document.querySelector('.settings-nav-btn'));
-}
-
-// ========== نهاية دالة loadSettingsPage ==========
-
-
-// ========== تعديل تهيئة التطبيق ==========
-// أضف هذا في دالة DOMContentLoaded أو في initDOM
-
-// تهيئة اللغة عند تحميل الصفحة
-document.addEventListener('DOMContentLoaded', function () {
-    initLanguage();
-});
-
-// تحميل لوحة التحكم
-async function loadDashboard() {
-    showLoading();
-
-    try {
-        const [statsRes, chartRes, urgentRes] = await Promise.all([
-            fetch('api/?action=stats'),
-            fetch('api/?action=chart'),
-            fetch('api/?action=urgent')
-        ]);
-
-        const stats = await statsRes.json();
-        const chart = await chartRes.json();
-        const urgent = await urgentRes.json();
-
-        if (stats.success) App.stats = stats.data;
-        if (chart.success) App.chartData = chart.data;
-
-        renderDashboard(urgent.success ? urgent.data : []);
-
-    } catch (error) {
-        showToast('خطأ في تحميل البيانات', 'error');
-        console.error(error);
-    }
-}
-
-// عرض لوحة التحكم
-function renderDashboard(urgentTransactions) {
-    const html = `
-        <div class="dashboard-split">
-            <!-- القسم الأيمن: نظرة عامة + المعاملات العاجلة -->
-            <div class="dashboard-right">
-                <div class="urgent-section">
-                    <div class="urgent-header">
-                        <div class="urgent-title">
-                            <span class="urgent-icon">⚠️</span>
-                            <h3>المعاملات العاجلة</h3>
-                            <span class="urgent-count">${urgentTransactions.length}</span>
-                        </div>
-                        <div class="urgent-filters">
-                            <button class="urgent-filter-btn active" onclick="filterUrgent('all', this)">الكل</button>
-                            <button class="urgent-filter-btn" onclick="filterUrgent('عاجل', this)">🔴 عاجل</button>
-                            <button class="urgent-filter-btn" onclick="filterUrgent('متابعة', this)">⚠️ متابعة</button>
-                        </div>
-                    </div>
-                    <div class="urgent-table-container">
-                        ${urgentTransactions.length > 0 ? `
-                        <table class="urgent-table">
-                            <thead>
-                                <tr>
-                                    <th>الحالة</th>
-                                    <th>رقم المعاملة</th>
-                                    <th>الوصف</th>
-                                    <th>المبلغ</th>
-                                    <th></th>
-                                </tr>
-                            </thead>
-                            <tbody id="urgentTableBody">
-                                ${urgentTransactions.slice(0, 8).map(tx => `
-                                <tr class="urgent-row" data-type="${tx.alert_type || 'عاجل'}">
-                                    <td>
-                                        <span class="alert-badge alert-${tx.alert_type === 'عاجل' ? 'danger' : tx.alert_type === 'متابعة' ? 'warning' : 'info'}">
-                                            ${tx.alert_type === 'عاجل' ? '🔴' : tx.alert_type === 'متابعة' ? '⚠️' : '⏳'}
-                                        </span>
-                                    </td>
-                                    <td><span class="tx-number">${tx.transaction_number}</span></td>
-                                    <td><span class="tx-desc-text">${tx.description?.substring(0, 30) || ''}${tx.description?.length > 30 ? '...' : ''}</span></td>
-                                    <td><span class="tx-amount">${formatMoney(tx.amount)}</span></td>
-                                    <td>
-                                        <button class="btn-action btn-view" onclick="viewTransaction(${tx.id})" title="عرض">
-                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                                                <circle cx="12" cy="12" r="3"></circle>
-                                            </svg>
-                                        </button>
-                                    </td>
-                                </tr>
-                                `).join('')}
-                            </tbody>
-                        </table>
-                        ${urgentTransactions.length > 8 ? `<div class="urgent-more">و ${urgentTransactions.length - 8} معاملات أخرى...</div>` : ''}
-                        ` : `
-                        <div class="urgent-empty">
-                            <div class="empty-icon">✅</div>
-                            <h4>لا توجد معاملات عاجلة</h4>
-                            <p>جميع المعاملات تسير بشكل طبيعي</p>
-                        </div>
-                        `}
-                    </div>
-                </div>
-                <div class="stats-overview-card">
-                    <div class="stats-header">
-                        <h3>📊 نظرة عامة على النظام</h3>
-                        <span class="stats-date">${new Date().toLocaleDateString('ar-SA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
-                    </div>
-                    <div class="stats-content">
-                        <div class="stat-item">
-                            <div class="stat-icon-sm blue">
-                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                                    <polyline points="14 2 14 8 20 8"></polyline>
-                                    <line x1="16" y1="13" x2="8" y2="13"></line>
-                                    <line x1="16" y1="17" x2="8" y2="17"></line>
-                                </svg>
-                            </div>
-                            <div class="stat-details">
-                                <span class="stat-number">${App.stats.total || 0}</span>
-                                <span class="stat-text">إجمالي المعاملات</span>
-                            </div>
-                        </div>
-                        <div class="stat-divider"></div>
-                        <div class="stat-item">
-                            <div class="stat-icon-sm green">
-                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-                                    <polyline points="22 4 12 14.01 9 11.01"></polyline>
-                                </svg>
-                            </div>
-                            <div class="stat-details">
-                                <span class="stat-number">${App.stats.paid || 0}</span>
-                                <span class="stat-text">المكتملة</span>
-                            </div>
-                        </div>
-                        <div class="stat-divider"></div>
-                        <div class="stat-item">
-                            <div class="stat-icon-sm orange">
-                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <circle cx="12" cy="12" r="10"></circle>
-                                    <line x1="12" y1="8" x2="12" y2="12"></line>
-                                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
-                                </svg>
-                            </div>
-                            <div class="stat-details">
-                                <span class="stat-number urgent">${App.stats.urgent || 0}</span>
-                                <span class="stat-text">تحتاج متابعة</span>
-                            </div>
-                        </div>
-                        <div class="stat-divider"></div>
-                        <div class="stat-item">
-                            <div class="stat-icon-sm purple">
-                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <line x1="12" y1="1" x2="12" y2="23"></line>
-                                    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
-                                </svg>
-                            </div>
-                            <div class="stat-details">
-                                <span class="stat-number">${formatMoney(App.stats.total_amount || 0)}</span>
-                                <span class="stat-text">إجمالي المبالغ</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                
-            </div>
-            
-            <!-- القسم الأيسر: متابعة الأداء -->
-            <div class="dashboard-left">
-                <div class="performance-dashboard-section">
-                    <div class="perf-dash-header">
-                        <div class="perf-dash-title">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <circle cx="12" cy="12" r="10"></circle>
-                                <polyline points="12 6 12 12 16 14"></polyline>
-                            </svg>
-                            <h3>متابعة الأداء</h3>
-                        </div>
-                        <div class="perf-dash-tabs">
-                            <button class="perf-dash-tab active" onclick="switchDashPerfTab('employees', this)">الموظفين</button>
-                            <button class="perf-dash-tab" onclick="switchDashPerfTab('events', this)">الأحداث</button>
-                        </div>
-                    </div>
-                    
-                    <!-- قسم الموظفين -->
-                    <div id="dashPerfEmployees" class="perf-dash-content active">
-                        <div id="dashEmployeeCards" class="dash-employee-cards">
-                            <div class="loading-placeholder">جاري التحميل...</div>
-                        </div>
-                    </div>
-                    
-                    <!-- قسم الأحداث -->
-                    <div id="dashPerfEvents" class="perf-dash-content">
-                        <div id="dashEventsTimeline" class="dash-events-timeline">
-                            <div class="loading-placeholder">جاري التحميل...</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    `;
-
-    DOM.mainContent.innerHTML = html;
-
-    // تحميل بيانات الأداء
-    loadDashboardPerformance();
-
-    if (DOM.notificationBadge) {
-        DOM.notificationBadge.textContent = App.stats.urgent || 0;
-        DOM.notificationBadge.style.display = App.stats.urgent > 0 ? 'flex' : 'none';
-    }
-}
-
-// تبديل تبويبات الأداء في لوحة التحكم
-function switchDashPerfTab(tab, btn) {
-    document.querySelectorAll('.perf-dash-tab').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.perf-dash-content').forEach(c => c.classList.remove('active'));
-
-    btn.classList.add('active');
-
-    if (tab === 'employees') {
-        document.getElementById('dashPerfEmployees').classList.add('active');
-    } else {
-        document.getElementById('dashPerfEvents').classList.add('active');
-        loadDashboardEvents();
-    }
-}
-
-// تحميل بيانات الأداء في لوحة التحكم
-async function loadDashboardPerformance() {
-    try {
-        const res = await fetch('api/?action=performance_summary');
-        const result = await res.json();
-
-        if (result.success) {
-            renderDashboardEmployees(result.data);
-        }
-    } catch (e) {
-        console.error('Error loading performance:', e);
-    }
-
-
-    // إضافة إحصائيات الخطابات
-    fetch('api/correspondence_api.php?action=stats')
-        .then(res => res.json())
-        .then(data => {
-            if (data.success) {
-                displayCorrespondenceStatsInDashboard(data.data);
-            }
-        });
-}
-
-function displayCorrespondenceStatsInDashboard(stats) {
-    // إضافة قسم جديد في لوحة التحكم
-    const corrSection = `
-        <div class="dashboard-section">
-            <h3>📨 الخطابات والمراسلات</h3>
-            <div class="mini-stats">
-                <div class="mini-stat">
-                    <span class="mini-stat-value">${stats.total}</span>
-                    <span class="mini-stat-label">إجمالي الخطابات</span>
-                </div>
-                <div class="mini-stat">
-                    <span class="mini-stat-value">${stats.pending}</span>
-                    <span class="mini-stat-label">قيد المعالجة</span>
-                </div>
-                <div class="mini-stat">
-                    <span class="mini-stat-value">${stats.urgent}</span>
-                    <span class="mini-stat-label">عاجلة</span>
-                </div>
-            </div>
-        </div>
-    `;
-
-    // إدراجه في المكان المناسب
-}
-// عرض بطاقات الموظفين في لوحة التحكم
-function renderDashboardEmployees(data) {
-    const container = document.getElementById('dashEmployeeCards');
-    if (!container) return;
-
-    // تجميع البيانات حسب الموظف
-    const employeeStats = {};
-    data.forEach(item => {
-        if (!employeeStats[item.employee_id]) {
-            employeeStats[item.employee_id] = {
-                name: item.employee_name,
-                role: item.employee_role,
-                total: 0,
-                totalDuration: 0
-            };
-        }
-        employeeStats[item.employee_id].total += parseInt(item.total_transactions) || 0;
-        employeeStats[item.employee_id].totalDuration += parseInt(item.total_duration) || 0;
-    });
-
-    const roleColors = {
-        'admin': '#667eea',
-        'receiver': '#69db7c',
-        'budget': '#3bc9db',
-        'payment': '#ffa94d',
-        'invoice': '#b197fc'
-    };
-
-    const roleNames = {
-        'admin': 'مدير',
-        'receiver': 'استلام',
-        'budget': 'موازنة',
-        'payment': 'دفع',
-        'invoice': 'فوترة'
-    };
-
-    let html = '';
-
-    Object.values(employeeStats).forEach(emp => {
-        const avgTime = emp.total > 0 ? Math.round(emp.totalDuration / emp.total) : 0;
-        const color = roleColors[emp.role] || '#667eea';
-        const roleName = roleNames[emp.role] || emp.role;
-
-        html += `
-        <div class="dash-emp-card">
-            <div class="dash-emp-avatar" style="background: ${color}20; color: ${color};">
-                ${emp.name ? emp.name.charAt(0) : '؟'}
-            </div>
-            <div class="dash-emp-info">
-                <span class="dash-emp-name">${emp.name}</span>
-                <span class="dash-emp-role" style="color: ${color};">${roleName}</span>
-            </div>
-            <div class="dash-emp-stats">
-                <span class="dash-emp-count">${emp.total}</span>
-                <span class="dash-emp-time">${avgTime > 0 ? avgTime + ' د' : '-'}</span>
-            </div>
-        </div>`;
-    });
-
-    if (Object.keys(employeeStats).length === 0) {
-        html = '<div class="empty-placeholder">لا توجد بيانات</div>';
-    }
-
-    container.innerHTML = html;
-}
-
-// تحميل أحداث لوحة التحكم
-async function loadDashboardEvents() {
-    const container = document.getElementById('dashEventsTimeline');
-    if (!container) return;
-
-    container.innerHTML = '<div class="loading-placeholder">جاري التحميل...</div>';
-
-    try {
-        const res = await fetch('api/?action=all_events&limit=15');
-        const result = await res.json();
-
-        if (result.success && result.data && result.data.length > 0) {
-            const stageInfo = {
-                'creation': { name: 'إنشاء', color: '#4dabf7', icon: '➕' },
-                'receiving': { name: 'استلام', color: '#69db7c', icon: '📥' },
-                'budget': { name: 'موازنة', color: '#3bc9db', icon: '💰' },
-                'payment': { name: 'دفع', color: '#ffa94d', icon: '💳' },
-                'invoice': { name: 'فوترة', color: '#b197fc', icon: '🧾' }
-            };
-
-            let html = '<div class="dash-timeline">';
-
-            result.data.forEach(event => {
-                const info = stageInfo[event.stage] || { name: event.stage, color: '#888', icon: '📋' };
-                const duration = event.duration_from_previous;
-
-                html += `
-                <div class="dash-event-item">
-                    <div class="dash-event-icon" style="background: ${info.color}20; color: ${info.color};">${info.icon}</div>
-                    <div class="dash-event-content">
-                        <div class="dash-event-header">
-                            <span class="dash-event-tx">${event.transaction_number || '-'}</span>
-                            <span class="dash-event-tx">${event.transaction_date || '-'}</span>
-                            <span class="dash-event-stage" style="color: ${info.color};">${info.name}</span>
-                        </div>
-                        <div class="dash-event-status">
-                            ${event.old_status ? `<span class="old">${event.old_status}</span> ← ` : ''}
-                            <span class="new">${event.new_status || '-'}</span>
-                            ${duration > 0 ? `<span class="duration">${formatDuration(duration)} </span>` : ''}
-                        </div>
-                        <div class="dash-event-footer">
-                            <span>${event.employee_name || 'النظام'}</span>
-                            <span>${formatTimeAgo(event.event_time)}</span>
-                        </div>
-                    </div>
-                </div>`;
-            });
-
-            html += '</div>';
-            container.innerHTML = html;
-        } else {
-            container.innerHTML = '<div class="empty-placeholder">لا توجد أحداث</div>';
-        }
-    } catch (e) {
-        container.innerHTML = '<div class="empty-placeholder">خطأ في التحميل</div>';
-    }
-}
-
-function formatDuration(minutes) {
-    if (!minutes || minutes <= 0) return 'الآن';
-
-    const days = Math.floor(minutes / 1440);
-    const hours = Math.floor((minutes % 1440) / 60);
-    const mins = minutes % 60;
-
-    let parts = [];
-
-    if (days > 0) parts.push(`${days} يوم`);
-    if (hours > 0) parts.push(`${hours} ساعة`);
-    if (mins > 0 && days === 0) parts.push(`${mins} دقيقة`);
-
-    return 'منذ ' + parts.join(' و ');
-}
-
-
-// تنسيق الوقت النسبي
-function formatTimeAgo(datetime) {
-    if (!datetime) return '';
-    const date = new Date(datetime);
-    const now = new Date();
-    const diff = Math.floor((now - date) / 1000);
-
-    if (diff < 60) return 'الآن';
-    if (diff < 3600) return Math.floor(diff / 60) + ' د';
-    if (diff < 86400) return Math.floor(diff / 3600) + ' س';
-    return Math.floor(diff / 86400) + ' ي';
-}
-
-// فلترة المعاملات العاجلة
-function filterUrgent(type, btn) {
-    document.querySelectorAll('.urgent-filter-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-
-    document.querySelectorAll('.urgent-row').forEach(row => {
-        if (type === 'all' || row.dataset.type === type) {
-            row.style.display = '';
-        } else {
-            row.style.display = 'none';
-        }
-    });
-}
-
-// رسم الرسم البياني الخطي
-function renderLineChart() {
-    const canvas = document.getElementById('lineChart');
-    if (!canvas || !App.chartData.length) return;
-
-    const ctx = canvas.getContext('2d');
-    const data = App.chartData;
-
-    const rect = canvas.parentElement.getBoundingClientRect();
-    canvas.width = rect.width;
-    canvas.height = rect.height - 20;
-
-    const padding = { top: 20, right: 20, bottom: 40, left: 60 };
-    const width = canvas.width - padding.left - padding.right;
-    const height = canvas.height - padding.top - padding.bottom;
-
-    const maxCount = Math.max(...data.map(d => d.count), 1);
-
-    ctx.strokeStyle = 'rgba(71, 85, 105, 0.3)';
-    ctx.lineWidth = 1;
-    for (let i = 0; i <= 4; i++) {
-        const y = padding.top + (height / 4) * i;
-        ctx.beginPath();
-        ctx.moveTo(padding.left, y);
-        ctx.lineTo(canvas.width - padding.right, y);
-        ctx.stroke();
-    }
-
-    ctx.strokeStyle = '#0ea5e9';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    data.forEach((d, i) => {
-        const x = padding.left + (width / (data.length - 1 || 1)) * i;
-        const y = padding.top + height - (d.count / maxCount) * height;
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-    });
-    ctx.stroke();
-
-    ctx.fillStyle = '#0ea5e9';
-    data.forEach((d, i) => {
-        const x = padding.left + (width / (data.length - 1 || 1)) * i;
-        const y = padding.top + height - (d.count / maxCount) * height;
-        ctx.beginPath();
-        ctx.arc(x, y, 5, 0, Math.PI * 2);
-        ctx.fill();
-    });
-
-    ctx.fillStyle = '#64748b';
-    ctx.font = '12px Noto Sans Arabic';
-    ctx.textAlign = 'center';
-    data.forEach((d, i) => {
-        const x = padding.left + (width / (data.length - 1 || 1)) * i;
-        ctx.fillText(d.month, x, canvas.height - 10);
-    });
-}
-
-// رسم الرسم الدائري
-function renderPieChart() {
-    const canvas = document.getElementById('pieChart');
-    if (!canvas) return;
-
-    const ctx = canvas.getContext('2d');
-    const rect = canvas.parentElement.getBoundingClientRect();
-    canvas.width = rect.width;
-    canvas.height = rect.height - 60;
-
-    const centerX = canvas.width / 2;
-    const centerY = canvas.height / 2;
-    const radius = Math.min(centerX, centerY) - 20;
-    const innerRadius = radius * 0.6;
-
-    const data = [
-        { value: App.stats.paid || 0, color: '#10b981' },
-        { value: (App.stats.total || 0) - (App.stats.paid || 0) - (App.stats.urgent || 0), color: '#0ea5e9' },
-        { value: App.stats.urgent || 0, color: '#ef4444' }
-    ];
-
-    const total = data.reduce((sum, d) => sum + d.value, 0) || 1;
-    let startAngle = -Math.PI / 2;
-
-    data.forEach(d => {
-        const sliceAngle = (d.value / total) * Math.PI * 2;
-
-        ctx.beginPath();
-        ctx.moveTo(centerX, centerY);
-        ctx.arc(centerX, centerY, radius, startAngle, startAngle + sliceAngle);
-        ctx.closePath();
-        ctx.fillStyle = d.color;
-        ctx.fill();
-
-        ctx.beginPath();
-        ctx.arc(centerX, centerY, innerRadius, 0, Math.PI * 2);
-        ctx.fillStyle = '#1e293b';
-        ctx.fill();
-
-        startAngle += sliceAngle;
-    });
-
-    ctx.fillStyle = '#f8fafc';
-    ctx.font = 'bold 24px Noto Sans Arabic';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(App.stats.total || 0, centerX, centerY - 10);
-    ctx.font = '12px Noto Sans Arabic';
-    ctx.fillStyle = '#64748b';
-    ctx.fillText('معاملة', centerX, centerY + 15);
-}
-
-// تحميل المعاملات
 async function loadTransactions() {
     showLoading();
 
@@ -2675,142 +931,44 @@ async function submitUpdateForm(e, type) {
 // عرض معاملة
 function viewTransaction(id) {
     switchTab('transactions');
-    setTimeout(function () {
-        App.expandedRow = id;
+
+    // ننتظر حتى يكتمل تحميل الجدول ثم نفتح الصف
+    let attempts = 0;
+    const tryExpand = setInterval(function () {
         const tbody = document.getElementById('transactionsBody');
-        if (tbody) {
+        attempts++;
+        if (tbody && (App.transactions?.length || attempts > 10)) {
+            clearInterval(tryExpand);
+            App.expandedRow = id;
             tbody.innerHTML = renderTransactionRows(App.transactions);
+            // تمرير الصفحة للصف المفتوح
+            setTimeout(function () {
+                const row = document.querySelector(`[data-id="${id}"]`);
+                if (row) row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 100);
         }
-    }, 300);
+    }, 150);
 }
 
-// ========== دوال مساعدة ==========
-function getStatusBadge(status) {
-    if (!status) return '<span class="badge badge-slate"><span class="badge-dot"></span>—</span>';
 
-    let color = 'slate';
-    if (status === 'مستلم' || status === 'تم الدفع' || status === 'صدرت الفاتورة' || status === 'معتمد') color = 'green';
-    else if (status === 'قيد المراجعة' || status === 'بدون فاتورة') color = 'amber';
-    else if (status === 'قيد المعالجة' || status === 'قيد الإصدار') color = 'blue';
-    else if (status === 'مرفوض' || status === 'ملغاة') color = 'red';
 
-    return '<span class="badge badge-' + color + '"><span class="badge-dot"></span>' + status + '</span>';
-}
+// ═══════════════════════════════════════════════════════════
+//  صفحة الإعدادات — الهيكل والتنقل
+// ═══════════════════════════════════════════════════════════
 
-// تبديل الوضع الليلي/النهاري
-function toggleTheme() {
-    const html = document.documentElement;
-    const currentTheme = html.getAttribute('data-theme');
-
-    if (currentTheme === 'light') {
-        html.removeAttribute('data-theme');
-        localStorage.setItem('theme', 'dark');
-    } else {
-        html.setAttribute('data-theme', 'light');
-        localStorage.setItem('theme', 'light');
-    }
-}
-
-// تحميل الوضع المحفوظ
-function loadSavedTheme() {
-    const savedTheme = localStorage.getItem('theme');
-    if (savedTheme === 'dark') {
-        document.documentElement.removeAttribute('data-theme');
-    } else {
-        // الوضع النهاري هو الافتراضي
-        document.documentElement.setAttribute('data-theme', 'light');
-    }
-}
-
-// تحميل الوضع عند بدء الصفحة
-document.addEventListener('DOMContentLoaded', function () {
-    loadSavedTheme();
-});
-
-// تسجيل الخروج
-async function logout() {
-    if (!confirm('هل تريد تسجيل الخروج؟')) return;
-
-    try {
-        await fetch('api/auth.php?action=logout', { method: 'POST' });
-        window.location.href = 'login.php';
-    } catch (e) {
-        window.location.href = 'login.php';
-    }
-}
-
-function getAlertBadge(alert) {
-    if (!alert) return '<span class="badge badge-slate"><span class="badge-dot"></span>—</span>';
-
-    let color = 'slate';
-    let icon = '⏳';
-
-    if (alert === 'عاجل') { color = 'red'; icon = '🔴'; }
-    else if (alert === 'متابعة') { color = 'amber'; icon = '⚠️'; }
-    else if (alert === 'مكتمل') { color = 'green'; icon = '✅'; }
-
-    return '<span class="badge badge-' + color + '">' + icon + ' ' + alert + '</span>';
-}
-
-function formatMoney(amount) {
-    return new Intl.NumberFormat('en-US').format(amount || 0) + ' ر.س';
-}
-
-function formatNumber(amount) {
-    return new Intl.NumberFormat('en-US').format(amount || 0);
-}
-
-function formatCreationTime(datetime) {
-    if (!datetime) return '—';
-    try {
-        const date = new Date(datetime);
-        const dateStr = date.toLocaleDateString('ar-SA', { year: 'numeric', month: 'short', day: 'numeric' });
-        const timeStr = date.toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
-        return dateStr + ' - ' + timeStr;
-    } catch (e) {
-        return datetime;
-    }
-}
-
-function showLoading() {
-    DOM.mainContent.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
-}
-
-function openModal() {
-    DOM.modal.classList.add('active');
-    document.body.style.overflow = 'hidden';
-}
-
-function closeModal() {
-    DOM.modal.classList.remove('active');
-    document.body.style.overflow = '';
-    App.editingTransaction = null;
-}
-
-function showToast(message, type) {
-    type = type || 'success';
-    DOM.toast.textContent = message;
-    DOM.toast.className = 'toast ' + type + ' show';
-
-    setTimeout(function () {
-        DOM.toast.classList.remove('show');
-    }, 3000);
-}
-
-// ========== قسم الإعدادات ==========
-var SettingsData = {
-    employees: [],
-    types: [],
-    currentFilter: 'all'
-};
-
+/**
+ * تحميل صفحة الإعدادات الرئيسية
+ * تعرض: الموظفون / الأداء / أنواع المعاملات / جميع المعاملات / النظام
+ */
 // تحميل صفحة الإعدادات
 async function loadSettingsPage() {
     DOM.mainContent.innerHTML = `
-        <div class="settings-page">
-            <div class="settings-sidebar">
-                <button class="settings-nav-btn active" onclick="showSettingsSection('employees', this)">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <div class="settings-page-new">
+
+            <!-- شريط التبويبات العلوي -->
+            <div class="settings-topbar">
+                <button class="settings-tab-btn active" data-section="employees" onclick="showSettingsSection('employees', this)">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
                         <circle cx="9" cy="7" r="4"></circle>
                         <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
@@ -2818,15 +976,8 @@ async function loadSettingsPage() {
                     </svg>
                     الموظفين
                 </button>
-                <button class="settings-nav-btn" onclick="showSettingsSection('performance', this)">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="12" cy="12" r="10"></circle>
-                        <polyline points="12 6 12 12 16 14"></polyline>
-                    </svg>
-                    أداء الموظفين
-                </button>
-                <button class="settings-nav-btn" onclick="showSettingsSection('types', this)">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <button class="settings-tab-btn" data-section="types" onclick="showSettingsSection('types', this)">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <line x1="8" y1="6" x2="21" y2="6"></line>
                         <line x1="8" y1="12" x2="21" y2="12"></line>
                         <line x1="8" y1="18" x2="21" y2="18"></line>
@@ -2836,46 +987,40 @@ async function loadSettingsPage() {
                     </svg>
                     أنواع المعاملات
                 </button>
-                <button class="settings-nav-btn" onclick="showSettingsSection('all-transactions', this)">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <button class="settings-tab-btn" data-section="all-transactions" onclick="showSettingsSection('all-transactions', this)">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
                         <polyline points="14 2 14 8 20 8"></polyline>
                     </svg>
                     جميع المعاملات
                 </button>
-                <button class="settings-nav-btn" onclick="showSettingsSection('system', this)">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <button class="settings-tab-btn" data-section="system" onclick="showSettingsSection('system', this)">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <circle cx="12" cy="12" r="3"></circle>
                         <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
                     </svg>
                     النظام
                 </button>
             </div>
-            <div class="settings-content" id="settingsContent">
-                <!-- سيتم تحميل المحتوى هنا -->
-            </div>
+
+            <!-- المحتوى -->
+            <div class="settings-content" id="settingsContent"></div>
         </div>
     `;
 
-    // تحميل الموظفين افتراضياً
     await loadSettingsEmployees();
-    showSettingsSection('employees', document.querySelector('.settings-nav-btn'));
+    showSettingsSection('employees', document.querySelector('.settings-tab-btn'));
 }
 
 // عرض قسم في الإعدادات
 function showSettingsSection(section, btn) {
-    // تحديث الأزرار
-    document.querySelectorAll('.settings-nav-btn').forEach(function (b) {
+    document.querySelectorAll('.settings-tab-btn, .settings-nav-btn').forEach(function (b) {
         b.classList.remove('active');
     });
     if (btn) btn.classList.add('active');
 
-    var content = document.getElementById('settingsContent');
-
     if (section === 'employees') {
         renderEmployeesSection();
-    } else if (section === 'performance') {
-        renderPerformanceSection();
     } else if (section === 'types') {
         renderTypesSection();
     } else if (section === 'all-transactions') {
@@ -2934,17 +1079,42 @@ function renderEmployeesSection() {
     } else {
         for (var i = 0; i < filtered.length; i++) {
             var emp = filtered[i];
+            // جلب اسم المشرف
+            var supervisorName = '';
+            if (emp.supervisor_id) {
+                var sup = SettingsData.employees.find(function (e) { return e.id == emp.supervisor_id; });
+                supervisorName = sup ? sup.name : '';
+            }
+
             html += '<div class="employee-card">';
             html += '<div class="employee-avatar">' + emp.name.charAt(0) + '</div>';
             html += '<div class="employee-info">';
             html += '<h4>' + emp.name + '</h4>';
             html += '<span class="role-badge role-' + emp.role + '">' + getRoleName(emp.role) + '</span>';
-            html += '<p class="employee-contact">' + (emp.employee_number || '—') + '</p>';
+            html += '<p class="employee-contact">' + (emp.email || '—') + '</p>';
             html += '<p class="employee-contact">' + (emp.phone || '—') + '</p>';
+            if (supervisorName) {
+                html += '<p class="employee-contact" style="color:var(--accent-blue);font-size:.8rem">';
+                html += '👤 المشرف: ' + supervisorName;
+                html += '</p>';
+            } else {
+                html += '<p class="employee-contact" style="color:var(--text-muted);font-size:.78rem">';
+                html += '👤 المشرف: مدير النظام (افتراضي)';
+                html += '</p>';
+            }
             html += '</div>';
             html += '<div class="employee-actions">';
-            html += '<button class="btn-icon-sm" onclick="editEmployee(' + emp.id + ')" title="تعديل"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg></button>';
-            html += '<button class="btn-icon-sm btn-danger-icon" onclick="deleteEmployee(' + emp.id + ', \'' + emp.name + '\')" title="حذف"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>';
+            if (canDo('employee.permissions')) {
+                html += '<button class="btn-icon-sm perm-btn" onclick="openPermissionsModal(' + emp.id + ', \'' + emp.name + '\')" title="إدارة الصلاحيات" style="color:var(--accent-blue);border-color:var(--accent-blue)">';
+                html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>';
+                html += '</button>';
+            }
+            if (canDo('employee.edit')) {
+                html += '<button class="btn-icon-sm" onclick="editEmployee(' + emp.id + ')" title="تعديل"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg></button>';
+            }
+            if (canDo('employee.delete')) {
+                html += '<button class="btn-icon-sm btn-danger-icon" onclick="deleteEmployee(' + emp.id + ', \'' + emp.name + '\')" title="حذف"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>';
+            }
             html += '</div>';
             html += '</div>';
         }
@@ -2974,32 +1144,55 @@ function filterEmployees(role, btn) {
     renderEmployeesSection();
 }
 
+function _roleLabel(role) {
+    return { admin: 'مدير', receiver: 'استلام', budget: 'موازنة', payment: 'دفع', invoice: 'فوترة' }[role] || role;
+}
+
 function openAddEmployeeModal() {
+    const supervisorOptions = (SettingsData.employees || [])
+        .filter(e => e.is_active != 0)
+        .map(e => `<option value="${e.id}">${e.name} (${_roleLabel(e.role)})</option>`)
+        .join('');
+
     DOM.modalTitle.textContent = 'إضافة موظف جديد';
     DOM.modalBody.innerHTML = `
         <form id="employeeForm" onsubmit="saveEmployee(event)">
             <input type="hidden" name="id" id="empId" value="">
-            <div class="form-group">
-                <label class="form-label">اسم الموظف</label>
-                <input type="text" class="form-input" name="name" id="empName" required>
+            <div class="modal-form-grid">
+                <div class="form-group">
+                    <label class="form-label">اسم الموظف</label>
+                    <input type="text" class="form-input" name="name" id="empName" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">البريد الإلكتروني</label>
+                    <input type="email" class="form-input" name="email" id="empEmail">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">رقم الهاتف</label>
+                    <input type="text" class="form-input" name="phone" id="empPhone">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">القسم / الدور</label>
+                    <select class="form-select" name="role" id="empRole" required>
+                        <option value="">اختر القسم</option>
+                        <option value="admin">مدير النظام</option>
+                        <option value="receiver">الاستلام</option>
+                        <option value="budget">الموازنة</option>
+                        <option value="payment">الدفع</option>
+                        <option value="invoice">الفوترة</option>
+                    </select>
+                </div>
             </div>
-            <div class="form-group">
-                <label class="form-label">البريد الإلكتروني</label>
-                <input type="email" class="form-input" name="email" id="empEmail">
-            </div>
-            <div class="form-group">
-                <label class="form-label">رقم الهاتف</label>
-                <input type="text" class="form-input" name="phone" id="empPhone">
-            </div>
-            <div class="form-group">
-                <label class="form-label">القسم</label>
-                <select class="form-select" name="role" id="empRole" required>
-                    <option value="">اختر القسم</option>
-                    <option value="admin">مدير النظام</option>
-                    <option value="receiver">الاستلام</option>
-                    <option value="budget">الموازنة</option>
-                    <option value="payment">الدفع</option>
-                    <option value="invoice">الفوترة</option>
+            <div class="form-group" style="margin-top:.5rem">
+                <label class="form-label">
+                    👤 المشرف المباشر
+                    <span style="font-size:.78rem;color:var(--text-muted);font-weight:400">
+                        (يُصعَّد إليه عند تجاوزOLA/SLA)
+                    </span>
+                </label>
+                <select class="form-select" name="supervisor_id" id="empSupervisor">
+                    <option value="">— بدون مشرف (يُصعَّد لمدير النظام) —</option>
+                    ${supervisorOptions}
                 </select>
             </div>
             <div class="modal-footer" style="padding: 0; border: none; margin-top: 1.5rem;">
@@ -3015,30 +1208,49 @@ function editEmployee(id) {
     var emp = SettingsData.employees.find(function (e) { return e.id == id; });
     if (!emp) return;
 
+    const supervisorOptions = (SettingsData.employees || [])
+        .filter(e => e.is_active != 0 && e.id != emp.id)
+        .map(e => `<option value="${e.id}" ${emp.supervisor_id == e.id ? 'selected' : ''}>${e.name} (${_roleLabel(e.role)})</option>`)
+        .join('');
+
     DOM.modalTitle.textContent = 'تعديل موظف';
     DOM.modalBody.innerHTML = `
         <form id="employeeForm" onsubmit="saveEmployee(event)">
             <input type="hidden" name="id" id="empId" value="${emp.id}">
-            <div class="form-group">
-                <label class="form-label">اسم الموظف</label>
-                <input type="text" class="form-input" name="name" id="empName" value="${emp.name}" required>
+            <div class="modal-form-grid">
+                <div class="form-group">
+                    <label class="form-label">اسم الموظف</label>
+                    <input type="text" class="form-input" name="name" id="empName" value="${emp.name}" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">البريد الإلكتروني</label>
+                    <input type="email" class="form-input" name="email" id="empEmail" value="${emp.email || ''}">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">رقم الهاتف</label>
+                    <input type="text" class="form-input" name="phone" id="empPhone" value="${emp.phone || ''}">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">القسم / الدور</label>
+                    <select class="form-select" name="role" id="empRole" required>
+                        <option value="admin" ${emp.role === 'admin' ? 'selected' : ''}>مدير النظام</option>
+                        <option value="receiver" ${emp.role === 'receiver' ? 'selected' : ''}>الاستلام</option>
+                        <option value="budget" ${emp.role === 'budget' ? 'selected' : ''}>الموازنة</option>
+                        <option value="payment" ${emp.role === 'payment' ? 'selected' : ''}>الدفع</option>
+                        <option value="invoice" ${emp.role === 'invoice' ? 'selected' : ''}>الفوترة</option>
+                    </select>
+                </div>
             </div>
-            <div class="form-group">
-                <label class="form-label">البريد الإلكتروني</label>
-                <input type="email" class="form-input" name="email" id="empEmail" value="${emp.email || ''}">
-            </div>
-            <div class="form-group">
-                <label class="form-label">رقم الهاتف</label>
-                <input type="text" class="form-input" name="phone" id="empPhone" value="${emp.phone || ''}">
-            </div>
-            <div class="form-group">
-                <label class="form-label">القسم</label>
-                <select class="form-select" name="role" id="empRole" required>
-                    <option value="admin" ${emp.role === 'admin' ? 'selected' : ''}>مدير النظام</option>
-                    <option value="receiver" ${emp.role === 'receiver' ? 'selected' : ''}>الاستلام</option>
-                    <option value="budget" ${emp.role === 'budget' ? 'selected' : ''}>الموازنة</option>
-                    <option value="payment" ${emp.role === 'payment' ? 'selected' : ''}>الدفع</option>
-                    <option value="invoice" ${emp.role === 'invoice' ? 'selected' : ''}>الفوترة</option>
+            <div class="form-group" style="margin-top:.5rem">
+                <label class="form-label">
+                    👤 المشرف المباشر
+                    <span style="font-size:.78rem;color:var(--text-muted);font-weight:400">
+                        (يُصعَّد إليه عند تجاوزOLA/SLA)
+                    </span>
+                </label>
+                <select class="form-select" name="supervisor_id" id="empSupervisor">
+                    <option value="">— بدون مشرف (يُصعَّد لمدير النظام) —</option>
+                    ${supervisorOptions}
                 </select>
             </div>
             <div class="modal-footer" style="padding: 0; border: none; margin-top: 1.5rem;">
@@ -3054,11 +1266,13 @@ async function saveEmployee(e) {
     e.preventDefault();
 
     var id = document.getElementById('empId').value;
+    var supervisorEl = document.getElementById('empSupervisor');
     var data = {
         name: document.getElementById('empName').value,
         email: document.getElementById('empEmail').value,
         phone: document.getElementById('empPhone').value,
-        role: document.getElementById('empRole').value
+        role: document.getElementById('empRole').value,
+        supervisor_id: supervisorEl ? (supervisorEl.value || null) : null
     };
 
     if (id) data.id = id;
@@ -3437,6 +1651,14 @@ async function renderPerformanceSection() {
                 </svg>
                 تحليلات
             </button>
+            <button class="perf-tab sla-tab-btn" onclick="switchPerfTab('sla')">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <polyline points="12 6 12 12 16 14"></polyline>
+                </svg>
+                SLA / OLA
+                <span class="tab-badge sla-breach-badge" id="slaBadge" style="display:none">0</span>
+            </button>
         </div>
 
         <!-- الفلاتر -->
@@ -3532,6 +1754,90 @@ async function renderPerformanceSection() {
                     </div>
                 </div>
             </div>
+
+            <!-- ═══ SLA / OLA ═══ -->
+            <div id="perfTabSla" class="perf-tab-content">
+                <!-- إحصاءات سريعة -->
+                <div id="slaStats" class="sla-stats-bar">
+                    <div class="sla-stat sla-stat-breach">
+                        <div class="sla-stat-num" id="slaBreachCount">—</div>
+                        <div class="sla-stat-label">خروقات مفتوحة</div>
+                    </div>
+                    <div class="sla-stat sla-stat-warn">
+                        <div class="sla-stat-num" id="slaWarnCount">—</div>
+                        <div class="sla-stat-label">تحذيرات نشطة</div>
+                    </div>
+                    <div class="sla-stat sla-stat-today">
+                        <div class="sla-stat-num" id="slaBreachToday">—</div>
+                        <div class="sla-stat-label">خروقات اليوم</div>
+                    </div>
+                    <div class="sla-stat sla-stat-action">
+                        <button class="btn btn-sm btn-primary" onclick="runSlaCheck()">🔄 فحص الآن</button>
+                        <button class="btn btn-sm btn-secondary" onclick="openSlaSettingsModal()">⚙️ OLA/SLA</button>
+                        <button class="btn btn-sm btn-secondary" onclick="openNotifSettingsModal()">📧 إعدادات الإشعارات</button>
+                    </div>
+                </div>
+
+                <!-- فلاتر -->
+                <div class="perf-filters" style="margin-top:.75rem">
+                    <div class="filter-group">
+                        <label>النطاق</label>
+                        <select id="slaScopeFilter" onchange="loadSlaDashboard()">
+                            <option value="all">الكل</option>
+                            <option value="transaction">معاملات</option>
+                            <option value="correspondence">مراسلات</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>حالة SLA</label>
+                        <select id="slaStatusFilter" onchange="loadSlaDashboard()">
+                            <option value="">الكل</option>
+                            <option value="breached">تجاوز✗</option>
+                            <option value="warning">تحذير ⚠</option>
+                            <option value="ok">ضمن المدة ✓</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>نوع الإشعار</label>
+                        <select id="slaBreachTypeFilter" onchange="loadSlaBreaches()">
+                            <option value="">الكل</option>
+                            <option value="ola_breach">تجاوزOLA</option>
+                            <option value="sla_breach">تجاوزSLA</option>
+                            <option value="ola_warning">تحذير OLA</option>
+                            <option value="sla_warning">تحذير SLA</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>الحالة</label>
+                        <select id="slaResolvedFilter" onchange="loadSlaBreaches()">
+                            <option value="">الكل</option>
+                            <option value="no">غير محلول</option>
+                            <option value="yes">محلول</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- جدول المعاملات مع حالة SLA -->
+                <div class="perf-section">
+                    <div class="section-header">
+                        <h3>📋 حالة SLA للمعاملات النشطة</h3>
+                    </div>
+                    <div id="slaDashboardTable" class="perf-table-container">
+                        <div class="loading-placeholder">جارٍ التحميل...</div>
+                    </div>
+                </div>
+
+                <!-- سجل التجاوزات -->
+                <div class="perf-section" style="margin-top:1.5rem">
+                    <div class="section-header">
+                        <h3>⚠️ سجل التجاوزات والتصعيد</h3>
+                    </div>
+                    <div id="slaBreachLog" class="perf-table-container">
+                        <div class="loading-placeholder">جارٍ التحميل...</div>
+                    </div>
+                </div>
+            </div>
+
         </div>
     </div>`;
 
@@ -3544,15 +1850,18 @@ async function renderPerformanceSection() {
 
 // تبديل التبويبات
 function switchPerfTab(tab) {
-    // إزالة active من جميع التبويبات
     document.querySelectorAll('.perf-tab').forEach(t => t.classList.remove('active'));
     document.querySelectorAll('.perf-tab-content').forEach(c => c.classList.remove('active'));
 
-    // تفعيل التبويب المطلوب
     event.target.closest('.perf-tab').classList.add('active');
     document.getElementById('perfTab' + tab.charAt(0).toUpperCase() + tab.slice(1)).classList.add('active');
 
-    // تحميل البيانات حسب التبويب
+    if (tab === 'sla') {
+        loadSlaStats();
+        loadSlaDashboard();
+        loadSlaBreaches();
+        return;
+    }
     if (tab === 'timeline') {
         loadEventsTimeline();
     } else if (tab === 'analytics') {
@@ -4028,6 +2337,16 @@ async function loadEventsLog() {
 }
 
 // ========== قسم النظام ==========
+
+
+// ═══════════════════════════════════════════════════════════
+//  قسم النظام
+// ═══════════════════════════════════════════════════════════
+
+/**
+ * عرض إعدادات النظام والإحصائيات ومنطقة الخطر
+ */
+// ========== قسم النظام ==========
 async function renderSystemSection() {
     var content = document.getElementById('settingsContent');
 
@@ -4107,612 +2426,523 @@ async function clearAllTransactions() {
 function openUserGuide() {
     window.open('User_Guide.html', '_blank', 'width=1200,height=800');
 }
+// ═══════════════════════════════════════════════════════════════
+//  نظام إدارة الصلاحيات — Permissions Management
+// ═══════════════════════════════════════════════════════════════
 
+var ACTIONS_CONFIG = [
+    { key: 'bank.record_balance', label: 'تسجيل رصيد اليوم', icon: '📊', group: 'البنك' },
+    { key: 'bank.edit_balance', label: 'تعديل الرصيد', icon: '✏️', group: 'البنك' },
+    { key: 'bank.edit_account', label: 'تعديل بيانات الحساب', icon: '⚙️', group: 'البنك' },
+    { key: 'bank.add_account', label: 'إضافة حساب بنكي', icon: '🏦', group: 'البنك' },
+    { key: 'bank.add_deposit', label: 'إضافة وديعة', icon: '💵', group: 'البنك' },
+    { key: 'bank.confirm_deposit', label: 'تأكيد الوديعة', icon: '✅', group: 'البنك' },
+    { key: 'bank.delete_deposit', label: 'حذف وديعة', icon: '🗑', group: 'البنك' },
+    { key: 'transaction.add', label: 'إضافة معاملة', icon: '➕', group: 'المعاملات' },
+    { key: 'transaction.edit', label: 'تعديل معاملة', icon: '✏️', group: 'المعاملات' },
+    { key: 'transaction.delete', label: 'حذف معاملة', icon: '🗑', group: 'المعاملات' },
+    { key: 'transaction.export', label: 'تصدير البيانات', icon: '📤', group: 'المعاملات' },
+    { key: 'employee.add', label: 'إضافة موظف', icon: '👤', group: 'الموظفين' },
+    { key: 'employee.edit', label: 'تعديل موظف', icon: '✏️', group: 'الموظفين' },
+    { key: 'employee.delete', label: 'حذف موظف', icon: '🗑', group: 'الموظفين' },
+    { key: 'employee.permissions', label: 'إدارة الصلاحيات', icon: '🔒', group: 'الموظفين' },
+    { key: 'budget.review', label: 'مراجعة واعتماد الموازنة', icon: '⚖️', group: 'الموازنة' },
+    { key: 'budget.link_transaction', label: 'ربط بمعاملة مالية', icon: '🔗', group: 'الموازنة' },
+    { key: 'budget.edit_code', label: 'تعديل رمز الموازنة', icon: '🏷️', group: 'الموازنة' },
+    { key: 'reservation.add', label: 'إضافة حجز جديد', icon: '📋', group: 'الحجوزات' },
+    { key: 'reservation.view_own', label: 'عرض حجوزات القسم', icon: '👁', group: 'الحجوزات' },
+    { key: 'reservation.view_all', label: 'عرض كل الحجوزات', icon: '📑', group: 'الحجوزات' },
+    { key: 'reservation.review', label: 'مراجعة الحجوزات', icon: '🔍', group: 'الحجوزات' },
+    { key: 'reservation.approve', label: 'اعتماد / رفض حجز', icon: '✅', group: 'الحجوزات' },
+    { key: 'reservation.delete', label: 'حذف حجز', icon: '🗑', group: 'الحجوزات' },
+];
 
+var PAGES_CONFIG = [
+    { key: 'dashboard', label: 'لوحة التحكم', icon: '📊', group: 'رئيسية' },
+    { key: 'notifications', label: 'التنبيهات', icon: '🔔', group: 'رئيسية' },
+    { key: 'transactions', label: 'المعاملات المالية', icon: '💰', group: 'معاملات' },
+    { key: 'bank-deposits', label: 'الودائع البنكية', icon: '🏦', group: 'معاملات' },
+    { key: 'correspondence', label: 'الخطابات', icon: '📨', group: 'معاملات' },
+    { key: 'sla', label: 'SLA / OLA', icon: '⏱', group: 'متابعة' },
+    { key: 'performance', label: 'متابعة الأداء', icon: '📈', group: 'متابعة' },
+    { key: 'settings', label: 'الإعدادات', icon: '⚙️', group: 'نظام' },
+];
 
+var PERMISSION_LEVELS = [
+    { value: 'system_admin', label: 'مدير النظام', desc: 'صلاحية كاملة على كل شيء بما فيها الحذف', color: 'var(--accent-red)' },
+    { value: 'manager', label: 'مدير', desc: 'وصول موسع للتقارير والمتابعة', color: 'var(--accent-blue)' },
+    { value: 'employee', label: 'موظف', desc: 'وصول محدود لصفحته الوظيفية', color: 'var(--accent-green)' },
+];
 
+var DEFAULT_PAGES = {
+    system_admin: { dashboard: 1, notifications: 1, transactions: 1, 'bank-deposits': 1, correspondence: 1, sla: 1, performance: 1, settings: 1, reservations: 1 },
+    manager: { dashboard: 1, notifications: 1, transactions: 1, 'bank-deposits': 1, correspondence: 1, sla: 1, performance: 1, settings: 0, reservations: 1 },
+    employee: { dashboard: 0, notifications: 1, transactions: 1, 'bank-deposits': 1, correspondence: 1, sla: 0, performance: 0, settings: 0, reservations: 1 },
+};
 
-// ========== نظام الودائع البنكية ==========
+/** فتح modal صلاحيات الموظف */
+async function openPermissionsModal(empId, empName) {
+    DOM.modalTitle.textContent = '🔒 صلاحيات: ' + empName;
+    DOM.modalBody.innerHTML = '<div style="text-align:center;padding:2rem"><div class="spinner"></div></div>';
+    openModal();
 
-let bankAccounts = [];
-let bankDeposits = [];
-let bankWithdrawals = [];
-let dailyBalances = [];
+    // تهيئة الجداول تلقائياً إذا لم تكن موجودة
+    await fetch('api/settings.php?action=init_permissions').catch(() => { });
 
-// تحميل الحسابات البنكية
-async function loadBankAccounts() {
     try {
-        const res = await fetch('api/?action=bank_accounts');
-        const result = await res.json();
-
-        if (result.success) {
-            bankAccounts = result.data || [];
-        }
-    } catch (error) {
-        console.error('Error loading bank accounts:', error);
+        var res = await fetch('api/settings.php?action=get_employee_permissions&employee_id=' + empId);
+        var data = await res.json();
+        var perms = data.success ? data.data : { permission_level: 'employee', can_delete: false, pages: {} };
+        DOM.modalBody.innerHTML = renderPermissionsForm(empId, empName, perms);
+        injectPermissionsStyles();
+    } catch (e) {
+        DOM.modalBody.innerHTML = '<div style="color:var(--accent-red);padding:1rem">خطأ في تحميل الصلاحيات</div>';
     }
 }
 
-// تحميل بطاقات الأرصدة
-async function loadBalanceCards() {
-    const container = document.getElementById('balance-cards');
+/** رسم نموذج الصلاحيات */
+function renderPermissionsForm(empId, empName, perms) {
+    var level = perms.permission_level || 'employee';
+    var pages = perms.pages || {};
+    var isSystemAdmin = (level === 'system_admin');
 
-    if (!container) return;
+    // مستويات الصلاحية
+    var levelsHtml = PERMISSION_LEVELS.map(function (l) {
+        var checked = (level === l.value) ? 'checked' : '';
+        return '<label class="perm-level-card ' + (level === l.value ? 'selected' : '') + '" data-level="' + l.value + '">' +
+            '<input type="radio" name="permLevel" value="' + l.value + '" ' + checked + ' onchange="onPermLevelChange(this,' + empId + ')" hidden>' +
+            '<div class="perm-level-dot" style="background:' + l.color + '"></div>' +
+            '<div>' +
+            '<div style="font-weight:700;font-size:.88rem">' + l.label + '</div>' +
+            '<div style="font-size:.76rem;color:var(--text-muted)">' + l.desc + '</div>' +
+            '</div>' +
+            '</label>';
+    }).join('');
 
-    if (!bankAccounts || bankAccounts.length === 0) {
-        container.innerHTML = `
-            <div class="empty-state">
-                <p>لا توجد حسابات بنكية</p>
-                <button class="btn-primary" onclick="openAddAccountModal()">إضافة حساب</button>
-            </div>
-        `;
-        return;
-    }
+    // صلاحية الحذف
+    var canDelChecked = perms.can_delete ? 'checked' : '';
 
-    const cardsHTML = bankAccounts.map(account => `
-        <div class="balance-card">
-            <div class="balance-card-header">
-                <div class="account-info">
-                    <h3>${account.account_name}</h3>
-                    <div class="bank-name">🏦 ${account.bank_name}</div>
-                </div>
-                <span class="badge badge-primary">${account.account_type}</span>
-            </div>
-            
-            <div class="balance-amount">
-                <div class="amount">${formatMoney(account.current_balance)}</div>
-                <div class="currency">${account.currency}</div>
-            </div>
-            
-            <div class="account-details">
-                <div class="detail-item">
-                    <div class="detail-label">رقم الحساب</div>
-                    <div class="detail-value">${account.account_number}</div>
-                </div>
-                <div class="detail-item">
-                    <div class="detail-label">IBAN</div>
-                    <div class="detail-value">${account.iban || 'غير متوفر'}</div>
-                </div>
-            </div>
-            
-       
-        </div>
-    `).join('');
-
-    container.innerHTML = cardsHTML;
-}
-
-// تحميل الأرصدة اليومية
-async function loadDailyBalances() {
-    try {
-        const res = await fetch('api/?action=daily_balances');
-        const result = await res.json();
-
-        const tbody = document.getElementById('daily-balances-table');
-        if (!tbody) return;
-
-        if (!result.success || !result.data || result.data.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="8" class="text-center">لا توجد أرصدة مسجلة</td></tr>';
-            return;
-        }
-
-        dailyBalances = result.data;
-
-        tbody.innerHTML = dailyBalances.map(balance => `
-            <tr>
-                <td>${formatDate(balance.balance_date)}</td>
-                <td>${balance.account_name}</td>
-                <td>${formatMoney(balance.opening_balance)}</td>
-                <td class="text-success">+${formatMoney(balance.total_deposits)}</td>
-                <td class="text-danger">-${formatMoney(balance.total_withdrawals)}</td>
-                <td><strong>${formatMoney(balance.closing_balance)}</strong></td>
-                <td><span class="badge badge-success">متطابق</span></td>
-                <td>
-                    <button class="btn-icon" onclick="viewBalanceDetails(${balance.id})">
-                        👁️
-                    </button>
-                </td>
-            </tr>
-        `).join('');
-    } catch (error) {
-        console.error('Error loading daily balances:', error);
-    }
-}
-
-// تحميل الودائع
-async function loadDeposits() {
-    try {
-        const res = await fetch('api/?action=bank_deposits');
-        const result = await res.json();
-
-        const tbody = document.getElementById('deposits-table');
-        if (!tbody) return;
-
-        if (!result.success || !result.data || result.data.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="7" class="text-center">لا توجد ودائع</td></tr>';
-            return;
-        }
-
-        bankDeposits = result.data;
-
-        tbody.innerHTML = bankDeposits.map(deposit => `
-            <tr>
-                <td>${deposit.deposit_number}</td>
-                <td>${formatDate(deposit.deposit_date)}</td>
-                <td>${deposit.account_name}</td>
-                <td class="text-success"><strong>+${formatMoney(deposit.amount)}</strong></td>
-                <td>${deposit.deposit_type}</td>
-                <td>${getStatusBadge(deposit.status)}</td>
-                <td>
-                    ${deposit.status === 'معلق' ?
-                `<button class="btn-icon btn-success" onclick="confirmDeposit(${deposit.id})">✓</button>` : ''
-            }
-                    <button class="btn-icon" onclick="viewDeposit(${deposit.id})">👁️</button>
-                </td>
-            </tr>
-        `).join('');
-    } catch (error) {
-        console.error('Error loading deposits:', error);
-    }
-}
-
-// ========== التبديل بين تبويبات البنوك ==========
-
-function switchBankTab(tabName) {
-    console.log('Switching to bank tab:', tabName);
-
-    // تحديث الأزرار
-    document.querySelectorAll('[data-bank-tab]').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.bankTab === tabName);
+    // الصفحات مجمعة بحسب المجموعة
+    var groups = {};
+    PAGES_CONFIG.forEach(function (p) {
+        if (!groups[p.group]) groups[p.group] = [];
+        groups[p.group].push(p);
     });
 
-    // تحديث المحتوى
-    document.querySelectorAll('.bank-tab-content').forEach(content => {
-        content.classList.remove('active');
+    var pagesHtml = '';
+    Object.keys(groups).forEach(function (g) {
+        pagesHtml += '<div class="perm-group">';
+        pagesHtml += '<div class="perm-group-label">' + g + '</div>';
+        pagesHtml += '<div class="perm-pages-grid">';
+
+        groups[g].forEach(function (pg) {
+            var hasAccess = isSystemAdmin ? true : !!(pages[pg.key]);
+            var toggleCls = hasAccess ? 'on' : 'off';
+            var disabled = isSystemAdmin ? 'disabled' : '';
+
+            pagesHtml += '<div class="perm-page-item" data-page="' + pg.key + '">' +
+                '<span class="perm-page-icon">' + pg.icon + '</span>' +
+                '<span class="perm-page-name">' + pg.label + '</span>' +
+                '<button class="perm-toggle ' + toggleCls + '" ' + disabled + ' ' +
+                'onclick="togglePagePerm(this,\'' + pg.key + '\')" ' +
+                'title="' + (hasAccess ? 'محجوب حالياً — اضغط للحجب' : 'محجوب — اضغط للسماح') + '">' +
+                (hasAccess ?
+                    '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>' :
+                    '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>'
+                ) +
+                '</button>' +
+                '</div>';
+        });
+
+        pagesHtml += '</div></div>';
     });
 
-    const targetContent = document.getElementById(`bank-${tabName}-content`);
-    if (targetContent) {
-        targetContent.classList.add('active');
-    }
+    return '<div class="perms-modal-body">' +
 
-    // تحميل البيانات حسب التبويب
-    if (tabName === 'balances') {
-        loadBalanceCards();
-        loadDailyBalances();
-    } else if (tabName === 'deposits') {
-        loadDeposits();
-    } else if (tabName === 'accounts') {
-        loadBankAccountsTable();
-    }
-}
-// تحميل جدول الحسابات
-async function loadBankAccountsTable() {
-    const tbody = document.getElementById('accounts-table');
-    if (!tbody) return;
+        // القسم 1: مستوى الصلاحية
+        '<div class="perm-section">' +
+        '<h4 class="perm-section-title">🏅 مستوى الصلاحية</h4>' +
+        '<div class="perm-levels">' + levelsHtml + '</div>' +
+        '</div>' +
 
-    if (!bankAccounts || bankAccounts.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="text-center">لا توجد حسابات</td></tr>';
-        return;
-    }
+        // القسم 2: صلاحية الحذف
+        '<div class="perm-section">' +
+        '<h4 class="perm-section-title">🗑️ إجراءات خاصة</h4>' +
+        '<label class="perm-special-row">' +
+        '<input type="checkbox" id="perm_can_delete" ' + canDelChecked + ' ' + (isSystemAdmin ? 'disabled' : '') + '>' +
+        '<div>' +
+        '<div style="font-weight:600;font-size:.88rem">صلاحية الحذف</div>' +
+        '<div style="font-size:.76rem;color:var(--text-muted)">يمكنه حذف المعاملات والموظفين والودائع</div>' +
+        '</div>' +
+        (isSystemAdmin ? '<span style="font-size:.75rem;color:var(--accent-red);font-weight:600">دائمة لمدير النظام</span>' : '') +
+        '</label>' +
+        '</div>' +
 
-    tbody.innerHTML = bankAccounts.map(account => `
-        <tr>
-            <td>${account.account_number}</td>
-            <td>${account.account_name}</td>
-            <td>${account.bank_name}</td>
-            <td>${account.account_type}</td>
-            <td><strong>${formatMoney(account.current_balance)}</strong> ${account.currency}</td>
-            <td>${account.is_active ? '<span class="badge badge-success">نشط</span>' : '<span class="badge badge-secondary">غير نشط</span>'}</td>
-            <td>
-                <button class="btn-icon" onclick="viewAccount(${account.id})">👁️</button>
-                <button class="btn-icon" onclick="editAccount(${account.id})">✏️</button>
-            </td>
-        </tr>
-    `).join('');
-}
+        // القسم 3: صلاحيات الصفحات
+        '<div class="perm-section">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem">' +
+        '<h4 class="perm-section-title" style="margin:0">📑 صلاحيات الصفحات</h4>' +
+        (!isSystemAdmin ?
+            '<div style="display:flex;gap:.5rem">' +
+            '<button class="btn btn-ghost-sm" onclick="setAllPages(true)">تحديد الكل</button>' +
+            '<button class="btn btn-ghost-sm" onclick="setAllPages(false)">إلغاء الكل</button>' +
+            '</div>' : '') +
+        '</div>' +
+        (isSystemAdmin ?
+            '<div style="padding:.75rem;background:rgba(239,68,68,.08);border-radius:8px;font-size:.82rem;color:var(--accent-red)">' +
+            '🔓 مدير النظام يملك صلاحية وصول كاملة لا يمكن تقييدها</div>' :
+            '<div id="permsPagesContainer">' + pagesHtml + '</div>') +
+        '</div>' +
 
-// دوال Modal
-function openAddDepositModal() {
-    const accountsOptions = bankAccounts.map(acc =>
-        `<option value="${acc.id}">${acc.account_name} - ${acc.bank_name}</option>`
-    ).join('');
+        // القسم 4: صلاحيات الإجراءات
+        '<div class="perm-section">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem">' +
+        '<h4 class="perm-section-title" style="margin:0">🎛️ صلاحيات الإجراءات</h4>' +
+        (!isSystemAdmin ? '<div style="display:flex;gap:.5rem"><button class="btn btn-ghost-sm" onclick="setAllActions(true)">تحديد الكل</button><button class="btn btn-ghost-sm" onclick="setAllActions(false)">إلغاء الكل</button></div>' : '') +
+        '</div>' +
+        (isSystemAdmin ?
+            '<div style="padding:.75rem;background:rgba(239,68,68,.08);border-radius:8px;font-size:.82rem;color:var(--accent-red)">🔓 مدير النظام يملك صلاحية تنفيذ جميع الإجراءات</div>' :
+            '<div id="permsActionsContainer">' + buildActionsGrid(perms.action_permissions || {}, level) + '</div>') +
+        '</div>' +
 
-    showModal(`
-        <h3>إضافة إيداع بنكي</h3>
-        <form onsubmit="submitDeposit(event)">
-            <div class="form-grid">
-                <div class="form-group">
-                    <label>الحساب البنكي *</label>
-                    <select name="account_id" required>
-                        <option value="">اختر الحساب</option>
-                        ${accountsOptions}
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>المبلغ *</label>
-                    <input type="number" name="amount" step="0.01" required>
-                </div>
-                <div class="form-group">
-                    <label>تاريخ الإيداع *</label>
-                    <input type="date" name="deposit_date" value="${new Date().toISOString().split('T')[0]}" required>
-                </div>
-                <div class="form-group">
-                    <label>نوع الإيداع *</label>
-                    <select name="deposit_type" required>
-                        <option value="إيداع نقدي">إيداع نقدي</option>
-                        <option value="إيداع شيك">إيداع شيك</option>
-                        <option value="تحويل بنكي">تحويل بنكي</option>
-                        <option value="إيداع آلي">إيداع آلي</option>
-                    </select>
-                </div>
-                <div class="form-group full-width">
-                    <label>ملاحظات</label>
-                    <textarea name="notes" rows="3"></textarea>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn-secondary" onclick="closeModal()">إلغاء</button>
-                <button type="submit" class="btn-primary">حفظ</button>
-            </div>
-        </form>
-    `);
+        // أزرار الحفظ
+        '<div class="perm-footer">' +
+        '<button class="btn btn-secondary" onclick="closeModal()">إلغاء</button>' +
+        '<button class="btn btn-primary" onclick="savePermissions(' + empId + ', \'' + empName + '\')">' +
+        '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>' +
+        ' حفظ الصلاحيات</button>' +
+        '</div>' +
+
+        '</div>';
 }
 
-function openAddWithdrawalModal() {
-    const accountsOptions = bankAccounts.map(acc =>
-        `<option value="${acc.id}">${acc.account_name} - ${acc.bank_name}</option>`
-    ).join('');
-
-    showModal(`
-        <h3>إضافة سحب بنكي</h3>
-        <form onsubmit="submitWithdrawal(event)">
-            <div class="form-grid">
-                <div class="form-group">
-                    <label>الحساب البنكي *</label>
-                    <select name="account_id" required>
-                        <option value="">اختر الحساب</option>
-                        ${accountsOptions}
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>المبلغ *</label>
-                    <input type="number" name="amount" step="0.01" required>
-                </div>
-                <div class="form-group">
-                    <label>تاريخ السحب *</label>
-                    <input type="date" name="withdrawal_date" value="${new Date().toISOString().split('T')[0]}" required>
-                </div>
-                <div class="form-group">
-                    <label>نوع السحب *</label>
-                    <select name="withdrawal_type" required>
-                        <option value="سحب نقدي">سحب نقدي</option>
-                        <option value="شيك">شيك</option>
-                        <option value="تحويل بنكي">تحويل بنكي</option>
-                    </select>
-                </div>
-                <div class="form-group full-width">
-                    <label>ملاحظات</label>
-                    <textarea name="notes" rows="3"></textarea>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn-secondary" onclick="closeModal()">إلغاء</button>
-                <button type="submit" class="btn-primary">حفظ</button>
-            </div>
-        </form>
-    `);
-}
-
-function openAddAccountModal() {
-    showModal(`
-        <h3>إضافة حساب بنكي</h3>
-        <form onsubmit="submitAccount(event)">
-            <div class="form-grid">
-                <div class="form-group">
-                    <label>اسم الحساب *</label>
-                    <input type="text" name="account_name" required>
-                </div>
-                <div class="form-group">
-                    <label>رقم الحساب *</label>
-                    <input type="text" name="account_number" required>
-                </div>
-                <div class="form-group">
-                    <label>اسم البنك *</label>
-                    <input type="text" name="bank_name" required>
-                </div>
-                <div class="form-group">
-                    <label>نوع الحساب *</label>
-                    <select name="account_type" required>
-                        <option value="جاري">جاري</option>
-                        <option value="توفير">توفير</option>
-                        <option value="استثماري">استثماري</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>الرصيد الافتتاحي *</label>
-                    <input type="number" name="initial_balance" step="0.01" value="0" required>
-                </div>
-                <div class="form-group">
-                    <label>IBAN</label>
-                    <input type="text" name="iban">
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn-secondary" onclick="closeModal()">إلغاء</button>
-                <button type="submit" class="btn-primary">حفظ</button>
-            </div>
-        </form>
-    `);
-}
-
-function openRecordBalanceModal() {
-    const accountsOptions = bankAccounts.map(acc =>
-        `<option value="${acc.id}">${acc.account_name} - ${acc.bank_name}</option>`
-    ).join('');
-
-    showModal(`
-        <h3>تسجيل رصيد يومي</h3>
-        <form onsubmit="submitDailyBalance(event)">
-            <div class="form-grid">
-                <div class="form-group">
-                    <label>الحساب البنكي *</label>
-                    <select name="account_id" required>
-                        <option value="">اختر الحساب</option>
-                        ${accountsOptions}
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>التاريخ *</label>
-                    <input type="date" name="balance_date" value="${new Date().toISOString().split('T')[0]}" required>
-                </div>
-                <div class="form-group">
-                    <label>رصيد افتتاحي *</label>
-                    <input type="number" name="opening_balance" step="0.01" required>
-                </div>
-                <div class="form-group">
-                    <label>رصيد ختامي *</label>
-                    <input type="number" name="closing_balance" step="0.01" required>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn-secondary" onclick="closeModal()">إلغاء</button>
-                <button type="submit" class="btn-primary">حفظ</button>
-            </div>
-        </form>
-    `);
-}
-
-// دوال Submit
-async function submitDeposit(e) {
-    e.preventDefault();
-    const formData = new FormData(e.target);
-    const data = Object.fromEntries(formData);
-
-    try {
-        const res = await fetch('api/?action=add_deposit', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
-        });
-
-        const result = await res.json();
-
-        if (result.success) {
-            showToast('تم إضافة الإيداع بنجاح', 'success');
-            closeModal();
-            loadDeposits();
-            loadBankAccounts();
-            loadBalanceCards();
-        } else {
-            showToast(result.message || 'حدث خطأ', 'error');
-        }
-    } catch (error) {
-        showToast('حدث خطأ', 'error');
-    }
-}
-
-async function submitWithdrawal(e) {
-    e.preventDefault();
-    const formData = new FormData(e.target);
-    const data = Object.fromEntries(formData);
-
-    try {
-        const res = await fetch('api/?action=add_withdrawal', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
-        });
-
-        const result = await res.json();
-
-        if (result.success) {
-            showToast('تم إضافة السحب بنجاح', 'success');
-            closeModal();
-            loadWithdrawals();
-            loadBankAccounts();
-            loadBalanceCards();
-        } else {
-            showToast(result.message || 'حدث خطأ', 'error');
-        }
-    } catch (error) {
-        showToast('حدث خطأ', 'error');
-    }
-}
-
-async function submitAccount(e) {
-    e.preventDefault();
-    const formData = new FormData(e.target);
-    const data = Object.fromEntries(formData);
-
-    try {
-        const res = await fetch('api/?action=add_bank_account', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
-        });
-
-        const result = await res.json();
-
-        if (result.success) {
-            showToast('تم إضافة الحساب بنجاح', 'success');
-            closeModal();
-            loadBankAccounts();
-            loadBalanceCards();
-        } else {
-            showToast(result.message || 'حدث خطأ', 'error');
-        }
-    } catch (error) {
-        showToast('حدث خطأ', 'error');
-    }
-}
-
-async function submitDailyBalance(e) {
-    e.preventDefault();
-    const formData = new FormData(e.target);
-    const data = Object.fromEntries(formData);
-
-    try {
-        const res = await fetch('api/?action=record_daily_balance', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
-        });
-
-        const result = await res.json();
-
-        if (result.success) {
-            showToast('تم تسجيل الرصيد بنجاح', 'success');
-            closeModal();
-            loadDailyBalances();
-        } else {
-            showToast(result.message || 'حدث خطأ', 'error');
-        }
-    } catch (error) {
-        showToast('حدث خطأ', 'error');
-    }
-}
-
-// دوال مساعدة
-function getStatusBadge(status) {
-    const badges = {
-        'معلق': '<span class="badge badge-warning">معلق</span>',
-        'تم التأكيد': '<span class="badge badge-success">تم التأكيد</span>',
-        'ملغي': '<span class="badge badge-danger">ملغي</span>'
+/** بناء grid صلاحيات الإجراءات */
+function buildActionsGrid(overrides, level) {
+    var defaults = {
+        system_admin: {},  // كلها true دائماً
+        manager: { 'bank.edit_balance': 1, 'bank.view_history': 1, 'bank.record_balance': 1, 'bank.add_deposit': 1, 'bank.confirm_deposit': 1, 'transaction.add': 1, 'transaction.edit': 1, 'transaction.export': 1 },
+        employee: { 'bank.record_balance': 1, 'bank.view_history': 1, 'bank.add_deposit': 1, 'transaction.add': 1 },
     };
-    return badges[status] || status;
+    var def = defaults[level] || {};
+
+    var groups = {};
+    ACTIONS_CONFIG.forEach(function (a) {
+        if (!groups[a.group]) groups[a.group] = [];
+        groups[a.group].push(a);
+    });
+
+    var html = '';
+    Object.keys(groups).forEach(function (g) {
+        html += '<div class="perm-group"><div class="perm-group-label">' + g + '</div>';
+        html += '<div class="perm-pages-grid">';
+        groups[g].forEach(function (act) {
+            var isOn = overrides.hasOwnProperty(act.key) ? !!overrides[act.key] : !!(def[act.key]);
+            var cls = isOn ? 'on' : 'off';
+            html += '<div class="perm-page-item" data-action="' + act.key + '">' +
+                '<span class="perm-page-icon">' + act.icon + '</span>' +
+                '<span class="perm-page-name">' + act.label + '</span>' +
+                '<button class="perm-toggle ' + cls + '" onclick="toggleActionPerm(this,\'' + act.key + '\')">' +
+                (isOn
+                    ? '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>'
+                    : '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>') +
+                '</button></div>';
+        });
+        html += '</div></div>';
+    });
+    return html;
 }
 
-async function confirmDeposit(id) {
-    if (!confirm('هل تريد تأكيد هذا الإيداع؟')) return;
+/** تبديل حالة إجراء */
+function toggleActionPerm(btn, actionKey) {
+    var isOn = btn.classList.contains('on');
+    btn.classList.toggle('on', !isOn);
+    btn.classList.toggle('off', isOn);
+    btn.innerHTML = !isOn
+        ? '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>'
+        : '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+}
+
+/** تحديد/إلغاء كل الإجراءات */
+function setAllActions(state) {
+    document.querySelectorAll('#permsActionsContainer .perm-toggle').forEach(function (btn) {
+        btn.classList.toggle('on', state);
+        btn.classList.toggle('off', !state);
+        btn.innerHTML = state
+            ? '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>'
+            : '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+    });
+}
+
+/** تبديل حالة صفحة */
+function togglePagePerm(btn, pageKey) {
+    var isOn = btn.classList.contains('on');
+    btn.classList.toggle('on', !isOn);
+    btn.classList.toggle('off', isOn);
+    btn.title = !isOn ? 'مسموح — اضغط للحجب' : 'محجوب — اضغط للسماح';
+    btn.innerHTML = !isOn
+        ? '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>'
+        : '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+}
+
+/** تحديد/إلغاء كل الصفحات */
+function setAllPages(state) {
+    document.querySelectorAll('.perm-toggle:not([disabled])').forEach(function (btn) {
+        btn.classList.toggle('on', state);
+        btn.classList.toggle('off', !state);
+        btn.innerHTML = state
+            ? '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>'
+            : '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+    });
+}
+
+/** عند تغيير مستوى الصلاحية → تطبيق الافتراضيات */
+function onPermLevelChange(input, empId) {
+    var level = input.value;
+
+    // تحديث تصميم الكارد المختار
+    document.querySelectorAll('.perm-level-card').forEach(function (c) {
+        c.classList.toggle('selected', c.dataset.level === level);
+    });
+
+    // تطبيق إجراءات افتراضية حسب المستوى
+    var actionDefaults = {
+        manager: [
+            'bank.edit_balance', 'bank.view_history', 'bank.record_balance',
+            'bank.add_deposit', 'bank.confirm_deposit',
+            'transaction.add', 'transaction.edit', 'transaction.export',
+            'reservation.add', 'reservation.view_own', 'reservation.view_all',
+        ],
+        employee: [
+            'bank.record_balance', 'bank.view_history', 'bank.add_deposit',
+            'transaction.add',
+            'reservation.add', 'reservation.view_own',
+        ],
+    };
+    var actDef = actionDefaults[level] || [];
+    document.querySelectorAll('[data-action]').forEach(function (item) {
+        var key = item.dataset.action;
+        var btn = item.querySelector('.perm-toggle');
+        if (!btn) return;
+        var isOn = actDef.includes(key);
+        btn.classList.toggle('on', isOn);
+        btn.classList.toggle('off', !isOn);
+        btn.innerHTML = isOn
+            ? '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>'
+            : '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+    });
+
+    // تطبيق الصفحات الافتراضية
+    var defaults = DEFAULT_PAGES[level] || {};
+    document.querySelectorAll('.perm-page-item').forEach(function (item) {
+        var key = item.dataset.page;
+        var btn = item.querySelector('.perm-toggle');
+        if (!btn || btn.disabled) return;
+        var isOn = !!(defaults[key]);
+        btn.classList.toggle('on', isOn);
+        btn.classList.toggle('off', !isOn);
+        btn.innerHTML = isOn
+            ? '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>'
+            : '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+    });
+
+    // إظهار/إخفاء صلاحية الحذف
+    var delChk = document.getElementById('perm_can_delete');
+    if (delChk) {
+        delChk.disabled = (level === 'system_admin');
+        if (level === 'system_admin') delChk.checked = true;
+    }
+}
+
+/** جمع وحفظ الصلاحيات */
+async function savePermissions(empId, empName) {
+    var level = document.querySelector('input[name="permLevel"]:checked')?.value || 'employee';
+    var canDel = !!(document.getElementById('perm_can_delete')?.checked);
+
+    var pages = {};
+    document.querySelectorAll('.perm-page-item').forEach(function (item) {
+        var key = item.dataset.page;
+        var btn = item.querySelector('.perm-toggle');
+        pages[key] = btn ? btn.classList.contains('on') : false;
+    });
+
+    var actionPerms = {};
+    document.querySelectorAll('[data-action]').forEach(function (item) {
+        var key = item.dataset.action;
+        var btn = item.querySelector('.perm-toggle');
+        actionPerms[key] = btn ? btn.classList.contains('on') : false;
+    });
 
     try {
-        const res = await fetch('api/?action=confirm_deposit', {
+        var res = await fetch('api/settings.php?action=save_employee_permissions', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id })
+            body: JSON.stringify({
+                employee_id: empId,
+                permission_level: level,
+                can_delete: canDel,
+                pages: pages,
+                action_permissions: actionPerms
+            })
         });
+        var data = await res.json();
 
-        const result = await res.json();
-
-        if (result.success) {
-            showToast('تم تأكيد الإيداع', 'success');
-            loadDeposits();
-            loadBankAccounts();
-            loadBalanceCards();
+        if (data.success) {
+            showToast('✅ تم حفظ صلاحيات ' + empName, 'success');
+            closeModal();
+        } else {
+            showToast('❌ ' + (data.error || 'خطأ في الحفظ'), 'error');
         }
-    } catch (error) {
-        showToast('حدث خطأ', 'error');
+    } catch (e) {
+        showToast('❌ خطأ في الاتصال', 'error');
     }
 }
 
-async function confirmWithdrawal(id) {
-    if (!confirm('هل تريد تأكيد هذا السحب؟')) return;
+/** حقن CSS الصلاحيات */
+function injectPermissionsStyles() {
+    if (document.getElementById('perms-styles')) return;
+    var s = document.createElement('style');
+    s.id = 'perms-styles';
+    s.textContent = `
+        /* ── Modal Body ── */
+        .perms-modal-body { display:flex; flex-direction:column; gap:1.25rem; }
 
-    try {
-        const res = await fetch('api/?action=confirm_withdrawal', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id })
-        });
+        /* ── Sections ── */
+        .perm-section { background:var(--bg-surface); border-radius:12px; padding:1rem 1.1rem; }
+        .perm-section-title { font-size:.88rem; font-weight:700; color:var(--text-primary); margin:0 0 .75rem; }
 
-        const result = await res.json();
-
-        if (result.success) {
-            showToast('تم تأكيد السحب', 'success');
-            loadWithdrawals();
-            loadBankAccounts();
-            loadBalanceCards();
+        /* ── Level Cards ── */
+        .perm-levels { display:flex; flex-direction:column; gap:.5rem; }
+        .perm-level-card {
+            display:flex; align-items:center; gap:.75rem;
+            padding:.7rem 1rem; border-radius:9px;
+            border:1.5px solid var(--border-color);
+            cursor:pointer; transition:all .2s;
+            background: var(--bg-card);
         }
-    } catch (error) {
-        showToast('حدث خطأ', 'error');
-    }
-}
+        .perm-level-card:hover { border-color:var(--btn-primary-bg); }
+        .perm-level-card.selected {
+            border-color:var(--btn-primary-bg);
+            background:var(--bg-secondary);
+            box-shadow:0 1px 8px rgba(0,0,0,.12);
+        }
+        .perm-level-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
 
+        /* ── Special Row (delete) ── */
+        .perm-special-row {
+            display:flex; align-items:center; gap:.85rem;
+            padding:.65rem 1rem; border-radius:8px;
+            background:var(--bg-card); cursor:pointer;
+        }
+        .perm-special-row input[type=checkbox] { width:18px; height:18px; cursor:pointer; flex-shrink:0; }
 
-// ========== Modal Functions ==========
+        /* ── Pages Grid ── */
+        .perm-group { margin-bottom:.85rem; }
+        .perm-group:last-child { margin-bottom:0; }
+        .perm-group-label { font-size:.72rem; font-weight:700; text-transform:uppercase;
+                            letter-spacing:.07em; color:var(--text-muted); margin-bottom:.4rem; }
+        .perm-pages-grid {
+            display:grid; grid-template-columns:repeat(auto-fill, minmax(190px, 1fr));
+            gap:.4rem;
+        }
+        .perm-page-item {
+            display:flex; align-items:center; gap:.6rem;
+            padding:.55rem .85rem; border-radius:8px;
+            background:var(--bg-card); border:1px solid var(--border-color);
+        }
+        .perm-page-icon { font-size:.95rem; flex-shrink:0; }
+        .perm-page-name { flex:1; font-size:.82rem; font-weight:500; color:var(--text-secondary); }
 
-function showModal(content) {
-    // إنشاء Modal إذا لم يكن موجود
-    let modal = document.getElementById('bank-modal');
-    let overlay = document.getElementById('bank-modal-overlay');
+        /* ── Toggle ── */
+        .perm-toggle {
+            width:26px; height:26px; border-radius:6px; border:none; cursor:pointer;
+            display:flex; align-items:center; justify-content:center;
+            flex-shrink:0; transition:all .18s; font-size:.8rem;
+        }
+        .perm-toggle.on {
+            background:rgba(105,219,124,.18); color:var(--accent-green);
+        }
+        .perm-toggle.on:hover { background:rgba(105,219,124,.32); }
+        .perm-toggle.off {
+            background:rgba(239,68,68,.12); color:var(--accent-red);
+        }
+        .perm-toggle.off:hover { background:rgba(239,68,68,.22); }
+        .perm-toggle[disabled] { opacity:.45; cursor:not-allowed; }
 
-    if (!modal) {
-        // إنشاء Overlay
-        overlay = document.createElement('div');
-        overlay.id = 'bank-modal-overlay';
-        overlay.className = 'modal-overlay';
-        overlay.onclick = closeModal;
-        document.body.appendChild(overlay);
+        /* ── Footer ── */
+        .perm-footer { display:flex; justify-content:flex-start; gap:.625rem; padding-top:.25rem; }
 
-        // إنشاء Modal
-        modal = document.createElement('div');
-        modal.id = 'bank-modal';
-        modal.className = 'modal';
-        document.body.appendChild(modal);
-    }
+        /* ── Ghost SM Button ── */
+        .btn-ghost-sm {
+            padding:.3rem .75rem; font-size:.76rem; border-radius:6px;
+            border:1px solid var(--border-color); background:transparent;
+            color:var(--text-muted); cursor:pointer; transition:all .15s;
+            font-family:inherit;
+        }
+        .btn-ghost-sm:hover { background:var(--bg-surface); color:var(--text-primary); }
 
-    // محتوى Modal
-    modal.innerHTML = `
-        <div class="modal-content">
-            <button class="modal-close" onclick="closeModal()">&times;</button>
-            <div class="modal-body">
-                ${content}
-            </div>
-        </div>
+        @media (max-width:560px) {
+            .perm-pages-grid { grid-template-columns:1fr 1fr; }
+        }
     `;
-
-    // إظهار Modal
-    setTimeout(() => {
-        overlay.classList.add('active');
-        modal.classList.add('active');
-    }, 10);
+    document.head.appendChild(s);
 }
 
-function closeModal() {
-    const modal = document.getElementById('bank-modal');
-    const overlay = document.getElementById('bank-modal-overlay');
-
-    if (modal) modal.classList.remove('active');
-    if (overlay) overlay.classList.remove('active');
-
-    setTimeout(() => {
-        if (modal) modal.innerHTML = '';
-    }, 300);
-}
-
-// إغلاق عند الضغط على Escape
-document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
-        closeModal();
-    }
-});
-
-// دوال فارغة للتوافق
-function viewDeposit(id) { console.log('View deposit:', id); }
-function viewWithdrawal(id) { console.log('View withdrawal:', id); }
-function viewAccount(id) { console.log('View account:', id); }
-function editAccount(id) { console.log('Edit account:', id); }
-function viewBalanceDetails(id) { console.log('View balance:', id); }
-function openDepositModal(accountId) { openAddDepositModal(); }
-function openWithdrawalModal(accountId) { openAddWithdrawalModal(); }
+// ── CSS شريط التبويبات العلوي لصفحة الإعدادات ────────────────
+(function injectSettingsTopbarStyles() {
+    if (document.getElementById('settings-topbar-styles')) return;
+    const s = document.createElement('style');
+    s.id = 'settings-topbar-styles';
+    s.textContent = `
+        .settings-page-new {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            min-height: calc(100vh - 200px);
+        }
+        .settings-topbar {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 5px;
+            flex-wrap: wrap;
+        }
+        .settings-tab-btn {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.55rem 1.1rem;
+            background: transparent;
+            border: 1px solid transparent;
+            border-radius: 8px;
+            color: var(--text-secondary);
+            font-family: inherit;
+            font-size: 0.85rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+        }
+        .settings-tab-btn:hover {
+            background: var(--bg-surface);
+            color: var(--text-primary);
+        }
+        .settings-tab-btn.active {
+            background: var(--btn-primary-bg);
+            color: var(--btn-primary-text);
+            border-color: transparent;
+            font-weight: 600;
+            box-shadow: 0 2px 8px rgba(0,0,0,.15);
+        }
+        .settings-page-new .settings-content {
+            flex: 1;
+            min-width: 0;
+        }
+        @media (max-width: 600px) {
+            .settings-tab-btn { font-size: 0.78rem; padding: 0.5rem 0.75rem; }
+        }
+    `;
+    document.head.appendChild(s);
+})();

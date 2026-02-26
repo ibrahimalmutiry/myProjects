@@ -1,0 +1,243 @@
+/* ═══════════════════════════════════════════════════════════
+   الودائع الاستثمارية — Investment Deposits Styles
+   أضف هذا في نهاية style.css أو bank_deposits_new.css
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── إحصاءات ──────────────────────────────────────────────── */
+.inv-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+@media (max-width: 900px) { .inv-stats-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 500px) { .inv-stats-grid { grid-template-columns: 1fr; } }
+
+.inv-stat-card {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1.25rem;
+    border-radius: 14px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-card);
+    transition: transform .2s, box-shadow .2s;
+}
+.inv-stat-card:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,.12); }
+
+.inv-stat-icon { font-size: 2rem; }
+.inv-stat-label { font-size: .8rem; color: var(--text-secondary); margin-bottom: .2rem; }
+.inv-stat-value { font-size: 1.4rem; font-weight: 700; color: var(--text-primary); }
+.inv-stat-sub   { font-size: .78rem; color: var(--text-muted); margin-top: .15rem; }
+
+.inv-stat-blue   { border-right: 3px solid var(--accent-blue); }
+.inv-stat-green  { border-right: 3px solid var(--accent-green); }
+.inv-stat-red    { border-right: 3px solid var(--accent-red); }
+.inv-stat-orange { border-right: 3px solid var(--accent-orange); }
+.inv-stat-gray   { border-right: 3px solid var(--border-color); }
+
+/* ── شريط الأدوات ─────────────────────────────────────────── */
+.inv-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+    flex-wrap: wrap;
+}
+.inv-toolbar-right { display: flex; gap: .75rem; }
+.inv-filter-group  { display: flex; gap: .5rem; flex-wrap: wrap; }
+.inv-filter-btn {
+    padding: .45rem 1rem;
+    border-radius: 20px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-card);
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: .85rem;
+    transition: all .2s;
+}
+.inv-filter-btn:hover, .inv-filter-btn.active {
+    background: var(--accent-blue);
+    color: #fff;
+    border-color: var(--accent-blue);
+}
+
+/* ── بطاقة وديعة ──────────────────────────────────────────── */
+.inv-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    margin-bottom: 1rem;
+    overflow: hidden;
+    transition: box-shadow .2s;
+}
+.inv-card:hover { box-shadow: 0 6px 24px rgba(0,0,0,.1); }
+
+.inv-card--overdue  { border-right: 4px solid var(--accent-red);    background: rgba(239,68,68,.02); }
+.inv-card--expiring { border-right: 4px solid var(--accent-orange); background: rgba(245,158,11,.02); }
+.inv-card--done     { border-right: 4px solid var(--accent-green);  opacity: .85; }
+.inv-card--canceled { border-right: 4px solid var(--text-muted);    opacity: .7; }
+
+.inv-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    padding: 1.1rem 1.25rem .75rem;
+    border-bottom: 1px solid var(--border-color);
+    flex-wrap: wrap;
+}
+.inv-card-name { font-size: 1.05rem; font-weight: 700; color: var(--text-primary); }
+.inv-card-ref  { font-size: .8rem; color: var(--text-muted); margin-top: .15rem; }
+.inv-card-badges { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+
+.inv-card-body { padding: 1rem 1.25rem; }
+
+.inv-info-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: .75rem 1.5rem;
+    margin-bottom: 1rem;
+}
+@media (max-width: 600px) { .inv-info-grid { grid-template-columns: repeat(2, 1fr); } }
+
+.inv-info-item  { display: flex; flex-direction: column; gap: .15rem; }
+.inv-info-label { font-size: .78rem; color: var(--text-secondary); }
+.inv-info-value { font-size: .95rem; font-weight: 600; color: var(--text-primary); }
+.inv-amount     { color: var(--accent-blue)  !important; }
+.inv-profit     { color: var(--accent-green) !important; }
+.inv-total      { color: var(--accent-cyan)  !important; }
+
+.inv-account-row {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    padding: .75rem 1rem;
+    background: var(--bg-surface);
+    border-radius: 10px;
+    margin-bottom: .75rem;
+    flex-wrap: wrap;
+}
+.inv-account-label { font-size: .75rem; color: var(--text-muted); display: block; }
+.inv-account-name  { font-size: .9rem; font-weight: 600; color: var(--text-primary); }
+.inv-account-arrow { color: var(--text-muted); font-size: 1.2rem; }
+
+.inv-dates-row {
+    display: flex;
+    gap: 1.5rem;
+    font-size: .85rem;
+    color: var(--text-secondary);
+    margin-bottom: .75rem;
+    flex-wrap: wrap;
+}
+
+.inv-progress-wrap {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+}
+.inv-progress-bar {
+    flex: 1;
+    height: 6px;
+    background: var(--bg-surface);
+    border-radius: 3px;
+    overflow: hidden;
+}
+.inv-progress-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width .5s ease;
+}
+.inv-progress-label { font-size: .78rem; color: var(--text-muted); white-space: nowrap; }
+
+.inv-actions {
+    display: flex;
+    gap: .75rem;
+    padding: .85rem 1.25rem;
+    border-top: 1px solid var(--border-color);
+    background: var(--bg-surface);
+    flex-wrap: wrap;
+}
+
+/* ── بادجات ────────────────────────────────────────────────── */
+.inv-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    padding: .3rem .7rem;
+    border-radius: 20px;
+    font-size: .78rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+.inv-badge-red    { background: rgba(239,68,68,.15);  color: var(--accent-red); }
+.inv-badge-orange { background: rgba(245,158,11,.15); color: var(--accent-orange); }
+.inv-badge-green  { background: rgba(34,197,94,.15);  color: var(--accent-green); }
+.inv-badge-blue   { background: rgba(59,130,246,.15); color: var(--accent-blue); }
+.inv-badge-gray   { background: var(--bg-surface);    color: var(--text-muted); }
+
+.inv-days      { font-size: .82rem; color: var(--text-secondary); padding: .2rem .6rem; background: var(--bg-surface); border-radius: 10px; }
+.inv-days-red  { color: var(--accent-red); background: rgba(239,68,68,.1); }
+
+/* ── حالة فارغة ────────────────────────────────────────────── */
+.inv-empty {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: var(--text-secondary);
+}
+.inv-empty-icon { font-size: 3rem; margin-bottom: 1rem; }
+.inv-empty-text { font-size: 1rem; margin-bottom: 1.25rem; }
+
+/* ── مودال الإغلاق ─────────────────────────────────────────── */
+.inv-mature-summary {
+    background: var(--bg-surface);
+    border-radius: 12px;
+    padding: 1.25rem;
+    border: 1px solid var(--border-color);
+}
+.inv-mature-row {
+    display: flex;
+    justify-content: space-between;
+    padding: .6rem 0;
+    border-bottom: 1px solid var(--border-color);
+    font-size: .95rem;
+}
+.inv-mature-row:last-child { border-bottom: none; }
+.inv-mature-total {
+    margin-top: .25rem;
+    padding-top: .75rem;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--accent-green);
+}
+
+/* ── مودال الإلغاء ─────────────────────────────────────────── */
+.inv-cancel-warning {
+    display: flex;
+    gap: 1rem;
+    align-items: flex-start;
+    background: rgba(239,68,68,.08);
+    border: 1px solid rgba(239,68,68,.25);
+    border-radius: 10px;
+    padding: 1rem 1.25rem;
+    color: var(--text-primary);
+    font-size: .95rem;
+    line-height: 1.6;
+}
+.inv-cancel-icon { font-size: 1.75rem; flex-shrink: 0; }
+
+/* ── تفاصيل الوديعة ─────────────────────────────────────────── */
+.inv-detail-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: .75rem 1.5rem;
+    background: var(--bg-surface);
+    border-radius: 12px;
+    padding: 1.25rem;
+    margin-bottom: 1rem;
+}
+@media (max-width: 500px) { .inv-detail-grid { grid-template-columns: 1fr; } }
+.inv-detail-item { display: flex; flex-direction: column; gap: .2rem; }
+.inv-detail-item span { font-size: .78rem; color: var(--text-secondary); }
+.inv-detail-item strong { font-size: .95rem; color: var(--text-primary); }

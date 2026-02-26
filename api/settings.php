@@ -32,12 +32,14 @@ try {
             $input = json_decode(file_get_contents('php://input'), true);
             $conn = db();
             
-            $name = $conn->real_escape_string($input['name']);
-            $email = $conn->real_escape_string($input['email'] ?? '');
-            $phone = $conn->real_escape_string($input['phone'] ?? '');
-            $role = $conn->real_escape_string($input['role']);
+            $name        = $conn->real_escape_string($input['name']);
+            $email       = $conn->real_escape_string($input['email'] ?? '');
+            $phone       = $conn->real_escape_string($input['phone'] ?? '');
+            $role        = $conn->real_escape_string($input['role']);
+            $supervisorId = !empty($input['supervisor_id']) ? (int)$input['supervisor_id'] : 'NULL';
             
-            $sql = "INSERT INTO employees (name, email, phone, role) VALUES ('$name', '$email', '$phone', '$role')";
+            $sql = "INSERT INTO employees (name, email, phone, role, supervisor_id)
+                    VALUES ('$name', '$email', '$phone', '$role', $supervisorId)";
             
             if ($conn->query($sql)) {
                 jsonResponse(['success' => true, 'message' => 'تم إضافة الموظف', 'id' => $conn->insert_id]);
@@ -55,13 +57,17 @@ try {
             $input = json_decode(file_get_contents('php://input'), true);
             $conn = db();
             
-            $id = (int)$input['id'];
-            $name = $conn->real_escape_string($input['name']);
-            $email = $conn->real_escape_string($input['email'] ?? '');
-            $phone = $conn->real_escape_string($input['phone'] ?? '');
-            $role = $conn->real_escape_string($input['role']);
+            $id          = (int)$input['id'];
+            $name        = $conn->real_escape_string($input['name']);
+            $email       = $conn->real_escape_string($input['email'] ?? '');
+            $phone       = $conn->real_escape_string($input['phone'] ?? '');
+            $role        = $conn->real_escape_string($input['role']);
+            $supervisorId = !empty($input['supervisor_id']) ? (int)$input['supervisor_id'] : 'NULL';
             
-            $sql = "UPDATE employees SET name='$name', email='$email', phone='$phone', role='$role' WHERE id=$id";
+            $sql = "UPDATE employees
+                    SET name='$name', email='$email', phone='$phone',
+                        role='$role', supervisor_id=$supervisorId
+                    WHERE id=$id";
             
             if ($conn->query($sql)) {
                 jsonResponse(['success' => true, 'message' => 'تم تحديث الموظف']);
@@ -272,6 +278,161 @@ try {
             jsonResponse(['success' => true, 'data' => $stats]);
             break;
         
+
+        // ══════════════════════════════════════════════════════
+        //  نظام الصلاحيات
+        // ══════════════════════════════════════════════════════
+
+        // ── إنشاء الجداول إذا لم تكن موجودة (يُنفَّذ تلقائياً) ──
+        case 'init_permissions':
+        case 'get_employee_permissions':
+        case 'save_employee_permissions':
+
+            $conn = db();
+
+            // تأكد من وجود عمود permission_level
+            $chkCol = $conn->query("SHOW COLUMNS FROM employees LIKE 'permission_level'");
+            if (!$chkCol || $chkCol->num_rows === 0) {
+                $conn->query("ALTER TABLE employees
+                    ADD COLUMN permission_level ENUM('system_admin','manager','employee')
+                        NOT NULL DEFAULT 'employee' AFTER role,
+                    ADD COLUMN can_delete TINYINT(1) NOT NULL DEFAULT 0 AFTER permission_level");
+                // مدير النظام role=admin → system_admin
+                $conn->query("UPDATE employees SET permission_level='system_admin', can_delete=1 WHERE role='admin'");
+            }
+
+            // تأكد من وجود جدول الصلاحيات
+            $chkTbl = $conn->query("SHOW TABLES LIKE 'employee_page_permissions'");
+            if (!$chkTbl || $chkTbl->num_rows === 0) {
+                $conn->query("CREATE TABLE employee_page_permissions (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    employee_id INT NOT NULL,
+                    page VARCHAR(50) NOT NULL,
+                    can_access TINYINT(1) NOT NULL DEFAULT 1,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    UNIQUE KEY uq_emp_page (employee_id, page),
+                    FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+            }
+
+            if ($action === 'init_permissions') {
+                jsonResponse(['success' => true, 'message' => 'تم تهيئة جداول الصلاحيات']);
+                break;
+            }
+
+            // ── GET: جلب صلاحيات موظف ────────────────────────
+            if ($action === 'get_employee_permissions') {
+                $empId = (int)($_GET['employee_id'] ?? 0);
+                if (!$empId) {
+                    jsonResponse(['success' => false, 'error' => 'employee_id مطلوب']);
+                    break;
+                }
+
+                $r = $conn->query("SELECT permission_level, can_delete FROM employees WHERE id=$empId LIMIT 1");
+                if (!$r || !($emp = $r->fetch_assoc())) {
+                    jsonResponse(['success' => false, 'error' => 'موظف غير موجود']);
+                    break;
+                }
+
+                $allPages = ['dashboard','transactions','correspondence','bank-deposits','sla','performance','settings','notifications'];
+                $pages    = [];
+
+                if ($emp['permission_level'] === 'system_admin') {
+                    foreach ($allPages as $p) $pages[$p] = true;
+                } else {
+                    // قراءة الصلاحيات المخزنة
+                    $r2 = $conn->query("SELECT page, can_access FROM employee_page_permissions WHERE employee_id=$empId");
+                    $stored = [];
+                    if ($r2) { while ($row = $r2->fetch_assoc()) $stored[$row['page']] = (bool)$row['can_access']; }
+
+                    // الافتراضيات حسب المستوى
+                    $defaults = [
+                        'manager'  => ['dashboard'=>1,'transactions'=>1,'correspondence'=>1,'bank-deposits'=>1,'sla'=>1,'performance'=>1,'settings'=>0,'notifications'=>1],
+                        'employee' => ['dashboard'=>0,'transactions'=>1,'correspondence'=>1,'bank-deposits'=>1,'sla'=>0,'performance'=>0,'settings'=>0,'notifications'=>1],
+                    ];
+                    $def = $defaults[$emp['permission_level']] ?? [];
+
+                    foreach ($allPages as $p) {
+                        if (isset($stored[$p]))    $pages[$p] = $stored[$p];
+                        elseif (isset($def[$p]))   $pages[$p] = (bool)$def[$p];
+                        else                       $pages[$p] = false;
+                    }
+                }
+
+                // جلب overrides الإجراءات
+                $actionOverrides = [];
+                $chkAct = $conn->query("SHOW TABLES LIKE 'employee_action_permissions'");
+                if ($chkAct && $chkAct->num_rows > 0) {
+                    $ra = $conn->query("SELECT action, can_do FROM employee_action_permissions WHERE employee_id=$empId");
+                    if ($ra) { while ($row = $ra->fetch_assoc()) $actionOverrides[$row['action']] = (bool)$row['can_do']; }
+                }
+
+                jsonResponse(['success' => true, 'data' => [
+                    'permission_level'    => $emp['permission_level'],
+                    'can_delete'          => (bool)$emp['can_delete'],
+                    'pages'               => $pages,
+                    'action_permissions'  => $actionOverrides,
+                ]]);
+                break;
+            }
+
+            // ── POST: حفظ صلاحيات موظف ───────────────────────
+            if ($action === 'save_employee_permissions') {
+                $body  = json_decode(file_get_contents('php://input'), true) ?? [];
+                $empId = (int)($body['employee_id'] ?? 0);
+
+                if (!$empId) {
+                    jsonResponse(['success' => false, 'error' => 'employee_id مطلوب']);
+                    break;
+                }
+
+                $level     = $conn->real_escape_string($body['permission_level'] ?? 'employee');
+                $canDelete = !empty($body['can_delete']) ? 1 : 0;
+
+                // تحديث جدول الموظفين
+                $conn->query("UPDATE employees
+                    SET permission_level='$level', can_delete=$canDelete
+                    WHERE id=$empId");
+
+                // تحديث جدول الصلاحيات
+                if (isset($body['pages']) && is_array($body['pages'])) {
+                    $conn->query("DELETE FROM employee_page_permissions WHERE employee_id=$empId");
+                    foreach ($body['pages'] as $page => $access) {
+                        $page   = $conn->real_escape_string($page);
+                        $access = $access ? 1 : 0;
+                        $conn->query("INSERT INTO employee_page_permissions (employee_id, page, can_access)
+                            VALUES ($empId, '$page', $access)
+                            ON DUPLICATE KEY UPDATE can_access=$access");
+                    }
+                }
+
+                // حفظ overrides الإجراءات
+                if (isset($body['action_permissions']) && is_array($body['action_permissions'])) {
+                    // تأكد من وجود الجدول
+                    $conn->query("CREATE TABLE IF NOT EXISTS employee_action_permissions (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        employee_id INT NOT NULL,
+                        action VARCHAR(80) NOT NULL,
+                        can_do TINYINT(1) NOT NULL DEFAULT 1,
+                        UNIQUE KEY uq_emp_action (employee_id, action),
+                        FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+                    $conn->query("DELETE FROM employee_action_permissions WHERE employee_id=$empId");
+                    foreach ($body['action_permissions'] as $action => $allow) {
+                        $action = $conn->real_escape_string($action);
+                        $allow  = $allow ? 1 : 0;
+                        $conn->query("INSERT INTO employee_action_permissions (employee_id, action, can_do)
+                            VALUES ($empId, '$action', $allow)
+                            ON DUPLICATE KEY UPDATE can_do=$allow");
+                    }
+                }
+
+                jsonResponse(['success' => true, 'message' => 'تم حفظ الصلاحيات']);
+                break;
+            }
+            break;
+
         default:
             jsonResponse(['success' => false, 'message' => 'إجراء غير معروف'], 400);
     }

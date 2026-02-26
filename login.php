@@ -100,15 +100,15 @@ if (isset($_SESSION['user_id'])) {
     }
 
     .logo-icon {
-        width: 80px;
-        height: 80px;
+        width: 60px;
+        height: 60px;
         background: var(--btn-primary-bg);
         border-radius: 20px;
         display: flex;
         align-items: center;
         justify-content: center;
         font-size: 2.5rem;
-        margin: 0 auto 1rem;
+        margin: 0 auto;
         color: var(--btn-primary-text);
         box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.2);
     }
@@ -181,7 +181,7 @@ if (isset($_SESSION['user_id'])) {
         background: rgba(64, 192, 87, 0.1);
         border: 1px solid rgba(64, 192, 87, 0.3);
         border-radius: 12px;
-        padding: 1rem;
+        padding: 0.5rem;
         margin-bottom: 1.5rem;
         animation: slideIn 0.3s ease;
     }

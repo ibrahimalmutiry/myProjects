@@ -1,0 +1,1488 @@
+/**
+ * ═══════════════════════════════════════════════════════
+ *  نظام الودائع البنكية — CSS المُعاد تصميمه
+ *  Bank Deposits System — Redesigned Styles
+ * ═══════════════════════════════════════════════════════
+ */
+
+/* ════════════════════════════════════════════════════════
+   هيكل الصفحة الرئيسي
+   ════════════════════════════════════════════════════════ */
+.bank-page {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    padding: 1.5rem;
+    animation: pageIn 0.4s ease;
+}
+
+@keyframes pageIn {
+    from {
+        opacity: 0;
+        transform: translateY(16px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ─── رأس الصفحة ────────────────────────────────────── */
+.bank-page-header {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.bank-page-title {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.bank-page-icon {
+    width: 52px;
+    height: 52px;
+    background: linear-gradient(135deg, #0ea5e9, #0284c7);
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.6rem;
+    box-shadow: 0 4px 14px rgba(14, 165, 233, 0.35);
+    flex-shrink: 0;
+}
+
+.bank-page-title h1 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.bank-page-subtitle {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    margin: 0;
+}
+
+/* ─── شريط التنبيهات ────────────────────────────────── */
+.deposit-alerts-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    background: rgba(var(--bg-secondary-rgb, 30, 41, 59), 0.8);
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+}
+
+.alert-item {
+    font-size: 0.82rem;
+    font-weight: 600;
+    padding: 0.35rem 0.75rem;
+    border-radius: 20px;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.alert-overdue {
+    background: rgba(239, 68, 68, 0.12);
+    color: #ef4444;
+    border: 1px solid rgba(239, 68, 68, 0.25);
+    animation: pulse-red 2s infinite;
+}
+
+.alert-today {
+    background: rgba(245, 158, 11, 0.12);
+    color: #f59e0b;
+    border: 1px solid rgba(245, 158, 11, 0.25);
+}
+
+.alert-soon {
+    background: rgba(14, 165, 233, 0.12);
+    color: #0ea5e9;
+    border: 1px solid rgba(14, 165, 233, 0.2);
+}
+
+@keyframes pulse-red {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.65;
+    }
+}
+
+/* ─── الإحصاءات السريعة ─────────────────────────────── */
+.bank-quick-stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
+}
+
+.quick-stat-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    padding: 1.1rem 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    transition: transform 0.25s, box-shadow 0.25s;
+    position: relative;
+    overflow: hidden;
+}
+
+.quick-stat-card::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+}
+
+.qsc-blue::after {
+    background: linear-gradient(90deg, #0ea5e9, #38bdf8);
+}
+
+.qsc-green::after {
+    background: linear-gradient(90deg, #22c55e, #4ade80);
+}
+
+.qsc-orange::after {
+    background: linear-gradient(90deg, #f59e0b, #fbbf24);
+}
+
+.qsc-teal::after {
+    background: linear-gradient(90deg, #14b8a6, #2dd4bf);
+}
+
+.quick-stat-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.qsc-icon {
+    font-size: 1.5rem;
+    line-height: 1;
+}
+
+.qsc-value {
+    font-size: 1.3rem;
+    font-weight: 800;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+    direction: ltr;
+    text-align: right;
+}
+
+.qsc-label {
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.loading-pulse {
+    min-height: 90px;
+    animation: loadingShimmer 1.4s ease infinite;
+    background: linear-gradient(90deg,
+            var(--bg-secondary) 25%,
+            var(--border-color) 50%,
+            var(--bg-secondary) 75%);
+    background-size: 200%;
+}
+
+@keyframes loadingShimmer {
+    0% {
+        background-position: 200% center;
+    }
+
+    100% {
+        background-position: -200% center;
+    }
+}
+
+/* ════════════════════════════════════════════════════════
+   تبويبات البنوك
+   ════════════════════════════════════════════════════════ */
+.bank-tabs-nav {
+    display: flex;
+    gap: 0.25rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    padding: 0.35rem;
+    width: fit-content;
+}
+
+.bank-tab-btn {
+    padding: 0.55rem 1.1rem;
+    border: none;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    transition: all 0.22s ease;
+    white-space: nowrap;
+}
+
+.bank-tab-btn:hover {
+    background: var(--bg-tertiary, rgba(255, 255, 255, 0.05));
+    color: var(--text-primary);
+}
+
+.bank-tab-btn.active {
+    background: var(--accent-blue, #0ea5e9);
+    color: #fff;
+    box-shadow: 0 2px 10px rgba(14, 165, 233, 0.35);
+}
+
+.bank-tab-icon {
+    font-size: 1rem;
+}
+
+.tab-badge {
+    background: rgba(255, 255, 255, 0.25);
+    color: #fff;
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 0.1rem 0.45rem;
+    border-radius: 10px;
+    min-width: 18px;
+    text-align: center;
+}
+
+.bank-tab-btn:not(.active) .tab-badge {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+}
+
+/* ─── لوحات التبويب ─────────────────────────────────── */
+.bank-tab-panels {
+    width: 100%;
+}
+
+.bank-tab-panel {
+    display: none;
+    animation: panelIn 0.3s ease;
+}
+
+.bank-tab-panel.active {
+    display: block;
+}
+
+@keyframes panelIn {
+    from {
+        opacity: 0;
+        transform: translateX(-8px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+/* ════════════════════════════════════════════════════════
+   كتلة القسم
+   ════════════════════════════════════════════════════════ */
+.section-block {
+    /* background: var(--bg-secondary); */
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    padding: 1.5rem;
+    margin-bottom: 1.25rem;
+}
+
+.section-block-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.25rem;
+}
+
+.section-block-header h3 {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.btn-add {
+    padding: 0.5rem 1rem;
+    background: var(--accent-blue, #0ea5e9);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+}
+
+.btn-add:hover {
+    filter: brightness(1.1);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(14, 165, 233, 0.3);
+}
+
+/* ════════════════════════════════════════════════════════
+   بطاقات الحسابات (نظرة عامة)
+   ════════════════════════════════════════════════════════ */
+.accounts-overview-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 1rem;
+}
+
+.account-overview-card {
+    background: var(--bg-card, var(--bg-tertiary));
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    padding: 1.1rem;
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.25s, box-shadow 0.25s;
+}
+
+.account-overview-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: 0;
+    height: 4px;
+    border-radius: 14px 14px 0 0;
+}
+
+.account-trend-up::before {
+    background: linear-gradient(90deg, #22c55e, #4ade80);
+}
+
+.account-trend-down::before {
+    background: linear-gradient(90deg, #ef4444, #f87171);
+}
+
+.account-overview-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+    border-color: var(--accent-blue, #0ea5e9);
+}
+
+.account-card-bank {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 0.3rem;
+}
+
+.account-card-name {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 0.2rem;
+}
+
+.account-card-number {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    font-family: 'Courier New', monospace;
+    margin-bottom: 0.8rem;
+}
+
+.account-card-balance {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 0.7rem;
+    margin-bottom: 0.6rem;
+}
+
+.balance-label {
+    display: block;
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    margin-bottom: 0.2rem;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+
+.balance-value {
+    display: block;
+    font-size: 1.15rem;
+    font-weight: 800;
+    color: var(--accent-blue, #0ea5e9);
+    direction: ltr;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.balance-currency {
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    display: block;
+    text-align: right;
+}
+
+.account-card-trend {
+    font-size: 0.72rem;
+    font-weight: 700;
+    margin-bottom: 0.4rem;
+}
+
+.trend-positive {
+    color: #22c55e;
+}
+
+.trend-negative {
+    color: #ef4444;
+}
+
+.account-card-type {
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    padding: 0.2rem 0.6rem;
+    background: var(--bg-secondary);
+    border-radius: 20px;
+    display: inline-block;
+    border: 1px solid var(--border-color);
+}
+
+/* ════════════════════════════════════════════════════════
+   قائمة الودائع الأخيرة
+   ════════════════════════════════════════════════════════ */
+.deposits-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.deposit-list-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.85rem 1rem;
+    border-radius: 10px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-card, var(--bg-tertiary));
+    transition: border-color 0.2s;
+}
+
+.deposit-list-item:hover {
+    border-color: var(--accent-blue, #0ea5e9);
+}
+
+.deposit-item-left {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.deposit-item-icon {
+    font-size: 1.2rem;
+}
+
+.deposit-item-number {
+    font-weight: 700;
+    font-size: 0.875rem;
+    color: var(--text-primary);
+}
+
+.deposit-item-meta {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-top: 0.15rem;
+}
+
+.deposit-item-amount {
+    font-size: 1rem;
+    font-weight: 800;
+    color: #22c55e;
+    direction: ltr;
+    text-align: right;
+}
+
+.deposit-item-type {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    text-align: right;
+    margin-top: 0.2rem;
+}
+
+/* ════════════════════════════════════════════════════════
+   التايم لاين
+   ════════════════════════════════════════════════════════ */
+.deposit-timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+.timeline-item {
+    display: flex;
+    grid-template-columns: 52px 28px 1fr auto;
+    gap: 0;
+    align-items: start;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.timeline-item:last-child {
+    border-bottom: none;
+}
+
+.timeline-date {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding-top: 0.2rem;
+}
+
+.tl-day {
+    font-size: 1.2rem;
+    font-weight: 800;
+    color: var(--text-primary);
+    line-height: 1;
+}
+
+.tl-month {
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    font-weight: 600;
+}
+
+.timeline-connector {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding-top: 0.4rem;
+    position: relative;
+}
+
+.tl-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 2px solid var(--border-color);
+    background: var(--bg-secondary);
+    position: relative;
+    z-index: 1;
+    flex-shrink: 0;
+}
+
+.tl-dot.urgency-overdue {
+    background: #ef4444;
+    border-color: #ef4444;
+}
+
+.tl-dot.urgency-today {
+    background: #f59e0b;
+    border-color: #f59e0b;
+    box-shadow: 0 0 8px rgba(245, 158, 11, 0.5);
+}
+
+.tl-dot.urgency-soon {
+    background: #0ea5e9;
+    border-color: #0ea5e9;
+}
+
+.tl-dot.urgency-normal {
+    background: var(--text-muted);
+    border-color: var(--border-color);
+}
+
+.timeline-content {
+    padding: 0 1rem;
+}
+
+.tl-label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    margin-bottom: 0.2rem;
+    padding: 0.1rem 0.5rem;
+    border-radius: 10px;
+    display: inline-block;
+}
+
+.tl-label.overdue {
+    background: rgba(239, 68, 68, 0.1);
+    color: #ef4444;
+}
+
+.tl-label.today {
+    background: rgba(245, 158, 11, 0.1);
+    color: #f59e0b;
+}
+
+.tl-label.soon {
+    background: rgba(14, 165, 233, 0.1);
+    color: #0ea5e9;
+}
+
+.tl-label.normal {
+    background: var(--bg-tertiary, rgba(255, 255, 255, 0.05));
+    color: var(--text-secondary);
+}
+
+.tl-name {
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.tl-amount {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #22c55e;
+    direction: ltr;
+}
+
+.tl-account {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+
+.timeline-actions {
+    padding-top: 0.2rem;
+}
+
+.btn-confirm-small {
+    padding: 0.35rem 0.65rem;
+    background: rgba(34, 197, 94, 0.12);
+    color: #22c55e;
+    border: 1px solid rgba(34, 197, 94, 0.25);
+    border-radius: 6px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s;
+}
+
+.btn-confirm-small:hover {
+    background: #22c55e;
+    color: #fff;
+}
+
+/* ════════════════════════════════════════════════════════
+   جدول الودائع
+   ════════════════════════════════════════════════════════ */
+.deposits-filters {
+    display: flex;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+}
+
+.filter-input,
+.filter-select {
+    padding: 0.55rem 0.9rem;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--bg-card, var(--bg-tertiary));
+    color: var(--text-primary);
+    font-size: 0.85rem;
+    transition: border-color 0.2s;
+}
+
+.filter-input {
+    flex: 1;
+    min-width: 200px;
+}
+
+.filter-input:focus,
+.filter-select:focus {
+    outline: none;
+    border-color: var(--accent-blue, #0ea5e9);
+}
+
+.table-wrapper {
+    overflow-x: auto;
+    border-radius: 10px;
+    border: 1px solid var(--border-color);
+}
+
+.deposits-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+}
+
+.deposits-table thead {
+    background: var(--bg-card, var(--bg-tertiary));
+    border-bottom: 2px solid var(--border-color);
+}
+
+.deposits-table th {
+    padding: 0.75rem 1rem;
+    text-align: right;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    white-space: nowrap;
+}
+
+.deposits-table td {
+    padding: 0.8rem 1rem;
+    border-bottom: 1px solid var(--border-color);
+    color: var(--text-primary);
+    vertical-align: middle;
+}
+
+.deposits-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.deposits-table tbody tr {
+    transition: background 0.15s;
+}
+
+.deposits-table tbody tr:hover {
+    background: rgba(14, 165, 233, 0.04);
+}
+
+.dep-number {
+    font-family: 'Courier New', monospace;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.dep-account-name {
+    font-weight: 600;
+}
+
+.dep-bank-name {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+
+.deposit-type-badge {
+    padding: 0.2rem 0.6rem;
+    background: var(--bg-tertiary, rgba(255, 255, 255, 0.06));
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.dep-amount {
+    font-weight: 800;
+    color: #22c55e;
+    direction: ltr;
+    text-align: right;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.dep-actions {
+    display: flex;
+    gap: 0.4rem;
+    justify-content: flex-end;
+}
+
+.btn-icon-sm {
+    width: 30px;
+    height: 30px;
+    border-radius: 7px;
+    border: 1px solid var(--border-color);
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 0.85rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.btn-icon-sm:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+.btn-icon-sm.btn-success {
+    border-color: rgba(34, 197, 94, 0.3);
+    color: #22c55e;
+}
+
+.btn-icon-sm.btn-success:hover {
+    background: #22c55e;
+    color: #fff;
+    border-color: #22c55e;
+}
+
+/* ─── حالات الصفوف ──────────────────────────────────── */
+.row-pending {}
+
+.row-confirmed {
+    opacity: 0.7;
+}
+
+.empty-row {
+    text-align: center;
+    padding: 2.5rem !important;
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+/* ─── شارات الحالة ──────────────────────────────────── */
+.status-badge {
+    padding: 0.25rem 0.7rem;
+    border-radius: 20px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    display: inline-block;
+    white-space: nowrap;
+}
+
+.status-pending {
+    background: rgba(245, 158, 11, 0.1);
+    color: #f59e0b;
+    border: 1px solid rgba(245, 158, 11, 0.25);
+}
+
+.status-confirmed {
+    background: rgba(34, 197, 94, 0.1);
+    color: #22c55e;
+    border: 1px solid rgba(34, 197, 94, 0.25);
+}
+
+.status-cancelled {
+    background: rgba(239, 68, 68, 0.1);
+    color: #ef4444;
+    border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+.status-active {
+    background: rgba(34, 197, 94, 0.1);
+    color: #22c55e;
+    border: 1px solid rgba(34, 197, 94, 0.25);
+}
+
+.status-inactive {
+    background: var(--bg-tertiary);
+    color: var(--text-muted);
+    border: 1px solid var(--border-color);
+}
+
+/* ════════════════════════════════════════════════════════
+   ودائع الشهر
+   ════════════════════════════════════════════════════════ */
+.monthly-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.25rem;
+}
+
+.monthly-title {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.monthly-stats-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+}
+
+.monthly-stat {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 1rem 1.25rem;
+    text-align: center;
+}
+
+.ms-value {
+    font-size: 1.4rem;
+    font-weight: 800;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}
+
+.ms-label {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-top: 0.25rem;
+}
+
+.ms-received .ms-value {
+    color: #22c55e;
+}
+
+.ms-done .ms-value {
+    color: #0ea5e9;
+}
+
+/* ─── شريط التقدم ───────────────────────────────────── */
+.progress-section {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.25rem;
+}
+
+.progress-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.6rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.progress-pct {
+    font-size: 1rem;
+    font-weight: 800;
+    color: #0ea5e9;
+}
+
+.progress-bar-track {
+    height: 10px;
+    background: var(--bg-tertiary, rgba(255, 255, 255, 0.06));
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1px solid var(--border-color);
+}
+
+.progress-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #0ea5e9, #22c55e);
+    border-radius: 10px;
+    transition: width 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+    min-width: 2px;
+}
+
+/* ─── تقويم الودائع ─────────────────────────────────── */
+.deposit-calendar {
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+.cal-header {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 0.25rem;
+    margin-bottom: 0.4rem;
+}
+
+.cal-day-name {
+    text-align: center;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    padding: 0.3rem 0;
+}
+
+.cal-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 0.25rem;
+}
+
+.cal-cell {
+    aspect-ratio: 1;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: default;
+    transition: all 0.15s;
+    position: relative;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.cal-cell.cal-empty {
+    visibility: hidden;
+}
+
+.cal-today {
+    border-color: var(--accent-blue, #0ea5e9);
+    background: rgba(14, 165, 233, 0.08);
+    color: var(--accent-blue, #0ea5e9);
+}
+
+.cal-has-deposit {
+    background: rgba(245, 158, 11, 0.1);
+    border-color: rgba(245, 158, 11, 0.3);
+    cursor: pointer;
+}
+
+.cal-has-deposit:hover {
+    background: rgba(245, 158, 11, 0.2);
+    transform: scale(1.08);
+}
+
+.cal-done {
+    background: rgba(34, 197, 94, 0.08);
+    border-color: rgba(34, 197, 94, 0.25);
+    color: #22c55e;
+}
+
+.cal-dep-dot {
+    position: absolute;
+    bottom: 2px;
+    right: 50%;
+    transform: translateX(50%);
+    background: #f59e0b;
+    color: #fff;
+    font-size: 0.55rem;
+    font-weight: 800;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.cal-done .cal-dep-dot {
+    background: #22c55e;
+}
+
+.cal-day-num {
+    font-size: 0.82rem;
+}
+
+/* ─── بطاقات الودائع المجدولة ───────────────────────── */
+.monthly-deposits-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 1rem;
+}
+
+.monthly-dep-card {
+    background: var(--bg-card, var(--bg-tertiary));
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    padding: 1.1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    transition: transform 0.2s, box-shadow 0.2s;
+    position: relative;
+}
+
+.monthly-dep-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.1);
+}
+
+.mdc-done {
+    opacity: 0.65;
+    border-color: rgba(34, 197, 94, 0.3);
+}
+
+.mdc-late {
+    border-color: rgba(239, 68, 68, 0.4);
+    background: rgba(239, 68, 68, 0.03);
+}
+
+.mdc-today {
+    border-color: rgba(245, 158, 11, 0.4);
+    background: rgba(245, 158, 11, 0.04);
+}
+
+.mdc-soon {
+    border-color: rgba(14, 165, 233, 0.35);
+}
+
+.mdc-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.mdc-status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.mdc-done .mdc-status-dot {
+    background: #22c55e;
+}
+
+.mdc-late .mdc-status-dot {
+    background: #ef4444;
+    animation: pulse-red 1.5s infinite;
+}
+
+.mdc-today .mdc-status-dot {
+    background: #f59e0b;
+    animation: pulse-orange 1.5s infinite;
+}
+
+.mdc-soon .mdc-status-dot {
+    background: #0ea5e9;
+}
+
+@keyframes pulse-orange {
+
+    0%,
+    100% {
+        box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4);
+    }
+
+    50% {
+        box-shadow: 0 0 0 5px rgba(245, 158, 11, 0);
+    }
+}
+
+.mdc-status-label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+}
+
+.mdc-late .mdc-status-label {
+    color: #ef4444;
+}
+
+.mdc-today .mdc-status-label {
+    color: #f59e0b;
+}
+
+.mdc-name {
+    font-weight: 700;
+    font-size: 0.9rem;
+    color: var(--text-primary);
+}
+
+.mdc-amount {
+    font-size: 1.1rem;
+    font-weight: 800;
+    color: #22c55e;
+    direction: ltr;
+    text-align: right;
+}
+
+.mdc-account {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+.mdc-notes {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+.mdc-actions {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    margin-top: 0.25rem;
+}
+
+.btn-confirm-dep {
+    flex: 1;
+    padding: 0.45rem 0.75rem;
+    background: rgba(34, 197, 94, 0.1);
+    color: #22c55e;
+    border: 1px solid rgba(34, 197, 94, 0.25);
+    border-radius: 8px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-confirm-dep:hover {
+    background: #22c55e;
+    color: #fff;
+}
+
+.btn-del-dep {
+    width: 30px;
+    height: 30px;
+    background: transparent;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    flex-shrink: 0;
+}
+
+.btn-del-dep:hover {
+    background: rgba(239, 68, 68, 0.1);
+    border-color: rgba(239, 68, 68, 0.3);
+}
+
+.mdc-done-label {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: #22c55e;
+    padding: 0.4rem 0.75rem;
+}
+
+/* ════════════════════════════════════════════════════════
+   المودالات — النماذج
+   ════════════════════════════════════════════════════════ */
+.modal-form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+}
+
+.modal-form-grid .full-span {
+    grid-column: 1 / -1;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.form-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.form-input {
+    padding: 0.65rem 0.9rem;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--bg-card, var(--bg-tertiary));
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    font-family: inherit;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.form-input:focus {
+    outline: none;
+    border-color: var(--accent-blue, #0ea5e9);
+    box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.12);
+}
+
+textarea.form-input {
+    resize: vertical;
+    min-height: 70px;
+}
+
+/* ─── صندوق التنبيه الذكي ───────────────────────────── */
+.smart-alert-box {
+    display: flex;
+    gap: 0.75rem;
+    padding: 0.9rem 1rem;
+    background: rgba(14, 165, 233, 0.07);
+    border: 1px solid rgba(14, 165, 233, 0.2);
+    border-radius: 10px;
+    margin-bottom: 1rem;
+}
+
+.alert-box-icon {
+    font-size: 1.3rem;
+    flex-shrink: 0;
+}
+
+.smart-alert-box strong {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 0.25rem;
+}
+
+.smart-alert-box p {
+    margin: 0;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+
+/* ─── تفاصيل الإيداع ────────────────────────────────── */
+.deposit-details-view {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.ddv-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.6rem 0.75rem;
+    border-radius: 8px;
+    background: var(--bg-card, var(--bg-tertiary));
+    border: 1px solid var(--border-color);
+    font-size: 0.875rem;
+}
+
+.ddv-row span {
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+}
+
+.ddv-row strong {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.dep-amount-lg {
+    font-size: 1.2rem;
+    font-weight: 800;
+    color: #22c55e;
+}
+
+.ddv-row.full {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.4rem;
+}
+
+.ddv-row.full p {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 0.85rem;
+    line-height: 1.5;
+}
+
+/* ─── ودائع اليوم في المودال ────────────────────────── */
+.day-deposits-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.day-dep-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.65rem 0.9rem;
+    background: var(--bg-card, var(--bg-tertiary));
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    font-size: 0.875rem;
+}
+
+.dep-status-sm {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+
+/* ─── حالة فارغة ────────────────────────────────────── */
+.empty-state-sm {
+    text-align: center;
+    padding: 2rem;
+    color: var(--text-muted);
+    font-size: 0.875rem;
+    font-style: italic;
+}
+
+.empty-card {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 2rem;
+    color: var(--text-muted);
+    font-style: italic;
+    background: var(--bg-tertiary, rgba(255, 255, 255, 0.03));
+    border-radius: 12px;
+    border: 1px dashed var(--border-color);
+}
+
+/* ════════════════════════════════════════════════════════
+   Responsive
+   ════════════════════════════════════════════════════════ */
+@media (max-width: 1100px) {
+    .bank-quick-stats {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .monthly-stats-row {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 768px) {
+    .bank-page {
+        padding: 1rem;
+    }
+
+    .bank-quick-stats {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .monthly-stats-row {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .modal-form-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .bank-tabs-nav {
+        flex-wrap: wrap;
+        width: 100%;
+    }
+
+    .accounts-overview-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .monthly-deposits-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .deposits-filters {
+        flex-direction: column;
+    }
+
+    .filter-input {
+        min-width: unset;
+    }
+
+    .timeline-item {
+        grid-template-columns: 44px 22px 1fr auto;
+    }
+}
+
+@media (max-width: 480px) {
+    .bank-quick-stats {
+        grid-template-columns: 1fr;
+    }
+
+    .monthly-stats-row {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .qsc-value {
+        font-size: 1.05rem;
+    }
+}

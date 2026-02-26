@@ -158,7 +158,7 @@
     background: var(--bg-surface);
     border: 1px solid var(--border-color);
     border-radius: 10px;
-    padding: 1.25rem;
+    padding: 0.80rem;
     margin-bottom: 1rem;
     transition: all 0.3s ease;
     position: relative;
@@ -444,7 +444,7 @@
     grid-template-columns: repeat(4, 1fr);
     gap: 1rem;
     animation: slideDown 0.3s ease;
-
+    margin: 1.5rem;
 }
 
 /* ===== تنسيقات إضافية خاصة بالخطابات ===== */
