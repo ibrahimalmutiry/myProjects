@@ -196,6 +196,49 @@ try {
             }
             break;
 
+        // ─── مرحلة الفرز (dispatch) ────────────────────────────
+
+        // جلب قائمة انتظار الفرز
+        case 'dispatch_queue':
+            require_once __DIR__ . '/../includes/dispatch_functions.php';
+            $filters = [
+                'dispatch_type' => $_GET['dispatch_type'] ?? '',
+            ];
+            jsonResponse(['success' => true, 'data' => getDispatchQueue($filters)]);
+            break;
+
+        // جلب بيانات dispatch لمعاملة واحدة
+        case 'dispatch_get':
+            require_once __DIR__ . '/../includes/dispatch_functions.php';
+            $id = (int)($_GET['id'] ?? 0);
+            jsonResponse(['success' => true, 'data' => getDispatchData($id)]);
+            break;
+
+        // حفظ قرار الفرز
+        case 'dispatch_save':
+            if ($method !== 'POST') jsonResponse(['success' => false, 'message' => 'طريقة غير صحيحة'], 405);
+            require_once __DIR__ . '/../includes/dispatch_functions.php';
+            $input        = json_decode(file_get_contents('php://input'), true);
+            $txId         = (int)($input['transaction_id'] ?? 0);
+            $dispatchType = $input['dispatch_type'] ?? 'to_payment';
+            $routedTo     = $input['routed_to'] ?? '';
+            $notes        = $input['notes'] ?? '';
+            $empId        = (int)($_SESSION['user_id'] ?? 0);
+            if ($txId <= 0) jsonResponse(['success' => false, 'message' => 'معرف غير صالح'], 400);
+            jsonResponse(saveDispatch($txId, $empId, $dispatchType, $routedTo, $notes));
+            break;
+
+        // استئناف للدفع بعد عودة أمر الشراء
+        case 'dispatch_resume':
+            if ($method !== 'POST') jsonResponse(['success' => false, 'message' => 'طريقة غير صحيحة'], 405);
+            require_once __DIR__ . '/../includes/dispatch_functions.php';
+            $input  = json_decode(file_get_contents('php://input'), true);
+            $txId   = (int)($input['transaction_id'] ?? 0);
+            $notes  = $input['notes'] ?? '';
+            $empId  = (int)($_SESSION['user_id'] ?? 0);
+            jsonResponse(resumeDispatchToPayment($txId, $empId, $notes));
+            break;
+
         // ─── تحديث بيانات الدفع ────────────────────────────────
         case 'update_payment':
             if ($method !== 'POST') {
@@ -306,34 +349,46 @@ try {
             jsonResponse(['success' => true, 'data' => $events]);
             break;
 
-        // ─── الإشعارات ─────────────────────────────────────────
+        // ─── الإشعارات (SLA/OLA مخصصة لكل موظف) ──────────────────
         case 'notifications':
-            $limit         = (int)($_GET['limit'] ?? 20);
-            $notifications = getRecentNotifications($limit);
-            $unread        = 0;
-            foreach ($notifications as $n) {
-                if (!isset($n['is_read']) || !$n['is_read']) $unread++;
-            }
+            require_once __DIR__ . '/../includes/notification_functions.php';
+            $limit  = (int)($_GET['limit'] ?? 50);
+            $userId = (int)($_SESSION['user_id'] ?? 0);
+
+            // إشعارات SLA للمستخدم الحالي
+            $slaNotifs = $userId ? getSlaNotificationsForUser($userId, $limit) : [];
+
+            // إشعارات المعاملات القديمة (للتوافق — آخر 10 فقط)
+            $txNotifs = getRecentNotifications(10);
+
+            // دمج مع أولوية SLA
+            $all = array_merge($slaNotifs, $txNotifs);
+            usort($all, fn($a,$b) => strtotime($b['update_time'] ?? $b['created_at'] ?? 0)
+                                   - strtotime($a['update_time'] ?? $a['created_at'] ?? 0));
+
+            $unread = count(array_filter($all, fn($n) => !($n['is_read'] ?? false)));
             jsonResponse([
                 'success'      => true,
-                'data'         => $notifications,
-                'unread_count' => $unread
+                'data'         => array_slice($all, 0, $limit),
+                'unread_count' => $unread,
             ]);
             break;
 
         // ─── تحديد إشعار كمقروء ────────────────────────────────
         case 'mark_notification_read':
-            $data   = json_decode(file_get_contents('php://input'), true);
-            $notifId = (int)($data['notification_id'] ?? 0);
-            // UPDATE notifications SET is_read = 1 WHERE id = $notifId
+            require_once __DIR__ . '/../includes/notification_functions.php';
+            $data    = json_decode(file_get_contents('php://input'), true);
+            $notifId = (int)($data['notification_id'] ?? $data['id'] ?? 0);
+            $userId  = (int)$_SESSION['user_id'];
+            markNotificationRead($notifId, $userId);
             jsonResponse(['success' => true]);
             break;
 
         // ─── تحديد الكل كمقروء ─────────────────────────────────
-      case 'mark_all_notifications_read':
+        case 'mark_all_notifications_read':
+            require_once __DIR__ . '/../includes/notification_functions.php';
             $userId = (int)$_SESSION['user_id'];
-            $conn   = db();
-            $conn->query("UPDATE system_notifications SET is_read=1, read_at=NOW() WHERE user_id=$userId AND is_read=0");
+            markAllNotificationsRead($userId);
             jsonResponse(['success' => true]);
             break;
 
@@ -723,16 +778,9 @@ try {
             jsonResponse(['success' => true, 'data' => checkTransactionSla($id)]);
             break;
 
-        case 'sla_timeline':
-            $data = getTransactionTimeline((int)($_GET['id']??0));
-            jsonResponse(['success'=>true,'data'=>$data]);
-            break;
 
-        case 'sla_advanced_stats':
-            $data = getSlaAdvancedStats($_GET);
-            jsonResponse(['success'=>true,'data'=>$data]);
-            break;
-            
+      
+      
       
             // ═══════════════════════════════════════════════════════
         //  APIs الإشعارات ونظام الإعدادات

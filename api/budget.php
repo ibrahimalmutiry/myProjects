@@ -52,13 +52,22 @@ try {
                        e.name  AS requested_by_name,
                        eb.name AS budget_employee_name,
                        COALESCE(s.name, br.supplier_name_manual) AS supplier_name,
-                       t.transaction_number
+                       t.transaction_number,
+                       dd.dispatch_type,
+                       dd.routed_to,
+                       dd.status       AS dispatch_status,
+                       dd.ola_active   AS dispatch_ola_active,
+                       dd.dispatched_at,
+                       dd.notes        AS dispatch_notes,
+                       ed.name         AS dispatch_employee_name
                 FROM budget_reservations br
                 LEFT JOIN departments  d  ON br.department_id      = d.id
                 LEFT JOIN employees    e  ON br.requested_by       = e.id
                 LEFT JOIN employees    eb ON br.budget_employee_id = eb.id
                 LEFT JOIN suppliers    s  ON br.supplier_id        = s.id
                 LEFT JOIN transactions t  ON br.transaction_id     = t.id
+                LEFT JOIN dispatch_data dd ON t.id = dd.transaction_id
+                LEFT JOIN employees    ed ON dd.employee_id        = ed.id
                 $wSql
                 ORDER BY br.created_at DESC
                 LIMIT 200
@@ -199,6 +208,10 @@ try {
                         budget_status = VALUES(budget_status),
                         notes         = VALUES(notes),
                         review_date   = VALUES(review_date)");
+
+                // ✅ تحديث OLA — تسجيل وقت المرحلة حسب الحالة الجديدة
+                // هذا يضمن أن اعتماد الحجز يُسجَّل في stage_times تماماً كما لو تم من صفحة المعاملات
+                recordStageTimeFromLastUpdate($txId, 'budget', $userId, $newStatus);
             }
 
             logReservation($conn, $id, $userId, 'review', $oldSt, $newStatus, $budgetNotes);

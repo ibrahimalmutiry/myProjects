@@ -156,73 +156,84 @@ async function loadNotifications(dropdown) {
     }
 }
 
-// عرض الإشعارات (فقط غير المقروءة) - بدون onclick في HTML
+// عرض الإشعارات — SLA/OLA مخصصة لكل موظف
 function renderNotifications(dropdown) {
-    const unreadNotifications = notificationsData.filter(n => !n.is_read);
+    const unread = notificationsData.filter(n => !n.is_read);
 
-    let html = '<div class="notif-header">';
-    html += '<h4>الإشعارات</h4>';
-    html += '<button class="mark-all-read">تعيين الكل كمقروء</button>';
-    html += '</div>';
+    // أيقونات حسب نوع الإشعار
+    const catIcon = {
+        'ola_warning': '⚠️', 'ola_breach': '🔴',
+        'sla_warning': '⚠️', 'sla_breach': '🚨',
+        'manual_escalation': '🔔',
+    };
+    const catColor = {
+        'ola_warning': 'var(--accent-orange)', 'ola_breach': 'var(--accent-red)',
+        'sla_warning': 'var(--accent-orange)', 'sla_breach': 'var(--accent-red)',
+        'manual_escalation': 'var(--accent-blue)',
+    };
+    const stageNames = { receiving: 'الاستلام', budget: 'الموازنة', payment: 'الدفع', invoice: 'الفوترة', sla_total: 'SLA الكلي' };
 
-    html += '<div class="notif-list">';
+    let html = `<div class="notif-header">
+        <h4>الإشعارات <span style="font-size:.8rem;color:var(--text-muted);font-weight:400">(${unread.length} غير مقروء)</span></h4>
+        <button class="mark-all-read">تعيين الكل كمقروء</button>
+    </div><div class="notif-list">`;
 
-    if (unreadNotifications.length > 0) {
-        const stageNames = {
-            'receiving': 'الاستلام',
-            'budget': 'الموازنة',
-            'payment': 'الدفع',
-            'invoice': 'الفوترة'
-        };
+    if (unread.length > 0) {
+        unread.forEach(n => {
+            const isSla = n.category && catIcon[n.category];
+            const icon = isSla ? catIcon[n.category] : '📋';
+            const color = isSla ? (catColor[n.category] || 'var(--text-muted)') : 'var(--text-muted)';
+            const time = formatTimeAgo(n.update_time || n.created_at);
+            const txNum = n.transaction_number || n.ref_number || '—';
+            const stage = n.stage || '';
+            const stageLbl = n.stage_label || stageNames[stage] || stage;
+            const catLbl = n.category_label || n.title || 'إشعار';
+            const desc = n.message || (n.transaction_type ? `${n.transaction_type} — ${n.status || ''}` : '');
+            const empName = n.employee_name ? `👤 ${n.employee_name}` : '';
+            const isEscalation = ['ola_breach', 'sla_breach', 'manual_escalation'].includes(n.category);
 
-        unreadNotifications.forEach(notification => {
-            const stageName = stageNames[notification.stage] || notification.stage;
-            const timeAgo = formatTimeAgo(notification.update_time);
-            const stage = notification.stage || 'receiving';
-            const notifId = notification.id;
-
-            // لاحظ: لا يوجد onclick في HTML
             html += `
-            <div class="notif-item unread" data-notif-id="${notifId}">
+            <div class="notif-item unread" data-notif-id="${n.id}"
+                 style="border-right:3px solid ${color}">
                 <div class="notif-card-content">
-                    <div class="notif-icon ${stage}">
-                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-                            ${getStageIconSVG(stage)}
-                        </svg>
-                    </div>
+                    <div class="notif-icon" style="background:${color}18;color:${color};font-size:1.1rem;
+                         width:36px;height:36px;display:flex;align-items:center;justify-content:center;
+                         border-radius:8px;flex-shrink:0">${icon}</div>
                     <div class="notif-content">
-                        <div class="notif-title">
-                            <span class="notif-number">${notification.transaction_number || 'TX-0000'}</span>
+                        <div class="notif-title" style="color:${color};font-weight:700;font-size:.85rem">${catLbl}</div>
+                        <div style="font-weight:600;font-size:.88rem;color:var(--text-primary);margin:.2rem 0">
+                            معاملة: ${txNum}${stageLbl ? ' — ' + stageLbl : ''}
                         </div>
-                        <div class="notif-desc">
-                            ${notification.transaction_type || 'معاملة'} - ${notification.status || 'تحديث'}
-                            ${notification.employee_name ? '<br><small style="color: var(--text-muted);">👤 ' + notification.employee_name + '</small>' : ''}
-                        </div>
-                        <div class="notif-meta">
-                            <div class="notif-time">${timeAgo}</div>
-                            <span class="stage-badge ${stage}">${stageName}</span>
+                        ${desc ? `<div class="notif-desc" style="font-size:.78rem">${desc}</div>` : ''}
+                        ${empName ? `<div style="font-size:.75rem;color:var(--text-muted);margin-top:.2rem">${empName}</div>` : ''}
+                        ${isEscalation && n.transaction_id ? `
+                        <button onclick="event.stopPropagation();openSlaDetailModal(${n.transaction_id})"
+                            style="margin-top:.4rem;background:${color};color:#fff;border:none;
+                                   border-radius:5px;padding:.25rem .6rem;font-size:.75rem;
+                                   cursor:pointer;font-family:inherit">
+                            📊 عرض تفاصيل SLA
+                        </button>` : ''}
+                        <div class="notif-meta" style="margin-top:.35rem">
+                            <div class="notif-time">${time}</div>
                         </div>
                     </div>
                 </div>
             </div>`;
         });
     } else {
-        html += `
-        <div class="notif-empty">
+        html += `<div class="notif-empty">
             <div class="empty-icon">✓</div>
             <p>لا توجد إشعارات جديدة</p>
             <small>جميع الإشعارات قد تم قراءتها</small>
         </div>`;
     }
 
-    html += '</div>';
-    html += '<div class="notif-footer">';
-    html += '<a href="#" class="view-all-link">عرض كل الإشعارات <span class="arrow">‹</span></a>';
-    html += '</div>';
+    html += `</div><div class="notif-footer">
+        <a href="#" class="view-all-link">عرض كل الإشعارات <span class="arrow">‹</span></a>
+    </div>`;
 
     dropdown.innerHTML = html;
 
-    // إضافة event listener لرابط "عرض الكل"
     dropdown.querySelector('.view-all-link')?.addEventListener('click', (e) => {
         e.preventDefault();
         viewAllNotifications();

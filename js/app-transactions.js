@@ -158,128 +158,196 @@ function renderTransactionRows(transactions) {
 
         // صف التفاصيل الموسع
         if (isExpanded) {
-            html += '<tr class="expanded-row">';
-            html += '<td colspan="11" style="padding: 0;">';
+            const dtLabels = { 'to_payment': '⚡ دفع مباشر', 'to_purchase_order': '📋 أمر شراء', 'to_requester': '↩️ جهة طالبة' };
+            const dtColors = { 'to_payment': 'var(--accent-green)', 'to_purchase_order': 'var(--accent-amber)', 'to_requester': 'var(--accent-purple)' };
 
-            // معلومات الإنشاء
-            html += '<div class="creation-info-bar" style="background: var(--bg-surface); padding: 0.75rem 1.5rem; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; gap: 2rem; flex-wrap: wrap;">';
-            html += '<div style="display: flex; align-items: center; gap: 0.5rem;">';
-            html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent-blue)" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="20" y1="8" x2="20" y2="14"></line><line x1="23" y1="11" x2="17" y2="11"></line></svg>';
-            html += '<span style="color: var(--text-muted); font-size: 0.85rem;">أنشئت بواسطة:</span>';
-            html += '<span style="color: var(--text-primary); font-weight: 600;">' + (tx.created_by_name || 'النظام') + '</span>';
-            html += '</div>';
-            html += '<div style="display: flex; align-items: center; gap: 0.5rem;">';
-            html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent-green)" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>';
-            html += '<span style="color: var(--text-muted); font-size: 0.85rem;">وقت الإنشاء:</span>';
-            html += '<span style="color: var(--text-primary); font-weight: 500;">' + formatCreationTime(tx.creation_time) + '</span>';
-            html += '</div>';
-            html += '</div>';
+            // ── دالة مساعدة: صف بيانات ─────────────────────────────
+            const drow = (label, value, style = '') =>
+                `<div class="xrow"><span class="xrow-lbl">${label}</span><span class="xrow-val" ${style ? `style="${style}"` : ''}>${value || '—'}</span></div>`;
 
-            html += '<div class="expanded-content four-columns">';
+            // ── معلومات الإنشاء ─────────────────────────────────────
+            html += `<tr class="expanded-row"><td colspan="11" style="padding:0">`;
+            html += `<div class="xmeta-bar">
+                <span class="xmeta-item">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent-blue)" stroke-width="2">
+                        <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                        <circle cx="8.5" cy="7" r="4"/>
+                        <line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/>
+                    </svg>
+                    أنشئت بواسطة <strong>${tx.created_by_name || 'النظام'}</strong>
+                </span>
+                <span class="xmeta-sep">·</span>
+                <span class="xmeta-item">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent-green)" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                    </svg>
+                    ${formatCreationTime(tx.creation_time)}
+                </span>
+            </div>`;
 
-            // قسم الاستلام
-            html += '<div class="detail-section receiving">';
-            html += '<div class="detail-header green">';
-            html += '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle></svg>';
-            html += ' موظف الاستلام';
-            html += '</div>';
-            html += '<div class="detail-row"><span class="detail-label">الموظف:</span><span class="detail-value">' + (tx.receiver_name || '—') + '</span></div>';
-            html += '<div class="detail-row"><span class="detail-label">التاريخ:</span><span class="detail-value">' + (tx.receive_date || '—') + '</span></div>';
-            html += '<div class="detail-row"><span class="detail-label">الحالة:</span><span class="detail-value">' + getStatusBadge(tx.receive_status) + '</span></div>';
-            html += '<div class="detail-row"><span class="detail-label">ملاحظات:</span><span class="detail-value">' + (tx.receive_notes || '—') + '</span></div>';
-            html += '</div>';
+            // ── pipeline المراحل ────────────────────────────────────
+            html += `<div class="xpipeline">`;
 
-            // قسم الموازنة (جديد)
-            html += '<div class="detail-section budget">';
-            html += '<div class="detail-header cyan">';
-            html += '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>';
-            html += ' موظف الموازنة';
-            html += '</div>';
-            html += '<div class="detail-row"><span class="detail-label">الموظف:</span><span class="detail-value">' + (tx.budget_employee_name || '—') + '</span></div>';
-            html += '<div class="detail-row"><span class="detail-label">التاريخ:</span><span class="detail-value">' + (tx.budget_date || '—') + '</span></div>';
-            html += '<div class="detail-row"><span class="detail-label">رمز الموازنة:</span><span class="detail-value" style="color: var(--accent-cyan); font-family: monospace;">' + (tx.budget_code || '—') + '</span></div>';
-            html += '<div class="detail-row"><span class="detail-label">الحالة:</span><span class="detail-value">' + getStatusBadge(tx.budget_status) + '</span></div>';
-            html += '<div class="detail-row"><span class="detail-label">ملاحظات:</span><span class="detail-value">' + (tx.budget_notes || '—') + '</span></div>';
-            html += '</div>';
+            // مرحلة: الاستلام
+            html += `<div class="xstage xstage-receive">
+                <div class="xstage-head xstage-head-green">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
+                    </svg>
+                    الاستلام
+                    <span class="xstage-badge">${getStatusBadge(tx.receive_status)}</span>
+                </div>
+                <div class="xstage-body">
+                    ${drow('الموظف', tx.receiver_name)}
+                    ${drow('التاريخ', tx.receive_date)}
+                    ${tx.receive_notes ? drow('ملاحظات', tx.receive_notes) : ''}
+                </div>
+            </div>`;
 
-            // قسم الدفع
-            html += '<div class="detail-section payment">';
-            html += '<div class="detail-header orange">';
-            html += '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect><line x1="1" y1="10" x2="23" y2="10"></line></svg>';
-            html += ' موظف الدفع';
-            html += '</div>';
-            html += '<div class="detail-row"><span class="detail-label">الموظف:</span><span class="detail-value">' + (tx.payment_employee_name || '—') + '</span></div>';
-            html += '<div class="detail-row"><span class="detail-label">التاريخ:</span><span class="detail-value">' + (tx.payment_date || '—') + '</span></div>';
-            html += '<div class="detail-row"><span class="detail-label">الطريقة:</span><span class="detail-value">' + (tx.payment_method || '—') + '</span></div>';
-            html += '<div class="detail-row"><span class="detail-label">الحالة:</span><span class="detail-value">' + getStatusBadge(tx.payment_status) + '</span></div>';
-            html += '<div class="detail-row"><span class="detail-label">المرجع:</span><span class="detail-value" style="color: var(--accent-blue); font-family: monospace;">' + (tx.reference_number || '—') + '</span></div>';
-            html += '<div class="detail-row"><span class="detail-label">ملاحظات:</span><span class="detail-value">' + (tx.payment_notes || '—') + '</span></div>';
-            html += '</div>';
+            // مرحلة: الموازنة
+            html += `<div class="xstage xstage-budget">
+                <div class="xstage-head xstage-head-cyan">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
+                        <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+                    </svg>
+                    الموازنة
+                    <span class="xstage-badge">${getStatusBadge(tx.budget_status)}</span>
+                </div>
+                <div class="xstage-body">
+                    ${drow('الموظف', tx.budget_employee_name)}
+                    ${tx.budget_code ? drow('رمز الموازنة', tx.budget_code, 'font-family:monospace;color:var(--accent-cyan)') : ''}
+                    ${drow('التاريخ', tx.budget_date)}
+                    ${tx.budget_notes ? drow('ملاحظات', tx.budget_notes) : ''}
+                </div>
+            </div>`;
 
-            // قسم الفوترة
-            html += '<div class="detail-section invoice">';
-            html += '<div class="detail-header purple">';
-            html += '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>';
-            html += ' موظف الفوترة';
-            html += '</div>';
-            html += '<div class="detail-row"><span class="detail-label">الموظف:</span><span class="detail-value">' + (tx.invoice_employee_name || '—') + '</span></div>';
-            html += '<div class="detail-row"><span class="detail-label">رقم الفاتورة:</span><span class="detail-value" style="color: var(--accent-blue); font-family: monospace;">' + (tx.invoice_number || '—') + '</span></div>';
-            html += '<div class="detail-row"><span class="detail-label">التاريخ:</span><span class="detail-value">' + (tx.invoice_date || '—') + '</span></div>';
-            html += '<div class="detail-row"><span class="detail-label">الحالة:</span><span class="detail-value">' + getStatusBadge(tx.invoice_status) + '</span></div>';
-            html += '<div class="detail-row"><span class="detail-label">التنبيه:</span><span class="detail-value">' + getAlertBadge(tx.alert_type) + '</span></div>';
-            html += '<div class="detail-row"><span class="detail-label">ملاحظات:</span><span class="detail-value">' + (tx.invoice_notes || '—') + '</span></div>';
-            html += '</div>';
+            // مرحلة: التوجيه
+            const hasDispatch = !!tx.dispatch_type;
+            const dispatchPaused = tx.dispatch_ola_active == 0;
+            html += `<div class="xstage xstage-dispatch ${dispatchPaused ? 'xstage-paused' : ''}">
+                <div class="xstage-head xstage-head-indigo">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="17 1 21 5 17 9"/>
+                        <path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+                        <polyline points="7 23 3 19 7 15"/>
+                        <path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+                    </svg>
+                    التوجيه
+                    ${hasDispatch ? `<span class="xstage-badge">${getStatusBadge(tx.dispatch_status)}</span>` : ''}
+                </div>
+                <div class="xstage-body">
+                    ${hasDispatch ? `
+                        ${drow('الموظف', tx.dispatch_employee_name)}
+                        <div class="xrow"><span class="xrow-lbl">المسار</span>
+                            <span class="xrow-val" style="color:${dtColors[tx.dispatch_type] || 'var(--text-muted)'};font-weight:700">
+                                ${dtLabels[tx.dispatch_type] || tx.dispatch_type}
+                            </span>
+                        </div>
+                        ${tx.routed_to ? drow('الجهة', tx.routed_to) : ''}
+                        ${dispatchPaused ? '<div class="xstage-paused-badge">⏸ OLA معلّق</div>' : ''}
+                        ${tx.dispatch_notes ? drow('ملاحظات', tx.dispatch_notes) : ''}
+                    ` : '<div class="xstage-empty">لم يتم التوجيه بعد</div>'}
+                </div>
+            </div>`;
 
-            html += '</div>';
+            // مرحلة: الدفع
+            html += `<div class="xstage xstage-payment">
+                <div class="xstage-head xstage-head-orange">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="1" y="4" width="22" height="16" rx="2"/>
+                        <line x1="1" y1="10" x2="23" y2="10"/>
+                    </svg>
+                    الدفع
+                    <span class="xstage-badge">${getStatusBadge(tx.payment_status)}</span>
+                </div>
+                <div class="xstage-body">
+                    ${drow('الموظف', tx.payment_employee_name)}
+                    ${tx.reference_number ? drow('المرجع', tx.reference_number, 'font-family:monospace;color:var(--accent-blue)') : ''}
+                    ${drow('التاريخ', tx.payment_date)}
+                    ${tx.payment_notes ? drow('ملاحظات', tx.payment_notes) : ''}
+                </div>
+            </div>`;
 
-            // قسم سجل الأحداث (Timeline)
-            html += '<div class="events-timeline-section">';
-            html += '<div class="events-header" onclick="loadTransactionEvents(' + tx.id + ')">';
-            html += '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>';
-            html += ' سجل الأحداث والتغييرات';
-            html += '<span class="events-toggle-icon">▼</span>';
-            html += '</div>';
-            html += '<div id="events-container-' + tx.id + '" class="events-container" style="display: none;"></div>';
-            html += '</div>';
+            // مرحلة: الفوترة
+            html += `<div class="xstage xstage-invoice">
+                <div class="xstage-head xstage-head-purple">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                        <polyline points="14 2 14 8 20 8"/>
+                    </svg>
+                    الفوترة
+                    <span class="xstage-badge">${getStatusBadge(tx.invoice_status)}</span>
+                </div>
+                <div class="xstage-body">
+                    ${drow('الموظف', tx.invoice_employee_name)}
+                    ${tx.invoice_number ? drow('رقم الفاتورة', tx.invoice_number, 'font-family:monospace;color:var(--accent-blue)') : ''}
+                    ${drow('التاريخ', tx.invoice_date)}
+                    ${tx.alert_type ? `<div class="xrow"><span class="xrow-lbl">التنبيه</span><span class="xrow-val">${getAlertBadge(tx.alert_type)}</span></div>` : ''}
+                    ${tx.invoice_notes ? drow('ملاحظات', tx.invoice_notes) : ''}
+                </div>
+            </div>`;
 
-            // قسم المرفقات
-            html += '<div class="attachment-section">';
-            html += '<div class="attachment-header">';
-            html += '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>';
-            html += ' المرفقات';
-            html += '</div>';
+            html += `</div>`; // end xpipeline
 
+            // ── سجل الأحداث ─────────────────────────────────────────
+            html += `<div class="events-timeline-section">
+                <div class="events-header" onclick="loadTransactionEvents(${tx.id})">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                    </svg>
+                    سجل الأحداث والتغييرات
+                    <span class="events-toggle-icon">▼</span>
+                </div>
+                <div id="events-container-${tx.id}" class="events-container" style="display:none"></div>
+            </div>`;
+
+            // ── المرفقات ─────────────────────────────────────────────
+            html += `<div class="attachment-section">
+                <div class="attachment-header">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+                    </svg>
+                    المرفقات
+                </div>`;
             if (tx.attachment) {
-                html += '<div class="attachment-file">';
-                html += '<div class="attachment-info">';
-                html += '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>';
-                html += '<span>' + (tx.attachment_name || 'مستند.pdf') + '</span>';
-                html += '</div>';
-                html += '<div class="attachment-actions">';
-                html += '<button class="btn btn-sm btn-primary" onclick="event.stopPropagation(); openPDF(\'' + tx.attachment + '\')">';
-                html += '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>';
-                html += ' استعراض';
-                html += '</button>';
-                html += '<button class="btn btn-sm btn-danger" onclick="event.stopPropagation(); deleteAttachment(' + tx.id + ')">';
-                html += '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>';
-                html += ' حذف';
-                html += '</button>';
-                html += '</div>';
-                html += '</div>';
+                html += `<div class="attachment-file">
+                    <div class="attachment-info">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                            <polyline points="14 2 14 8 20 8"/>
+                        </svg>
+                        <span>${tx.attachment_name || 'مستند.pdf'}</span>
+                    </div>
+                    <div class="attachment-actions">
+                        <button class="btn btn-sm btn-primary" onclick="event.stopPropagation();openPDF('${tx.attachment}')">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                                <circle cx="12" cy="12" r="3"/>
+                            </svg> استعراض
+                        </button>
+                        <button class="btn btn-sm btn-danger" onclick="event.stopPropagation();deleteAttachment(${tx.id})">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="3 6 5 6 21 6"/>
+                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                            </svg> حذف
+                        </button>
+                    </div>
+                </div>`;
             } else {
-                html += '<div class="no-attachment">';
-                html += '<p>لا يوجد مرفق</p>';
-                html += '<button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); uploadAttachment(' + tx.id + ')">';
-                html += '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>';
-                html += ' رفع ملف PDF';
-                html += '</button>';
-                html += '</div>';
+                html += `<div class="no-attachment">
+                    <p>لا يوجد مرفق</p>
+                    <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation();uploadAttachment(${tx.id})">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="17 8 12 3 7 8"/>
+                            <line x1="12" y1="3" x2="12" y2="15"/>
+                        </svg> رفع ملف PDF
+                    </button>
+                </div>`;
             }
-
-            html += '</div>';
-
-            html += '</td>';
-            html += '</tr>';
+            html += `</div>`; // end attachment-section
+            html += `</td></tr>`;
         }
     }
 
@@ -658,238 +726,347 @@ async function deleteAttachment(transactionId) {
     }
 }
 
-// تعديل معاملة
+// تعديل معاملة — تصميم محترف
 async function editTransaction(id) {
     const tx = App.transactions.find(t => t.id == id);
     if (!tx) return;
-
     App.editingTransaction = tx;
-
-    // الحصول على صلاحية المستخدم
     const userRole = (typeof currentUser !== 'undefined') ? currentUser.role : '';
 
     try {
-        const employeesRes = await fetch('api/?action=employees');
-        const employees = await employeesRes.json();
+        // تحديد الصلاحيات
+        const isAdmin = userRole === 'admin';
+        const showReceive = isAdmin || userRole === 'receiver' || userRole === '';
+        const showBudget = isAdmin || userRole === 'budget' || userRole === '';
+        const showDispatch = isAdmin || userRole === 'dispatch';
+        const showPayment = isAdmin || userRole === 'payment' || userRole === '';
+        const showInvoice = isAdmin || userRole === 'invoice' || userRole === '';
 
-        let receiversOptions = '';
-        let budgetOptions = '';
-        let paymentOptions = '';
-        let invoiceOptions = '';
+        const firstTab = showReceive ? 'receiving'
+            : showBudget ? 'budget'
+                : showDispatch ? 'dispatch'
+                    : showPayment ? 'payment'
+                        : 'invoice';
 
-        if (employees.success) {
-            employees.data.forEach(e => {
-                if (e.role === 'receiver') {
-                    receiversOptions += '<option value="' + e.id + '" ' + (tx.receiver_name === e.name ? 'selected' : '') + '>' + e.name + '</option>';
-                }
-                if (e.role === 'budget') {
-                    budgetOptions += '<option value="' + e.id + '" ' + (tx.budget_employee_name === e.name ? 'selected' : '') + '>' + e.name + '</option>';
-                }
-                if (e.role === 'payment') {
-                    paymentOptions += '<option value="' + e.id + '" ' + (tx.payment_employee_name === e.name ? 'selected' : '') + '>' + e.name + '</option>';
-                }
-                if (e.role === 'invoice') {
-                    invoiceOptions += '<option value="' + e.id + '" ' + (tx.invoice_employee_name === e.name ? 'selected' : '') + '>' + e.name + '</option>';
-                }
-            });
-        }
+        const esc = v => (v || '').toString()
+            .replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+            .replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-        // تحديد التبويبات المرئية حسب الصلاحية
-        const showReceiving = (userRole === 'receiver' || userRole === '' || userRole === 'admin');
-        const showBudget = (userRole === 'budget' || userRole === '' || userRole === 'admin');
-        const showPayment = (userRole === 'payment' || userRole === '' || userRole === 'admin');
-        const showInvoice = (userRole === 'invoice' || userRole === '' || userRole === 'admin');
+        const amount = tx.amount
+            ? Number(tx.amount).toLocaleString('ar-SA', { minimumFractionDigits: 2 }) + ' ر.س'
+            : '—';
 
-        // تحديد التبويب النشط الأول
-        let activeTab = '';
-        if (showReceiving) activeTab = 'receiving';
-        else if (showBudget) activeTab = 'budget';
-        else if (showPayment) activeTab = 'payment';
-        else if (showInvoice) activeTab = 'invoice';
+        // تعريف التبويبات النشطة
+        const tabs = [];
+        if (showReceive) tabs.push({ id: 'receiving', label: 'استلام', icon: '📥', color: 'var(--accent-green)' });
+        if (showBudget) tabs.push({ id: 'budget', label: 'موازنة', icon: '🏦', color: 'var(--accent-cyan)' });
+        if (showDispatch) tabs.push({ id: 'dispatch', label: 'توجيه', icon: '🔀', color: '#818cf8' });
+        if (showPayment) tabs.push({ id: 'payment', label: 'دفع', icon: '💳', color: 'var(--accent-orange)' });
+        if (showInvoice) tabs.push({ id: 'invoice', label: 'فوترة', icon: '🧾', color: 'var(--accent-amber)' });
 
-        DOM.modalTitle.textContent = 'تعديل المعاملة ' + tx.transaction_number;
+        DOM.modalTitle.innerHTML = `<span style="font-size:.85rem;font-weight:500;color:var(--text-muted)">تعديل المعاملة</span>`;
 
-        // بناء التبويبات
-        let tabsHtml = '<div class="modal-tabs">';
-        if (showReceiving) tabsHtml += '<button type="button" class="modal-tab green ' + (activeTab === 'receiving' ? 'active' : '') + '" onclick="switchModalTab(\'receiving\', this)">الاستلام</button>';
-        if (showBudget) tabsHtml += '<button type="button" class="modal-tab cyan ' + (activeTab === 'budget' ? 'active' : '') + '" onclick="switchModalTab(\'budget\', this)">الموازنة</button>';
-        if (showPayment) tabsHtml += '<button type="button" class="modal-tab orange ' + (activeTab === 'payment' ? 'active' : '') + '" onclick="switchModalTab(\'payment\', this)">الدفع</button>';
-        if (showInvoice) tabsHtml += '<button type="button" class="modal-tab purple ' + (activeTab === 'invoice' ? 'active' : '') + '" onclick="switchModalTab(\'invoice\', this)">الفوترة</button>';
-        tabsHtml += '</div>';
+        DOM.modalBody.innerHTML = `
+        <div class="edit-modal-wrap">
 
-        // بناء المحتوى
-        let contentHtml = '';
+          <!-- رأس المعاملة -->
+          <div class="edit-tx-header">
+            <div class="edit-tx-meta">
+              <div class="edit-tx-num">${esc(tx.transaction_number)}</div>
+              <div class="edit-tx-desc">${esc(tx.description || tx.transaction_type || '—')}</div>
+            </div>
+            <div class="edit-tx-amount">${amount}</div>
+          </div>
 
-        // تبويب الاستلام
-        if (showReceiving) {
-            contentHtml += `
-            <div id="tab-receiving" class="tab-content" style="${activeTab === 'receiving' ? '' : 'display: none;'}">
-                <form id="receivingForm" onsubmit="submitUpdateForm(event, 'receiving')">
-                    <input type="hidden" name="transaction_id" value="${tx.id}">
-                    <div class="auto-employee-info">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-                        <span>سيتم تسجيل التحديث باسمك وبالوقت الحالي تلقائياً</span>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">الحالة</label>
-                        <select class="form-select" name="status">
-                            <option value="معلق" ${tx.receive_status === 'معلق' ? 'selected' : ''}>معلق</option>
-                            <option value="مستلم" ${tx.receive_status === 'مستلم' ? 'selected' : ''}>مستلم</option>
-                            <option value="قيد المراجعة" ${tx.receive_status === 'قيد المراجعة' ? 'selected' : ''}>قيد المراجعة</option>
-                            <option value="مرفوض" ${tx.receive_status === 'مرفوض' ? 'selected' : ''}>مرفوض</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">ملاحظات</label>
-                        <textarea class="form-textarea" name="notes">${tx.receive_notes || ''}</textarea>
-                    </div>
-                    <div class="modal-footer" style="padding: 0; border: none; margin-top: 1.5rem;">
-                        <button type="button" class="btn btn-secondary" onclick="closeModal()">إلغاء</button>
-                        <button type="submit" class="btn btn-primary">حفظ التغييرات</button>
-                    </div>
-                </form>
+          <!-- شريط مراحل التقدم -->
+          <div class="edit-stages-bar">
+            ${tabs.map((t, i) => `
+              <div class="edit-stage-step ${t.id === firstTab ? 'active' : ''}"
+                   onclick="editModalSwitchTab('${t.id}')" style="--clr:${t.color}">
+                <div class="edit-stage-dot">${t.icon}</div>
+                <div class="edit-stage-lbl">${t.label}</div>
+              </div>
+              ${i < tabs.length - 1 ? '<div class="edit-stage-line"></div>' : ''}
+            `).join('')}
+          </div>
+
+          <!-- لوحة التبويبات -->
+          <div class="edit-tabs-body">
+
+            ${showReceive ? `
+            <div class="edit-tab-panel ${firstTab === 'receiving' ? 'active' : ''}" data-tab="receiving">
+              <form onsubmit="submitUpdateForm(event,'receiving')">
+                <input type="hidden" name="transaction_id" value="${tx.id}">
+                <div class="edit-auto-badge" style="--c:var(--accent-green)">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 10-16 0"/>
+                  </svg>يُسجَّل التحديث باسمك تلقائياً
+                </div>
+                <div class="edit-field-group">
+                  <label class="edit-field-label">الحالة</label>
+                  <select class="edit-field-select" name="status">
+                    <option value="معلق"         ${tx.receive_status === 'معلق' ? 'selected' : ''}>⏸ معلق</option>
+                    <option value="مستلم"        ${tx.receive_status === 'مستلم' ? 'selected' : ''}>✅ مستلم</option>
+                    <option value="قيد المراجعة" ${tx.receive_status === 'قيد المراجعة' ? 'selected' : ''}>🔄 قيد المراجعة</option>
+                    <option value="مرفوض"        ${tx.receive_status === 'مرفوض' ? 'selected' : ''}>❌ مرفوض</option>
+                  </select>
+                </div>
+                <div class="edit-field-group">
+                  <label class="edit-field-label">ملاحظات</label>
+                  <textarea class="edit-field-textarea" name="notes" placeholder="أضف ملاحظاتك...">${esc(tx.receive_notes)}</textarea>
+                </div>
+                <div class="edit-form-actions">
+                  <button type="button" class="edit-btn-cancel" onclick="closeModal()">إلغاء</button>
+                  <button type="submit" class="edit-btn-save" style="--c:var(--accent-green)">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                    حفظ
+                  </button>
+                </div>
+              </form>
+            </div>` : ''}
+
+            ${showBudget ? `
+            <div class="edit-tab-panel ${firstTab === 'budget' ? 'active' : ''}" data-tab="budget">
+              <form onsubmit="submitUpdateForm(event,'budget')">
+                <input type="hidden" name="transaction_id" value="${tx.id}">
+                <div class="edit-auto-badge" style="--c:var(--accent-cyan)">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 10-16 0"/>
+                  </svg>يُسجَّل التحديث باسمك تلقائياً
+                </div>
+                <div class="edit-field-row">
+                  <div class="edit-field-group">
+                    <label class="edit-field-label">رمز الموازنة</label>
+                    <input class="edit-field-input" name="budget_code" value="${esc(tx.budget_code)}" placeholder="BUD-XXXX">
+                  </div>
+                  <div class="edit-field-group">
+                    <label class="edit-field-label">الحالة</label>
+                    <select class="edit-field-select" name="status">
+                      <option value="معلق"         ${tx.budget_status === 'معلق' ? 'selected' : ''}>⏸ معلق</option>
+                      <option value="قيد المراجعة" ${tx.budget_status === 'قيد المراجعة' ? 'selected' : ''}>🔄 قيد المراجعة</option>
+                      <option value="معتمد"        ${tx.budget_status === 'معتمد' ? 'selected' : ''}>✅ معتمد</option>
+                      <option value="مرفوض"        ${tx.budget_status === 'مرفوض' ? 'selected' : ''}>❌ مرفوض</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="edit-field-group">
+                  <label class="edit-field-label">ملاحظات</label>
+                  <textarea class="edit-field-textarea" name="notes" placeholder="ملاحظات الموازنة...">${esc(tx.budget_notes)}</textarea>
+                </div>
+                <div class="edit-form-actions">
+                  <button type="button" class="edit-btn-cancel" onclick="closeModal()">إلغاء</button>
+                  <button type="submit" class="edit-btn-save" style="--c:var(--accent-cyan)">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                    حفظ
+                  </button>
+                </div>
+              </form>
+            </div>` : ''}
+
+            ${showDispatch ? (() => {
+                const dd = tx.dispatch_data || {};
+                const isRouted = dd.status === 'تم التوجيه' || dd.status === 'مكتمل';
+                const isPaused = dd.ola_active == 0;
+                const dtMap = { 'to_payment': '⚡ دفع مباشر', 'to_purchase_order': '📋 أمر شراء', 'to_requester': '↩️ جهة طالبة' };
+                return `
+            <div class="edit-tab-panel ${firstTab === 'dispatch' ? 'active' : ''}" data-tab="dispatch">
+              ${isRouted ? `<div class="edit-dispatch-done">
+                <span style="font-size:1.4rem">✅</span>
+                <div>
+                  <div style="font-weight:700;color:#818cf8">تم التوجيه</div>
+                  <div style="font-size:.82rem;color:var(--text-muted);margin-top:.15rem">
+                    ${dtMap[dd.dispatch_type] || '—'}${dd.routed_to ? ' — ' + esc(dd.routed_to) : ''}
+                  </div>
+                </div>
+                ${isPaused ? `<button onclick="openResumeDispatchModal(${tx.id})" class="edit-btn-resume">▶️ استئناف</button>` : ''}
+              </div>
+              ${isPaused ? `<div class="edit-ola-paused-banner">⏸️ OLA معلّق — بانتظار عودة أمر الشراء</div>` : ''}` : ''}
+              <form onsubmit="submitDispatch(event,${tx.id})">
+                <input type="hidden" name="transaction_id" value="${tx.id}">
+                <div class="edit-field-group" style="margin-bottom:1.2rem">
+                  <label class="edit-field-label" style="font-weight:700;margin-bottom:.7rem">اختر المسار</label>
+                  <div class="edit-dispatch-options">
+                    <label class="edit-dispatch-opt">
+                      <input type="radio" name="dispatch_type" value="to_payment"
+                        ${(!dd.dispatch_type || dd.dispatch_type === 'to_payment') ? 'checked' : ''}>
+                      <div class="edit-dispatch-card" style="--oc:#818cf8">
+                        <span class="edit-dispatch-emoji">⚡</span>
+                        <strong>دفع مباشر</strong>
+                        <span class="edit-dispatch-sub">OLA يستمر</span>
+                      </div>
+                    </label>
+                    <label class="edit-dispatch-opt">
+                      <input type="radio" name="dispatch_type" value="to_purchase_order"
+                        ${dd.dispatch_type === 'to_purchase_order' ? 'checked' : ''}>
+                      <div class="edit-dispatch-card" style="--oc:#f59e0b">
+                        <span class="edit-dispatch-emoji">📋</span>
+                        <strong>أمر شراء</strong>
+                        <span class="edit-dispatch-sub">OLA يُعلَّق</span>
+                      </div>
+                    </label>
+                    <label class="edit-dispatch-opt">
+                      <input type="radio" name="dispatch_type" value="to_requester"
+                        ${dd.dispatch_type === 'to_requester' ? 'checked' : ''}>
+                      <div class="edit-dispatch-card" style="--oc:#ec4899">
+                        <span class="edit-dispatch-emoji">↩️</span>
+                        <strong>جهة طالبة</strong>
+                        <span class="edit-dispatch-sub">OLA يُعلَّق</span>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+                <div class="edit-field-group">
+                  <label class="edit-field-label">الجهة <span style="font-weight:400;color:var(--text-muted)">(اختياري)</span></label>
+                  <input class="edit-field-input" name="routed_to" value="${esc(dd.routed_to)}" placeholder="سلاسل الإمداد — قسم المشتريات">
+                </div>
+                <div class="edit-field-group">
+                  <label class="edit-field-label">ملاحظات</label>
+                  <textarea class="edit-field-textarea" name="notes" rows="2" placeholder="تعليمات...">${esc(dd.notes)}</textarea>
+                </div>
+                <div class="edit-form-actions">
+                  <button type="button" class="edit-btn-cancel" onclick="closeModal()">إلغاء</button>
+                  <button type="submit" class="edit-btn-save" style="--c:#818cf8">🔀 توجيه</button>
+                </div>
+              </form>
             </div>`;
-        }
+            })() : ''}
 
-        // تبويب الموازنة
-        if (showBudget) {
-            contentHtml += `
-            <div id="tab-budget" class="tab-content" style="${activeTab === 'budget' ? '' : 'display: none;'}">
-                <form id="budgetForm" onsubmit="submitUpdateForm(event, 'budget')">
-                    <input type="hidden" name="transaction_id" value="${tx.id}">
-                    <div class="auto-employee-info">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-                        <span>سيتم تسجيل التحديث باسمك وبالوقت الحالي تلقائياً</span>
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label class="form-label">رمز الموازنة</label>
-                            <input type="text" class="form-input" name="budget_code" value="${tx.budget_code || ''}" placeholder="BUD-XXXX">
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">الحالة</label>
-                            <select class="form-select" name="status">
-                                <option value="معلق" ${tx.budget_status === 'معلق' ? 'selected' : ''}>معلق</option>
-                                <option value="قيد المراجعة" ${tx.budget_status === 'قيد المراجعة' ? 'selected' : ''}>قيد المراجعة</option>
-                                <option value="معتمد" ${tx.budget_status === 'معتمد' ? 'selected' : ''}>معتمد</option>
-                                <option value="مرفوض" ${tx.budget_status === 'مرفوض' ? 'selected' : ''}>مرفوض</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">ملاحظات</label>
-                        <textarea class="form-textarea" name="notes">${tx.budget_notes || ''}</textarea>
-                    </div>
-                    <div class="modal-footer" style="padding: 0; border: none; margin-top: 1.5rem;">
-                        <button type="button" class="btn btn-secondary" onclick="closeModal()">إلغاء</button>
-                        <button type="submit" class="btn btn-primary">حفظ التغييرات</button>
-                    </div>
-                </form>
-            </div>`;
-        }
+            ${showPayment ? `
+            <div class="edit-tab-panel ${firstTab === 'payment' ? 'active' : ''}" data-tab="payment">
+              <form onsubmit="submitUpdateForm(event,'payment')">
+                <input type="hidden" name="transaction_id" value="${tx.id}">
+                <div class="edit-auto-badge" style="--c:var(--accent-orange)">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 10-16 0"/>
+                  </svg>يُسجَّل التحديث باسمك تلقائياً
+                </div>
+                <div class="edit-payment-method-tag">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/>
+                  </svg>طريقة الدفع: تحويل بنكي
+                </div>
+                <div class="edit-field-row">
+                  <div class="edit-field-group">
+                    <label class="edit-field-label">الحالة</label>
+                    <select class="edit-field-select" name="status">
+                      <option value="معلق"         ${tx.payment_status === 'معلق' ? 'selected' : ''}>⏸ معلق</option>
+                      <option value="قيد المعالجة" ${tx.payment_status === 'قيد المعالجة' ? 'selected' : ''}>🔄 قيد المعالجة</option>
+                      <option value="تم الدفع"     ${tx.payment_status === 'تم الدفع' ? 'selected' : ''}>✅ تم الدفع</option>
+                      <option value="مرفوض"        ${tx.payment_status === 'مرفوض' ? 'selected' : ''}>❌ مرفوض</option>
+                    </select>
+                  </div>
+                  <div class="edit-field-group">
+                    <label class="edit-field-label">رقم المرجع</label>
+                    <input class="edit-field-input" name="reference" value="${esc(tx.reference_number)}" placeholder="REF-XXXX">
+                  </div>
+                </div>
+                <div class="edit-field-group">
+                  <label class="edit-field-label">ملاحظات</label>
+                  <textarea class="edit-field-textarea" name="notes" placeholder="ملاحظات الدفع...">${esc(tx.payment_notes)}</textarea>
+                </div>
+                <div class="edit-form-actions">
+                  <button type="button" class="edit-btn-cancel" onclick="closeModal()">إلغاء</button>
+                  <button type="submit" class="edit-btn-save" style="--c:var(--accent-orange)">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                    حفظ
+                  </button>
+                </div>
+              </form>
+            </div>` : ''}
 
-        // تبويب الدفع
-        // تبويب الدفع
-        if (showPayment) {
-            contentHtml += `
-    <div id="tab-payment" class="tab-content" style="${activeTab === 'payment' ? '' : 'display: none;'}">
-        <form id="paymentForm" onsubmit="submitUpdateForm(event, 'payment')">
-            <input type="hidden" name="transaction_id" value="${tx.id}">
-            <div class="auto-employee-info">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-                <span>سيتم تسجيل التحديث باسمك وبالوقت الحالي تلقائياً</span>
-            </div>
-            <div class="payment-method-info" style="background: linear-gradient(135deg, var(--accent-orange), #ff8c00); color: #000; padding: 0.75rem 1rem; border-radius: 8px; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 4H3a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h18a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"></path><path d="M1 10h22"></path></svg>
-                <span><strong>طريقة الدفع:</strong> تحويل بنكي</span>
-            </div>
-            <div class="form-group">
-                <label class="form-label">الحالة</label>
-                <select class="form-select" name="status">
-                    <option value="معلق" ${tx.payment_status === 'معلق' ? 'selected' : ''}>معلق</option>
-                    <option value="قيد المعالجة" ${tx.payment_status === 'قيد المعالجة' ? 'selected' : ''}>قيد المعالجة</option>
-                    <option value="تم الدفع" ${tx.payment_status === 'تم الدفع' ? 'selected' : ''}>تم الدفع</option>
-                    <option value="مرفوض" ${tx.payment_status === 'مرفوض' ? 'selected' : ''}>مرفوض</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label class="form-label">رقم المرجع</label>
-                <input type="text" class="form-input" name="reference" value="${tx.reference_number || ''}" placeholder="REF-XXXX">
-            </div>
-            <div class="form-group">
-                <label class="form-label">ملاحظات</label>
-                <textarea class="form-textarea" name="notes">${tx.payment_notes || ''}</textarea>
-            </div>
-            <div class="modal-footer" style="padding: 0; border: none; margin-top: 1.5rem;">
-                <button type="button" class="btn btn-secondary" onclick="closeModal()">إلغاء</button>
-                <button type="submit" class="btn btn-primary">حفظ التغييرات</button>
-            </div>
-        </form>
-    </div>`;
-        }
+            ${showInvoice ? `
+            <div class="edit-tab-panel ${firstTab === 'invoice' ? 'active' : ''}" data-tab="invoice">
+              <form onsubmit="submitUpdateForm(event,'invoice')">
+                <input type="hidden" name="transaction_id" value="${tx.id}">
+                <div class="edit-auto-badge" style="--c:var(--accent-amber)">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 10-16 0"/>
+                  </svg>يُسجَّل التحديث باسمك تلقائياً
+                </div>
+                <div class="edit-field-row">
+                  <div class="edit-field-group">
+                    <label class="edit-field-label">رقم الفاتورة</label>
+                    <input class="edit-field-input" name="invoice_number" value="${esc(tx.invoice_number)}" placeholder="INV-XXXX">
+                  </div>
+                  <div class="edit-field-group">
+                    <label class="edit-field-label">الحالة</label>
+                    <select class="edit-field-select" name="status">
+                      <option value="">— اختر —</option>
+                      <option value="قيد الإصدار"   ${tx.invoice_status === 'قيد الإصدار' ? 'selected' : ''}>🔄 قيد الإصدار</option>
+                      <option value="صدرت الفاتورة" ${tx.invoice_status === 'صدرت الفاتورة' ? 'selected' : ''}>✅ صدرت الفاتورة</option>
+                      <option value="بدون فاتورة"  ${tx.invoice_status === 'بدون فاتورة' ? 'selected' : ''}>➖ بدون فاتورة</option>
+                      <option value="ملغاة"         ${tx.invoice_status === 'ملغاة' ? 'selected' : ''}>❌ ملغاة</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="edit-field-group">
+                  <label class="edit-field-label">نوع التنبيه</label>
+                  <div class="edit-alert-chips">
+                    <label class="edit-alert-chip" style="--cc:#64748b">
+                      <input type="radio" name="alert_type" value="انتظار"  ${tx.alert_type === 'انتظار' ? 'checked' : ''}>
+                      <span>⏳ انتظار</span>
+                    </label>
+                    <label class="edit-alert-chip" style="--cc:var(--accent-amber)">
+                      <input type="radio" name="alert_type" value="متابعة" ${tx.alert_type === 'متابعة' ? 'checked' : ''}>
+                      <span>⚠️ متابعة</span>
+                    </label>
+                    <label class="edit-alert-chip" style="--cc:var(--accent-red)">
+                      <input type="radio" name="alert_type" value="عاجل"   ${tx.alert_type === 'عاجل' ? 'checked' : ''}>
+                      <span>🔴 عاجل</span>
+                    </label>
+                    <label class="edit-alert-chip" style="--cc:var(--accent-green)">
+                      <input type="radio" name="alert_type" value="مكتمل"  ${tx.alert_type === 'مكتمل' ? 'checked' : ''}>
+                      <span>✅ مكتمل</span>
+                    </label>
+                  </div>
+                </div>
+                <div class="edit-field-group">
+                  <label class="edit-field-label">ملاحظات</label>
+                  <textarea class="edit-field-textarea" name="notes" placeholder="ملاحظات الفوترة...">${esc(tx.invoice_notes)}</textarea>
+                </div>
+                <div class="edit-form-actions">
+                  <button type="button" class="edit-btn-cancel" onclick="closeModal()">إلغاء</button>
+                  <button type="submit" class="edit-btn-save" style="--c:var(--accent-amber)">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                    حفظ
+                  </button>
+                </div>
+              </form>
+            </div>` : ''}
 
-        // تبويب الفوترة
-        if (showInvoice) {
-            contentHtml += `
-            <div id="tab-invoice" class="tab-content" style="${activeTab === 'invoice' ? '' : 'display: none;'}">
-                <form id="invoiceForm" onsubmit="submitUpdateForm(event, 'invoice')">
-                    <input type="hidden" name="transaction_id" value="${tx.id}">
-                    <div class="auto-employee-info">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-                        <span>سيتم تسجيل التحديث باسمك وبالوقت الحالي تلقائياً</span>
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label class="form-label">رقم الفاتورة</label>
-                            <input type="text" class="form-input" name="invoice_number" value="${tx.invoice_number || ''}" placeholder="INV-XXXX">
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">الحالة</label>
-                            <select class="form-select" name="status">
-                                <option value="">اختر الحالة</option>
-                                <option value="صدرت الفاتورة" ${tx.invoice_status === 'صدرت الفاتورة' ? 'selected' : ''}>صدرت الفاتورة</option>
-                                <option value="بدون فاتورة" ${tx.invoice_status === 'بدون فاتورة' ? 'selected' : ''}>بدون فاتورة</option>
-                                <option value="قيد الإصدار" ${tx.invoice_status === 'قيد الإصدار' ? 'selected' : ''}>قيد الإصدار</option>
-                                <option value="ملغاة" ${tx.invoice_status === 'ملغاة' ? 'selected' : ''}>ملغاة</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">نوع التنبيه</label>
-                        <select class="form-select" name="alert_type">
-                            <option value="انتظار" ${tx.alert_type === 'انتظار' ? 'selected' : ''}>⏳ انتظار</option>
-                            <option value="متابعة" ${tx.alert_type === 'متابعة' ? 'selected' : ''}>⚠️ يحتاج متابعة</option>
-                            <option value="عاجل" ${tx.alert_type === 'عاجل' ? 'selected' : ''}>🔴 عاجل</option>
-                            <option value="مكتمل" ${tx.alert_type === 'مكتمل' ? 'selected' : ''}>✅ مكتمل</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">ملاحظات</label>
-                        <textarea class="form-textarea" name="notes">${tx.invoice_notes || ''}</textarea>
-                    </div>
-                    <div class="modal-footer" style="padding: 0; border: none; margin-top: 1.5rem;">
-                        <button type="button" class="btn btn-secondary" onclick="closeModal()">إلغاء</button>
-                        <button type="submit" class="btn btn-primary">حفظ التغييرات</button>
-                    </div>
-                </form>
-            </div>`;
-        }
+          </div>
+        </div>`;
 
-        DOM.modalBody.innerHTML = tabsHtml + contentHtml;
+        // ربط dispatch cards
+        document.querySelectorAll('.edit-dispatch-opt input[type=radio]').forEach(r => {
+            const upd = () => {
+                document.querySelectorAll('.edit-dispatch-card').forEach(c => c.classList.remove('selected'));
+                document.querySelectorAll('.edit-dispatch-opt input:checked').forEach(x =>
+                    x.closest('.edit-dispatch-opt').querySelector('.edit-dispatch-card').classList.add('selected'));
+            };
+            r.addEventListener('change', upd);
+            if (r.checked) upd();
+        });
 
         openModal();
-    } catch (error) {
+    } catch (err) {
         showToast('خطأ في تحميل البيانات', 'error');
+        console.error(err);
     }
 }
 
-// تبديل تبويبات المودال
-function switchModalTab(tab, btn) {
-    document.querySelectorAll('.modal-tab').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
+// تبديل تبويبات النموذج
+window.editModalSwitchTab = function (tabId) {
+    document.querySelectorAll('.edit-tab-panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.edit-stage-step').forEach(s => s.classList.remove('active'));
+    const panel = document.querySelector(`.edit-tab-panel[data-tab="${tabId}"]`);
+    const step = document.querySelector(`.edit-stage-step[onclick*="${tabId}"]`);
+    if (panel) panel.classList.add('active');
+    if (step) step.classList.add('active');
+};
 
-    btn.classList.add('active');
-    document.getElementById('tab-' + tab).style.display = 'block';
+function switchModalTab(tab, btn) {
+    if (typeof editModalSwitchTab === 'function') { editModalSwitchTab(tab); return; }
 }
 
 // إرسال نموذج التحديث
@@ -925,6 +1102,101 @@ async function submitUpdateForm(e, type) {
         }
     } catch (error) {
         showToast('خطأ في الاتصال', 'error');
+    }
+}
+
+// ─── إرسال قرار الفرز ─────────────────────────────────────────
+async function submitDispatch(e, txId) {
+    e.preventDefault();
+    const form = e.target;
+    const formData = new FormData(form);
+    const data = Object.fromEntries(formData.entries());
+    data.transaction_id = txId;
+
+    const btn = form.querySelector('button[type="submit"]');
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ جارٍ التوجيه...'; }
+
+    try {
+        const res = await fetch('api/?action=dispatch_save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        const result = await res.json();
+
+        if (result.success) {
+            const typeLabels = {
+                'to_payment': '⚡ تم التوجيه للدفع المباشر',
+                'to_purchase_order': '📋 تم الإرسال لإصدار أمر الشراء — OLA معلّق',
+                'to_requester': '↩️ تم الإرسال للجهة الطالبة — OLA معلّق',
+            };
+            showToast(typeLabels[result.dispatch_type] || 'تم التوجيه بنجاح', 'success');
+            closeModal();
+            loadTransactions();
+        } else {
+            showToast(result.message || 'خطأ في التوجيه', 'error');
+            if (btn) { btn.disabled = false; btn.textContent = '🔀 توجيه المعاملة'; }
+        }
+    } catch (err) {
+        showToast('خطأ في الاتصال', 'error');
+        if (btn) { btn.disabled = false; btn.textContent = '🔀 توجيه المعاملة'; }
+    }
+}
+
+// ─── استئناف للدفع بعد عودة أمر الشراء ───────────────────────
+function openResumeDispatchModal(txId) {
+    // Modal بسيط لتأكيد الاستئناف
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:1rem';
+    overlay.innerHTML = `
+        <div style="background:var(--bg-card);border-radius:14px;padding:1.5rem;max-width:420px;width:100%;
+                    border:1px solid var(--border);box-shadow:0 20px 60px rgba(0,0,0,.3)">
+            <h3 style="margin:0 0 1rem;font-size:1.05rem">▶️ استئناف المعاملة للدفع</h3>
+            <p style="font-size:.88rem;color:var(--text-muted);margin-bottom:1rem">
+                عند الاستئناف سيُعاد تشغيل OLA وتنتقل المعاملة لمرحلة الدفع
+            </p>
+            <div class="form-group" style="margin-bottom:1rem">
+                <label class="form-label">ملاحظات الاستئناف</label>
+                <textarea id="resumeNotes" class="form-textarea" rows="2"
+                          placeholder="مثال: وصل أمر الشراء رقم PO-2025-001"></textarea>
+            </div>
+            <div style="display:flex;gap:.5rem;justify-content:flex-end">
+                <button onclick="this.closest('[style*=fixed]').remove()"
+                        class="btn btn-secondary">إلغاء</button>
+                <button onclick="confirmResumeDispatch(${txId}, this)"
+                        class="btn btn-primary" style="background:#6366f1;border-color:#6366f1">
+                    ▶️ استئناف
+                </button>
+            </div>
+        </div>`;
+    document.body.appendChild(overlay);
+}
+
+async function confirmResumeDispatch(txId, btn) {
+    const notes = document.getElementById('resumeNotes')?.value || '';
+    btn.disabled = true;
+    btn.textContent = '⏳...';
+    try {
+        const res = await fetch('api/?action=dispatch_resume', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ transaction_id: txId, notes })
+        });
+        const result = await res.json();
+        if (result.success) {
+            btn.closest('[style*="position:fixed"]')?.remove();
+            showToast('✅ تم استئناف المعاملة للدفع', 'success');
+            closeModal();
+            loadTransactions();
+        } else {
+            showToast(result.message || 'خطأ', 'error');
+            btn.disabled = false;
+            btn.textContent = '▶️ استئناف';
+        }
+    } catch (err) {
+        showToast('خطأ في الاتصال', 'error');
+        btn.disabled = false;
+        btn.textContent = '▶️ استئناف';
     }
 }
 

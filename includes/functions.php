@@ -79,6 +79,15 @@ function ensureViewExists() {
         b.notes as budget_notes,
         eb.name as budget_employee_name,
         
+        d.status         as dispatch_status,
+        d.dispatch_type,
+        d.routed_to,
+        d.notes          as dispatch_notes,
+        d.ola_active     as dispatch_ola_active,
+        d.ola_paused_at  as dispatch_paused_at,
+        d.dispatched_at,
+        ed.name          as dispatch_employee_name,
+        
         p.status as payment_status,
         p.payment_date,
         p.payment_method,
@@ -96,16 +105,18 @@ function ensureViewExists() {
         t.created_at,
         t.updated_at
     FROM transactions t
-    LEFT JOIN transaction_types tt ON t.type_id = tt.id
-    LEFT JOIN employees ec ON t.created_by = ec.id
-    LEFT JOIN receiving_data r ON t.id = r.transaction_id
-    LEFT JOIN employees er ON r.employee_id = er.id
-    LEFT JOIN budget_data b ON t.id = b.transaction_id
-    LEFT JOIN employees eb ON b.employee_id = eb.id
-    LEFT JOIN payment_data p ON t.id = p.transaction_id
-    LEFT JOIN employees ep ON p.employee_id = ep.id
-    LEFT JOIN invoice_data i ON t.id = i.transaction_id
-    LEFT JOIN employees ei ON i.employee_id = ei.id
+    LEFT JOIN transaction_types tt ON t.type_id   = tt.id
+    LEFT JOIN employees ec         ON t.created_by = ec.id
+    LEFT JOIN receiving_data r     ON t.id = r.transaction_id
+    LEFT JOIN employees er         ON r.employee_id = er.id
+    LEFT JOIN budget_data b        ON t.id = b.transaction_id
+    LEFT JOIN employees eb         ON b.employee_id = eb.id
+    LEFT JOIN dispatch_data d      ON t.id = d.transaction_id
+    LEFT JOIN employees ed         ON d.employee_id = ed.id
+    LEFT JOIN payment_data p       ON t.id = p.transaction_id
+    LEFT JOIN employees ep         ON p.employee_id = ep.id
+    LEFT JOIN invoice_data i       ON t.id = i.transaction_id
+    LEFT JOIN employees ei         ON i.employee_id = ei.id
     ";
     
     return $conn->query($sql);
@@ -854,7 +865,7 @@ function ensureStageTimesTable() {
             CREATE TABLE IF NOT EXISTS stage_times (
                 id INT PRIMARY KEY AUTO_INCREMENT,
                 transaction_id INT NOT NULL,
-                stage ENUM('creation', 'receiving', 'budget', 'payment', 'invoice') NOT NULL,
+                stage ENUM('creation', 'receiving', 'budget', 'dispatch', 'payment', 'invoice') NOT NULL,
                 employee_id INT,
                 started_at DATETIME COMMENT 'وقت وصول المعاملة للمرحلة (بداية الانتظار)',
                 received_at DATETIME DEFAULT NULL COMMENT 'وقت الاستلام الفعلي (بداية OLA)',
@@ -871,11 +882,11 @@ function ensureStageTimesTable() {
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         ");
     } else {
-        // التأكد من وجود قيمة 'creation' في ENUM
+        // التأكد من وجود dispatch في ENUM
         $result = $conn->query("SHOW COLUMNS FROM stage_times WHERE Field = 'stage'");
         if ($result && $row = $result->fetch_assoc()) {
-            if (strpos($row['Type'], 'creation') === false) {
-                $conn->query("ALTER TABLE stage_times MODIFY COLUMN stage ENUM('creation', 'receiving', 'budget', 'payment', 'invoice') NOT NULL");
+            if (strpos($row['Type'], 'dispatch') === false) {
+                $conn->query("ALTER TABLE stage_times MODIFY COLUMN stage ENUM('creation', 'receiving', 'budget', 'dispatch', 'payment', 'invoice') NOT NULL");
             }
         }
         // إضافة الأعمدة الجديدة إن لم تكن موجودة
@@ -1236,7 +1247,8 @@ function recordStageTimeFromLastUpdate($transactionId, $stage, $employeeId, $sta
     $receivedStatuses = [
         'receiving' => ['مستلم'],
         'budget'    => ['قيد المراجعة'],
-        'payment'   => ['قيد المراجعة'],
+        'dispatch'  => ['قيد المراجعة'],
+        'payment'   => ['قيد المعالجة'],
         'invoice'   => ['قيد الإصدار'],
     ];
     // حالة "اكتمال" لكل مرحلة
@@ -1244,6 +1256,7 @@ function recordStageTimeFromLastUpdate($transactionId, $stage, $employeeId, $sta
         'creation'  => ['تم الإنشاء'],
         'receiving' => ['مستلم'],
         'budget'    => ['معتمد'],
+        'dispatch'  => ['تم التوجيه', 'مكتمل'],
         'payment'   => ['تم الدفع'],
         'invoice'   => ['صدرت الفاتورة', 'مكتمل'],
     ];
@@ -1335,11 +1348,12 @@ function recordStageTimeFromLastUpdate($transactionId, $stage, $employeeId, $sta
  */
 function getNextStage($currentStage) {
     $stages = [
-        'creation' => 'receiving',
-        'receiving' => 'budget', 
-        'budget' => 'payment', 
-        'payment' => 'invoice', 
-        'invoice' => null
+        'creation'  => 'receiving',
+        'receiving' => 'budget',
+        'budget'    => 'dispatch',   // بعد الموازنة → فرز مدير الحسابات
+        'dispatch'  => 'payment',    // بعد الفرز المباشر → دفع
+        'payment'   => 'invoice',
+        'invoice'   => null
     ];
     return $stages[$currentStage] ?? null;
 }
@@ -1356,15 +1370,15 @@ function startNextStage($transactionId, $stage, $startTime) {
     $result = $conn->query("SELECT id FROM stage_times WHERE transaction_id = $transactionId AND stage = '$stage'");
     
     if ($result && $result->num_rows > 0) {
-        // ✅ سجّل started_at و received_at معاً — OLA يبدأ فوراً
+        // سجّل started_at فقط — received_at يُسجَّل لاحقاً عندما يستلم الموظف فعلياً
         $conn->query("UPDATE stage_times
-                      SET started_at  = COALESCE(started_at, '$startTime'),
-                          received_at = COALESCE(received_at, '$startTime')
+                      SET started_at = COALESCE(started_at, '$startTime'),
+                          status     = COALESCE(NULLIF(status,''), 'في الانتظار')
                       WHERE transaction_id = $transactionId AND stage = '$stage'");
     } else {
-        // ✅ أضف received_at من البداية
-        $conn->query("INSERT INTO stage_times (transaction_id, stage, started_at, received_at, status)
-                      VALUES ($transactionId, '$stage', '$startTime', '$startTime', 'في الانتظار')");
+        // سجّل المرحلة الجديدة بدون received_at — OLA لم يبدأ بعد
+        $conn->query("INSERT INTO stage_times (transaction_id, stage, started_at, status)
+                      VALUES ($transactionId, '$stage', '$startTime', 'في الانتظار')");
     }
 }
 

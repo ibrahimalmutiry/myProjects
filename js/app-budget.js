@@ -637,6 +637,41 @@ async function openReservationDetails(id) {
                         ${r.budget_notes ? `<div class="res-drow"><span>ملاحظات</span><span>${r.budget_notes}</span></div>` : ''}
                         ${r.rejection_reason ? `<div class="res-drow" style="color:#ef4444"><span>سبب الرفض</span><span>${r.rejection_reason}</span></div>` : ''}
                     </div>
+
+                    ${(() => {
+                const dtLabels = { 'to_payment': '⚡ دفع مباشر', 'to_purchase_order': '📋 أمر شراء / تعميد', 'to_requester': '↩️ جهة طالبة' };
+                const dtColors = { 'to_payment': 'var(--accent-green)', 'to_purchase_order': 'var(--accent-amber)', 'to_requester': 'var(--accent-purple)' };
+                const hasDispatch = !!r.dispatch_type;
+                const isPaused = r.dispatch_ola_active == 0;
+                const label = dtLabels[r.dispatch_type] || '—';
+                const color = dtColors[r.dispatch_type] || 'var(--text-muted)';
+                return `
+                        <div class="res-detail-card res-dispatch-card">
+                            <h4 style="color:#818cf8">🔀 التوجيه</h4>
+                            ${hasDispatch ? `
+                                <div class="res-dispatch-route-badge" style="--rc:${color}">${label}</div>
+                                <div class="res-drow"><span>الموظف</span><span>${r.dispatch_employee_name || '—'}</span></div>
+                                ${r.routed_to ? `<div class="res-drow"><span>الجهة</span><span>${r.routed_to}</span></div>` : ''}
+                                <div class="res-drow"><span>الحالة</span><span>${r.dispatch_status || '—'}</span></div>
+                                ${r.dispatched_at ? `<div class="res-drow"><span>التاريخ</span><span>${r.dispatched_at.slice(0, 10)}</span></div>` : ''}
+                                ${isPaused ? `<div class="res-dispatch-paused">
+                                    ⏸ OLA معلّق — بانتظار عودة أمر الشراء
+                                    ${(currentUser?.role === 'dispatch' || currentUser?.role === 'admin') ? `
+                                    <button onclick="closeModal();openResumeDispatchModal(${r.transaction_id})"
+                                            class="res-dispatch-resume-btn">▶ استئناف للدفع</button>` : ''}
+                                </div>` : ''}
+                                ${r.dispatch_notes ? `<div class="res-drow" style="margin-top:.35rem"><span>ملاحظات</span><span style="color:var(--text-muted);font-size:.82rem">${r.dispatch_notes}</span></div>` : ''}
+                            ` : `
+                                <div class="res-dispatch-pending">
+                                    <div style="font-size:1.5rem">🔀</div>
+                                    <div style="font-size:.82rem;color:var(--text-muted);margin-top:.3rem">
+                                        ${r.transaction_number ? 'لم يتم التوجيه بعد' : 'لا توجد معاملة مرتبطة'}
+                                    </div>
+                                </div>
+                            `}
+                        </div>`;
+            })()}
+
                 </div>
 
                 <!-- سجل الأحداث -->
@@ -847,7 +882,7 @@ function injectBudgetStyles() {
     .res-details-hero { display:flex; align-items:flex-start; justify-content:space-between;
                         background:var(--bg-surface); padding:1rem; border-radius:10px; }
     .res-hero-num { font-size:1.5rem; font-weight:700; font-family:monospace; color:var(--text-primary); }
-    .res-details-grid { display:grid; grid-template-columns:1fr 1fr; gap:.85rem; }
+    .res-details-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:.85rem; }
     .res-detail-card { background:var(--bg-surface); border-radius:10px; padding:.9rem 1rem; }
     .res-detail-card h4 { font-size:.82rem; font-weight:700; color:var(--text-secondary);
                           margin:0 0 .75rem; padding-bottom:.5rem; border-bottom:1px solid var(--border-color); }
@@ -856,6 +891,23 @@ function injectBudgetStyles() {
     .res-drow:last-child { border-bottom:none; }
     .res-drow span:first-child { color:var(--text-muted); flex-shrink:0; }
     .res-drow span:last-child  { color:var(--text-primary); font-weight:500; text-align:left; }
+
+    /* ── بطاقة التوجيه ──────────────────────────── */
+    .res-dispatch-card { border:1px solid rgba(129,140,248,.25) !important;
+                         background:rgba(129,140,248,.04) !important; }
+    .res-dispatch-route-badge { display:inline-block; padding:.3rem .8rem;
+                                background:color-mix(in srgb, var(--rc) 12%, transparent);
+                                color:var(--rc); border:1px solid color-mix(in srgb, var(--rc) 30%, transparent);
+                                border-radius:20px; font-size:.78rem; font-weight:700;
+                                margin-bottom:.65rem; }
+    .res-dispatch-paused { background:rgba(234,179,8,.08); border:1px solid rgba(234,179,8,.25);
+                           border-radius:7px; padding:.5rem .7rem; font-size:.78rem;
+                           color:#b45309; margin-top:.6rem; display:flex;
+                           align-items:center; justify-content:space-between; gap:.5rem; flex-wrap:wrap; }
+    .res-dispatch-resume-btn { background:#818cf8; color:#fff; border:none; border-radius:6px;
+                                padding:.25rem .65rem; font-size:.74rem; font-family:inherit;
+                                cursor:pointer; white-space:nowrap; }
+    .res-dispatch-pending { text-align:center; padding:.75rem 0; }
 
     /* ── سجل الأحداث ────────────────────────────── */
     .res-log-section { background:var(--bg-surface); border-radius:10px; padding:.9rem 1rem; }
@@ -873,6 +925,9 @@ function injectBudgetStyles() {
     /* ── مراجعة الموازنة ────────────────────────── */
     .res-review-wrap .res-form-grid { gap:.85rem; }
 
+    @media (max-width:1100px) {
+        .res-details-grid { grid-template-columns:1fr 1fr; }
+    }
     @media (max-width:700px) {
         .budget-stats-row  { grid-template-columns:1fr 1fr; }
         .res-details-grid  { grid-template-columns:1fr; }
