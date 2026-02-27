@@ -32,6 +32,8 @@ $userRole = $_SESSION['user_role'] ?? '';
     <link rel="stylesheet" href="css/bank_deposits_new.css">
     <link rel="stylesheet" href="css/investment_styles.css">
     <link rel="stylesheet" href="css/correspondence.css">
+    <link rel="stylesheet" href="css/db-admin.css">
+
     <link rel="icon"
         href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
 </head>
@@ -120,6 +122,17 @@ $userRole = $_SESSION['user_role'] ?? '';
                 <span class="nav-label">المعاملات المالية</span>
             </button>
 
+
+            <button class="nav-tab" data-tab="reservations" data-tooltip="الحجوزات">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                    <line x1="16" y1="13" x2="8" y2="13" />
+                    <line x1="16" y1="17" x2="8" y2="17" />
+                    <line x1="10" y1="9" x2="8" y2="9" />
+                </svg>
+                <span class="nav-label">الحجوزات</span>
+            </button>
             <button class="nav-tab" data-tab="bank-deposits" data-tooltip="الودائع البنكية">
                 <span class="nav-icon">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -142,16 +155,6 @@ $userRole = $_SESSION['user_role'] ?? '';
 
             <span class="nav-group-label">المتابعة</span>
 
-            <button class="nav-tab" data-tab="reservations" data-tooltip="الحجوزات">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                    <polyline points="14 2 14 8 20 8" />
-                    <line x1="16" y1="13" x2="8" y2="13" />
-                    <line x1="16" y1="17" x2="8" y2="17" />
-                    <line x1="10" y1="9" x2="8" y2="9" />
-                </svg>
-                <span class="nav-label">الحجوزات</span>
-            </button>
             <button class="nav-tab" data-tab="sla" data-tooltip="SLA / OLA">
                 <span class="nav-icon">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -174,6 +177,18 @@ $userRole = $_SESSION['user_role'] ?? '';
 
             <span class="nav-group-label">النظام</span>
 
+            <?php if (($userRole ?? '') === 'admin' || ($_SESSION['permission_level'] ?? '') === 'system_admin'): ?>
+            <button class="nav-tab" data-tab="db-admin" data-tooltip="إدارة قاعدة البيانات">
+                <span class="nav-icon">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <ellipse cx="12" cy="5" rx="9" ry="3" />
+                        <path d="M21 12c0 1.66-4 3-9 3S3 13.66 3 12" />
+                        <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
+                    </svg>
+                </span>
+                <span class="nav-label">إدارة قاعدة البيانات</span>
+            </button>
+            <?php endif; ?>
             <button class="nav-tab" data-tab="settings" data-tooltip="الإعدادات">
                 <span class="nav-icon">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -275,6 +290,7 @@ $userRole = $_SESSION['user_role'] ?? '';
     <script src="js/app-budget.js"></script>
     <script src="js/app-bank.js"></script>
     <script src="js/correspondence.js"></script>
+    <script src="js/app-db-admin.js"></script>
 
     <script>
     // معلومات المستخدم الحالي

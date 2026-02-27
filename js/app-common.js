@@ -722,6 +722,8 @@ function switchTab(tab) {
         if (typeof loadBudgetReservationsPage === 'function') loadBudgetReservationsPage();
     } else if (tab === 'settings') {
         loadSettingsPage();
+    } else if (tab === 'db-admin') {
+        if (typeof loadDbAdminPage === 'function') loadDbAdminPage();
     }
 }
 

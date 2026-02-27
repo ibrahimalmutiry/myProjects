@@ -1,0 +1,917 @@
+/* ══════════════════════════════════════════════════════════════
+   db-admin.css — إدارة قاعدة البيانات
+   يعتمد على كلاسات style.css الموجودة (performance-page, card,
+   toolbar, data-table, perf-* …) ولا يُعيد تعريفها.
+   يُضيف فقط ما هو خاص بصفحة DB Admin.
+   ══════════════════════════════════════════════════════════════ */
+
+/* ══ حاوية الجداول + المحتوى (جانبي + رئيسي) ══════════════════ */
+.db-manager-layout {
+    display: flex;
+    gap: 0;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    overflow: hidden;
+    min-height: 560px;
+    margin-bottom: 1.5rem;
+}
+
+/* ══ قائمة الجداول الجانبية ════════════════════════════════════ */
+.db-tables-nav {
+    width: 210px;
+    min-width: 175px;
+    flex-shrink: 0;
+    background: var(--bg-surface);
+    border-left: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.db-tables-nav-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.7px;
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
+}
+
+.db-tables-list {
+    overflow-y: auto;
+    flex: 1;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-color) transparent;
+}
+
+.db-tables-list::-webkit-scrollbar {
+    width: 4px;
+}
+
+.db-tables-list::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 2px;
+}
+
+/* زر الجدول — يرث نمط nav-tab من sidebar.css تقريباً */
+.db-table-nav-btn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.65rem 0.875rem;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 0.83rem;
+    font-family: inherit;
+    text-align: right;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.db-table-nav-btn:hover {
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-primary);
+}
+
+[data-theme="light"] .db-table-nav-btn:hover {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+}
+
+.db-table-nav-btn.active {
+    background: var(--btn-primary-bg);
+    color: var(--btn-primary-text);
+    font-weight: 600;
+}
+
+.db-nav-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.db-nav-count {
+    flex-shrink: 0;
+    font-size: 0.68rem;
+    padding: 1px 6px;
+    border-radius: 9px;
+    background: var(--bg-secondary);
+    color: var(--text-muted);
+}
+
+.db-table-nav-btn.active .db-nav-count {
+    background: rgba(255, 255, 255, 0.15);
+    color: var(--btn-primary-text);
+}
+
+/* ══ منطقة محتوى الجدول ════════════════════════════════════════ */
+.db-table-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-width: 0;
+}
+
+/* شريط أدوات الجدول — يرث نمط .toolbar من style.css */
+.db-table-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1.125rem;
+    border-bottom: 1px solid var(--border-color);
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    flex-shrink: 0;
+}
+
+.db-table-toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    min-width: 0;
+}
+
+.db-table-name {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0;
+    white-space: nowrap;
+}
+
+.db-record-count {
+    display: inline-block;
+    padding: 2px 9px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    font-size: 0.73rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+/* صندوق بحث — يرث .search-input من style.css */
+.db-search-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.db-search-wrap svg {
+    position: absolute;
+    right: 0.75rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-muted);
+    pointer-events: none;
+}
+
+.db-search-wrap input {
+    padding: 0.55rem 2.25rem 0.55rem 0.875rem;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 0.875rem;
+    width: 185px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    outline: none;
+}
+
+.db-search-wrap input:focus {
+    border-color: var(--accent-blue);
+    box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.12);
+}
+
+.db-search-wrap input::placeholder {
+    color: var(--text-muted);
+}
+
+/* ══ الجدول الرئيسي ════════════════════════════════════════════ */
+.db-data-wrap {
+    flex: 1;
+    overflow: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-color) transparent;
+}
+
+.db-data-wrap::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+}
+
+.db-data-wrap::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 3px;
+}
+
+/* يرث .data-table من style.css — فقط نُكمّل بما ينقص */
+.db-data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+}
+
+.db-data-table th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    padding: 0.75rem 1rem;
+    text-align: right;
+    font-size: 0.74rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    background: var(--bg-surface);
+    border-bottom: 2px solid var(--border-color);
+    white-space: nowrap;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.db-data-table th.pk-col {
+    color: var(--accent-amber);
+}
+
+.db-data-table th.actions-col {
+    text-align: center;
+    width: 72px;
+}
+
+.db-col-type-hint {
+    display: block;
+    font-size: 0.6rem;
+    font-weight: 400;
+    color: var(--text-muted);
+    text-transform: lowercase;
+    letter-spacing: 0;
+    margin-top: 1px;
+}
+
+.db-data-table td {
+    padding: 0.7rem 1rem;
+    border-bottom: 1px solid var(--border-color);
+    color: var(--text-primary);
+    vertical-align: middle;
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.db-data-table tbody tr:hover td {
+    background: var(--bg-surface);
+}
+
+.db-null-val {
+    color: var(--text-muted);
+    font-style: italic;
+    font-size: 0.78rem;
+}
+
+/* ══ أعمدة الإجراءات ════════════════════════════════════════════ */
+.db-actions-cell {
+    text-align: center;
+    padding: 0.4rem !important;
+    width: 72px;
+}
+
+.db-row-btns {
+    display: flex;
+    justify-content: center;
+    gap: 4px;
+    opacity: 0;
+    transition: opacity 0.15s;
+}
+
+.db-data-table tbody tr:hover .db-row-btns {
+    opacity: 1;
+}
+
+/* يرث نمط .btn-icon-sm و .btn-danger-icon من style.css */
+.db-btn-edit,
+.db-btn-delete {
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 7px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s, transform 0.1s;
+}
+
+.db-btn-edit:hover,
+.db-btn-delete:hover {
+    transform: scale(1.08);
+}
+
+.db-btn-edit {
+    background: rgba(14, 165, 233, 0.1);
+    color: var(--accent-blue);
+}
+
+.db-btn-edit:hover {
+    background: rgba(14, 165, 233, 0.2);
+}
+
+.db-btn-delete {
+    background: rgba(239, 68, 68, 0.1);
+    color: var(--accent-red);
+}
+
+.db-btn-delete:hover {
+    background: rgba(239, 68, 68, 0.2);
+}
+
+/* ══ ترقيم الصفحات ══════════════════════════════════════════════ */
+.db-pagination-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.625rem 1.125rem;
+    border-top: 1px solid var(--border-color);
+    flex-wrap: wrap;
+    gap: 0.625rem;
+    flex-shrink: 0;
+}
+
+.db-pagination-info {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
+.db-page-btns {
+    display: flex;
+    gap: 3px;
+}
+
+/* يرث نمط filter-tab من style.css */
+.db-page-btn {
+    width: 30px;
+    height: 30px;
+    border: 1px solid var(--border-color);
+    background: transparent;
+    color: var(--text-secondary);
+    border-radius: 7px;
+    font-size: 0.78rem;
+    cursor: pointer;
+    font-family: inherit;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.db-page-btn:hover {
+    border-color: var(--accent-blue);
+    color: var(--accent-blue);
+}
+
+.db-page-btn.active {
+    background: var(--btn-primary-bg);
+    color: var(--btn-primary-text);
+    border-color: transparent;
+    font-weight: 700;
+}
+
+/* ══ حالات فارغة / خطأ ════════════════════════════════════════ */
+.db-empty,
+.db-error {
+    text-align: center;
+    padding: 3.5rem 2rem;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+.db-error {
+    color: var(--accent-red);
+}
+
+/* ══ نموذج الإضافة / التعديل ════════════════════════════════════ */
+/* يستخدم .form-group و .form-label من style.css مباشرة */
+.db-form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 0.875rem;
+    max-height: 55vh;
+    overflow-y: auto;
+    padding: 2px 2px 4px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-color) transparent;
+}
+
+.db-form-grid::-webkit-scrollbar {
+    width: 4px;
+}
+
+.db-form-grid::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 3px;
+}
+
+.db-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.db-field-label {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.83rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    flex-wrap: wrap;
+}
+
+.db-req {
+    color: var(--accent-red);
+}
+
+.db-pk-badge {
+    padding: 1px 5px;
+    background: rgba(255, 230, 102, 0.15);
+    color: var(--accent-amber);
+    border-radius: 4px;
+    font-size: 0.62rem;
+    font-weight: 700;
+}
+
+.db-type-hint {
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    font-weight: 400;
+}
+
+/* حقول الإدخال — تعيد استخدام .form-input من style.css */
+.db-input {
+    width: 100%;
+    padding: 0.625rem 0.875rem;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: rgba(15, 23, 42, 0.4);
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 0.875rem;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    box-sizing: border-box;
+    outline: none;
+}
+
+[data-theme="light"] .db-input {
+    background: var(--bg-card);
+}
+
+.db-input:focus {
+    border-color: var(--accent-blue);
+    box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.12);
+}
+
+.db-input:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.db-textarea {
+    resize: vertical;
+    min-height: 68px;
+}
+
+/* ══ نافذة تأكيد الحذف ══════════════════════════════════════════ */
+.db-confirm-body {
+    text-align: center;
+    padding: 0.75rem 0 1.25rem;
+}
+
+.db-confirm-icon {
+    font-size: 2.5rem;
+    line-height: 1;
+    margin-bottom: 0.75rem;
+}
+
+.db-confirm-msg {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    line-height: 1.65;
+}
+
+/* ══ الاستجابة للشاشات الصغيرة ════════════════════════════════ */
+@media (max-width: 900px) {
+    .db-manager-layout {
+        flex-direction: column;
+    }
+
+    .db-tables-nav {
+        width: 100%;
+        min-width: 0;
+        border-left: none;
+        border-bottom: 1px solid var(--border-color);
+        max-height: 56px;
+        overflow: hidden;
+    }
+
+    .db-tables-list {
+        display: flex;
+        flex-direction: row;
+        overflow-x: auto;
+        overflow-y: hidden;
+        max-height: none;
+        padding: 0.25rem 0.375rem;
+        gap: 2px;
+    }
+
+    .db-table-nav-btn {
+        white-space: nowrap;
+        border-radius: 7px;
+        flex-shrink: 0;
+        padding: 0.4rem 0.75rem;
+        font-size: 0.8rem;
+    }
+
+    .db-tables-nav-header {
+        display: none;
+    }
+}
+
+@media (max-width: 600px) {
+    .db-table-toolbar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .db-search-wrap input {
+        width: 100%;
+    }
+
+    .db-form-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   إضافات — ترتيب الجداول + إنشاء جدول جديد
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── فاصل "فارغة" في قائمة الجداول ──────────────────────────── */
+.db-nav-divider {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.875rem 0.25rem;
+    font-size: 0.62rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    opacity: 0.7;
+    margin-top: 0.25rem;
+}
+
+.db-nav-divider::before {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border-color);
+    order: -1;
+}
+
+/* badge الجداول الفارغة */
+.db-nav-count-zero {
+    background: transparent;
+    color: var(--text-muted);
+    opacity: 0.45;
+}
+
+/* ── زر "جدول جديد" في الشريط الجانبي ───────────────────────── */
+.db-new-table-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    width: calc(100% - 1rem);
+    margin: 0.5rem 0.5rem 0.25rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: 8px;
+    border: 1px dashed var(--border-color);
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    font-family: inherit;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    flex-shrink: 0;
+}
+
+.db-new-table-btn:hover {
+    border-color: var(--accent-blue);
+    color: var(--accent-blue);
+    background: rgba(14, 165, 233, 0.06);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   نافذة إنشاء جدول جديد (Create Table)
+   ══════════════════════════════════════════════════════════════ */
+
+/* أقسام النافذة */
+.db-ct-section {
+    margin-bottom: 1.25rem;
+}
+
+.db-ct-section:last-of-type {
+    margin-bottom: 0;
+}
+
+/* رأس كل قسم */
+.db-ct-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.625rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border-color);
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.db-ct-section-header>span {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+/* زر إضافة عمود / FK */
+.db-ct-add-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.3rem 0.7rem;
+    border-radius: 7px;
+    border: 1px solid var(--border-color);
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.18s;
+    white-space: nowrap;
+}
+
+.db-ct-add-btn:hover {
+    border-color: var(--accent-blue);
+    color: var(--accent-blue);
+    background: rgba(14, 165, 233, 0.07);
+}
+
+/* ── رؤوس جدول الأعمدة ─────────────────────────────────────── */
+.db-ct-cols-header {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0 0.25rem 0.375rem;
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 0.25rem;
+}
+
+/* ── صف عمود واحد ──────────────────────────────────────────── */
+.db-ct-col-row {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.375rem 0.25rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    transition: background 0.12s;
+}
+
+[data-theme="light"] .db-ct-col-row {
+    border-bottom-color: var(--border-color);
+}
+
+.db-ct-col-row:hover {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+[data-theme="light"] .db-ct-col-row:hover {
+    background: var(--bg-surface);
+}
+
+/* حقل اسم العمود / النوع داخل الصف — نستخدم db-input بـ padding أصغر */
+.db-ct-col-row .db-input {
+    padding: 0.4rem 0.6rem;
+    font-size: 0.8rem;
+    min-width: 0;
+}
+
+.db-ct-col-name {
+    flex: 1.2;
+}
+
+.db-ct-col-type {
+    flex: 1.4;
+}
+
+.db-ct-enum-vals {
+    flex: 1.2;
+}
+
+/* checkboxes — كل واحد في مربع ثابت 54px للمحاذاة */
+.db-ct-check {
+    width: 54px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    cursor: pointer;
+    position: relative;
+}
+
+.db-ct-check input[type="checkbox"] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 16px;
+    height: 16px;
+    border: 1.5px solid var(--border-color);
+    border-radius: 4px;
+    background: transparent;
+    cursor: pointer;
+    transition: all 0.15s;
+    position: relative;
+    flex-shrink: 0;
+}
+
+.db-ct-check input[type="checkbox"]:checked {
+    background: var(--btn-primary-bg);
+    border-color: var(--btn-primary-bg);
+}
+
+.db-ct-check input[type="checkbox"]:checked::after {
+    content: '';
+    position: absolute;
+    left: 3px;
+    top: 1px;
+    width: 5px;
+    height: 8px;
+    border: 1.5px solid var(--btn-primary-text);
+    border-top: none;
+    border-left: none;
+    transform: rotate(40deg);
+}
+
+.db-ct-check input[type="checkbox"]:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
+/* زر حذف عمود */
+.db-ct-del-col {
+    width: 28px;
+    height: 28px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+}
+
+.db-ct-del-col:hover {
+    background: rgba(239, 68, 68, 0.12);
+    color: var(--accent-red);
+}
+
+/* ── صفوف Foreign Keys ─────────────────────────────────────── */
+.db-ct-fk-row {
+    display: flex;
+    align-items: flex-end;
+    gap: 0.625rem;
+    padding: 0.75rem;
+    background: var(--bg-surface);
+    border-radius: 10px;
+    margin-bottom: 0.5rem;
+    border: 1px solid var(--border-color);
+    flex-wrap: wrap;
+}
+
+.db-ct-fk-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    flex: 1;
+    min-width: 140px;
+}
+
+.db-ct-fk-label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.db-ct-fk-row .db-input {
+    padding: 0.45rem 0.65rem;
+    font-size: 0.82rem;
+}
+
+/* حالة لا توجد FK */
+.db-ct-empty-fk {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    padding: 1rem 0.875rem;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    background: var(--bg-surface);
+    border-radius: 8px;
+    border: 1px dashed var(--border-color);
+    opacity: 0.75;
+}
+
+/* ── معاينة SQL ───────────────────────────────────────────── */
+.db-ct-sql-preview {
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 0.875rem 1rem;
+    font-family: 'Consolas', 'Fira Mono', monospace;
+    font-size: 0.78rem;
+    color: var(--accent-green);
+    line-height: 1.7;
+    overflow-x: auto;
+    white-space: pre;
+    max-height: 200px;
+    overflow-y: auto;
+    margin: 0;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-color) transparent;
+}
+
+[data-theme="light"] .db-ct-sql-preview {
+    background: #f8fafc;
+    color: #166534;
+}
+
+/* محتوى النافذة — سماحية بالتمرير */
+.db-ct-modal-body {
+    max-height: 72vh;
+    overflow-y: auto;
+    padding: 0 2px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-color) transparent;
+}
+
+.db-ct-modal-body::-webkit-scrollbar {
+    width: 5px;
+}
+
+.db-ct-modal-body::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 3px;
+}
+
+/* ── Responsive ─────────────────────────────────────────────── */
+@media (max-width: 700px) {
+    .db-ct-cols-header {
+        display: none;
+    }
+
+    .db-ct-col-row {
+        flex-wrap: wrap;
+    }
+
+    .db-ct-col-name,
+    .db-ct-col-type {
+        flex: 1 1 48%;
+    }
+
+    .db-ct-check {
+        width: 44px;
+    }
+
+    .db-ct-fk-field {
+        min-width: 120px;
+    }
+}

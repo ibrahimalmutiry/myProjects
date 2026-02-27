@@ -924,7 +924,7 @@ function renderNotifSettingsForm(cfg) {
     <!-- تبويب: متى تُرسَل ────────────────────── -->
     <div id="notifTab-triggers" class="notif-tab-panel" style="display:block">
         <p style="font-size:.87rem;color:var(--text-muted);margin-bottom:1rem">
-            اختر متى يُرسَل الإشعار — سيصل للموظف المسؤول وللمشرف عند الخرق.
+            اختر متى يُرسَل الإشعار — سيصل للموظف المسؤول وللمشرف عند التجاوز.
         </p>
         <div style="display:flex;flex-direction:column;gap:.85rem">
             ${[

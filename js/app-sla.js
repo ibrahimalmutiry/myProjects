@@ -7,11 +7,11 @@
  * يحتوي هذا الملف على:
  *  • تحميل إحصائيات SLA (loadSlaStats)
  *  • لوحة SLA الكاملة (loadSlaDashboard, renderSlaDashboardTable)
- *  • سجل الخروقات (loadSlaBreaches, renderSlaBreachLog)
+ *  • سجل التجاوزات (loadSlaBreaches, renderSlaBreachLog)
  *  • نافذة تفاصيل SLA لمعاملة (openSlaDetailModal, renderSlaDetailModal)
  *    └── يعرض: وقت الانتظار، وقت OLA، وقت ما بعد التصعيد لكل مرحلة
  *  • تشغيل فحص يدوي (runSlaCheck)
- *  • حل الخروقات (resolveBreach)
+ *  • حل التجاوزات (resolveBreach)
  *  • إعدادات SLA/OLA (openSlaSettingsModal, renderSlaSettingsForm, saveSlaSettings)
  *
  * ملاحظات المنطق:
@@ -24,6 +24,23 @@
 // ═══════════════════════════════════════════════════════════
 //  SLA / OLA — النسخة المحدثة
 // ═══════════════════════════════════════════════════════════
+
+const SLA_TYPE_LABELS = {
+    'ola_warning': '⚠️ تحذير OLA',
+    'ola_breach': '🔴 تجاوزOLA',
+    'sla_warning': '⚠️ تحذير SLA',
+    'sla_breach': '🚨 تجاوزSLA',
+};
+
+const SLA_STAGE_LABELS = {
+    'creation': 'الإنشاء',
+    'receiving': 'الاستلام',
+    'budget': 'الموازنة',
+    'dispatch': 'التوجيه',
+    'payment': 'الدفع',
+    'invoice': 'الفوترة',
+    'sla_total': 'SLA الكلي',
+};
 
 /**
  * تحميل إحصائيات SLA السريعة
@@ -135,7 +152,7 @@ function renderSlaDashboardTable(rows) {
     </table></div>`;
 }
 
-// ─── سجل الخروقات ────────────────────────────────────────────
+// ─── سجل التجاوزات ────────────────────────────────────────────
 async function loadSlaBreaches() {
     const container = document.getElementById('slaBreachLog');
     if (!container) return;
@@ -148,7 +165,7 @@ async function loadSlaBreaches() {
         const res = await fetch(`api/?action=sla_breaches&type=${encodeURIComponent(type)}&resolved=${encodeURIComponent(resolved)}&limit=50`);
         const data = await res.json();
         if (!data.success || !data.data.length) {
-            container.innerHTML = '<div class="empty-state-sm">لا توجد خروقات</div>';
+            container.innerHTML = '<div class="empty-state-sm">لا توجد تجاوزات</div>';
             return;
         }
         container.innerHTML = renderSlaBreachLog(data.data);
@@ -169,7 +186,7 @@ function renderSlaBreachLog(rows) {
         <thead>
             <tr>
                 <th>المعاملة</th>
-                <th>نوع الخرق</th>
+                <th>نوع التجاوز</th>
                 <th>المرحلة</th>
                 <th>الموظف</th>
                 <th>الوقت المنقضي</th>
@@ -350,7 +367,7 @@ function renderSlaDetailModal(d) {
 
         const statusBadge = isDone ? `<span class="sla-badge sla-badge-done">✓ مكتملة</span>`
             : st.status === 'escalated' ? `<span class="sla-badge sla-badge-esc">🔔 مُصعَّدة</span>`
-                : st.status === 'breached' ? `<span class="sla-badge sla-badge-breach">🔴 خرق OLA</span>`
+                : st.status === 'breached' ? `<span class="sla-badge sla-badge-breach">🔴 تجاوزOLA</span>`
                     : st.status === 'warning' ? `<span class="sla-badge sla-badge-warn">⚠️ تحذير</span>`
                         : st.status === 'active' ? `<span class="sla-badge sla-badge-active">🔵 جارية</span>`
                             : st.status === 'waiting' ? `<span class="sla-badge" style="color:var(--text-muted)">⏳ انتظار</span>`
@@ -436,23 +453,23 @@ async function runSlaCheck() {
         const res = await fetch('api/?action=sla_run_check');
         const data = await res.json();
         if (data.success) {
-            showToast(`تم فحص ${data.data.checked} معاملة — ${data.data.new_breaches} خرق جديد`, 'success');
+            showToast(`تم فحص ${data.data.checked} معاملة — ${data.data.new_breaches} تجاوزجديد`, 'success');
             loadSlaStats(); loadSlaDashboard(); loadSlaBreaches();
         }
     } catch (e) { showToast('خطأ في الفحص', 'error'); }
 }
 
-// ─── حل خرق ──────────────────────────────────────────────────
+// ─── حل تجاوز──────────────────────────────────────────────────
 async function resolveBreach(id) {
-    if (!confirm('تعليم هذا الخرق كمحلول؟')) return;
+    if (!confirm('تعليم هذا التجاوزكمحلول؟')) return;
     try {
         const res = await fetch('api/?action=sla_resolve_breach', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ id })
         });
         const data = await res.json();
-        if (data.success) { showToast('تم تعليم الخرق كمحلول ✓', 'success'); loadSlaBreaches(); }
-        else showToast('فشل تحديث الخرق', 'error');
+        if (data.success) { showToast('تم تعليم التجاوزكمحلول ✓', 'success'); loadSlaBreaches(); }
+        else showToast('فشل تحديث التجاوز', 'error');
     } catch (e) { showToast('خطأ في الاتصال', 'error'); }
 }
 
@@ -585,7 +602,7 @@ async function loadSlaPage() {
                 <div class="perf-header-stats">
                     <div class="header-stat">
                         <span class="stat-number" id="slaBreachCount" style="color:var(--accent-red)">—</span>
-                        <span class="stat-label">خروقات مفتوحة</span>
+                        <span class="stat-label">تجاوزات مفتوحة</span>
                     </div>
                     <div class="header-stat">
                         <span class="stat-number" id="slaWarnCount" style="color:var(--accent-orange)">—</span>
@@ -593,7 +610,7 @@ async function loadSlaPage() {
                     </div>
                     <div class="header-stat">
                         <span class="stat-number" id="slaBreachToday" style="color:var(--accent-blue)">—</span>
-                        <span class="stat-label">خروقات اليوم</span>
+                        <span class="stat-label">تجاوزات اليوم</span>
                     </div>
                 </div>
             </div>
@@ -607,7 +624,7 @@ async function loadSlaPage() {
 
         <div class="perf-tabs">
             <button class="perf-tab active" onclick="switchSlaPageTab('dashboard',this)">📋 حالة المعاملات</button>
-            <button class="perf-tab"        onclick="switchSlaPageTab('breaches',this)">⚠️ سجل الخروقات</button>
+            <button class="perf-tab"        onclick="switchSlaPageTab('breaches',this)">⚠️ سجل التجاوزات</button>
             <button class="perf-tab"        onclick="switchSlaPageTab('escalations',this)">📧 التصعيدات البريدية</button>
         </div>
 
@@ -624,17 +641,17 @@ async function loadSlaPage() {
                 <label>حالة SLA</label>
                 <select id="slaStatusFilter" onchange="loadSlaDashboard()">
                     <option value="">الكل</option>
-                    <option value="breached">خرق ✗</option>
+                    <option value="breached">تجاوز✗</option>
                     <option value="warning">تحذير ⚠</option>
                     <option value="ok">ضمن المدة ✓</option>
                 </select>
             </div>
             <div class="filter-group" id="slaBreachTypeFilterGroup">
-                <label>نوع الخرق</label>
+                <label>نوع التجاوز</label>
                 <select id="slaBreachTypeFilter" onchange="loadSlaBreaches()">
                     <option value="">الكل</option>
-                    <option value="ola_breach">خرق OLA</option>
-                    <option value="sla_breach">خرق SLA</option>
+                    <option value="ola_breach">تجاوزOLA</option>
+                    <option value="sla_breach">تجاوزSLA</option>
                     <option value="ola_warning">تحذير OLA</option>
                     <option value="sla_warning">تحذير SLA</option>
                 </select>
@@ -657,7 +674,7 @@ async function loadSlaPage() {
         </div>
         <div id="slaPageTabBreaches" class="perf-tab-content" style="display:none">
             <div class="perf-section">
-                <div class="section-header"><h3>⚠️ سجل الخروقات والتصعيد</h3></div>
+                <div class="section-header"><h3>⚠️ سجل التجاوزات والتصعيد</h3></div>
                 <div id="slaBreachLog" class="perf-table-container"><div class="loading-placeholder">جارٍ التحميل...</div></div>
             </div>
         </div>
@@ -672,8 +689,8 @@ async function loadSlaPage() {
                         <label>نوع التصعيد</label>
                         <select id="escalationTypeFilter" onchange="loadSlaEmailEscalations()">
                             <option value="">الكل</option>
-                            <option value="ola_breach">خرق OLA</option>
-                            <option value="sla_breach">خرق SLA</option>
+                            <option value="ola_breach">تجاوزOLA</option>
+                            <option value="sla_breach">تجاوزSLA</option>
                             <option value="ola_warning">تحذير OLA</option>
                             <option value="sla_warning">تحذير SLA</option>
                         </select>
@@ -741,7 +758,7 @@ async function loadSlaEmailEscalations() {
 
 function renderSlaEmailEscalationsTable(rows) {
     const typeLabels = {
-        'ola_breach': ['🔴', 'خرق OLA'], 'sla_breach': ['🔴', 'خرق SLA'],
+        'ola_breach': ['🔴', 'تجاوزOLA'], 'sla_breach': ['🔴', 'تجاوزSLA'],
         'ola_warning': ['🟡', 'تحذير OLA'], 'sla_warning': ['🟡', 'تحذير SLA'],
     };
     const statusIcon = s => s ? '<span style="color:var(--accent-green)">✅ مُرسل</span>'

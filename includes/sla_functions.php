@@ -124,11 +124,11 @@ function saveOlaRule($data) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  فحص الخروقات ← النواة الأساسية
+//  فحص التجاوزات ← النواة الأساسية
 // ═══════════════════════════════════════════════════════════════
 
 /**
- * يفحص معاملة واحدة ويُسجّل الخروقات / التصعيدات
+ * يفحص معاملة واحدة ويُسجّل التجاوزات / التصعيدات
  * يُستدعى عند كل تحديث وعند الفحص الدوري
  */
 function checkTransactionSla($transactionId) {
@@ -199,7 +199,7 @@ function checkTransactionSla($transactionId) {
         // نضيف للوقت الكلي فقط ola_minutes
         $totalElapsed += $elapsedMin;
 
-        // المرحلة المكتملة أو المُصعَّدة → لا نفحص خروقات جديدة
+        // المرحلة المكتملة أو المُصعَّدة → لا نفحص تجاوزات جديدة
         if ($isCompleted || $isEscalated) continue;
 
         // ─── OLA warning ────────────────────────────────────────
@@ -258,7 +258,7 @@ function _recordBreach($conn, $txId, $stage, $type, $empId, $elapsed, $allowed, 
     $stageEsc   = $conn->real_escape_string($stage);
     $typeEsc    = $conn->real_escape_string($type);
 
-    // تحقق: هل يوجد نفس الخرق خلال آخر ساعة؟
+    // تحقق: هل يوجد نفس التجاوزخلال آخر ساعة؟
     $existing = $conn->query("SELECT id FROM sla_breaches
                               WHERE transaction_id = $txId
                                 AND stage = '$stageEsc'
@@ -692,7 +692,7 @@ function getSlaStats() {
           AND breach_type IN ('ola_warning','sla_warning')
     ")->fetch_assoc()['cnt'] ?? 0;
 
-    // خروقات حسب موظف
+    // تجاوزات حسب موظف
     $byEmp = $conn->query("
         SELECT e.name, COUNT(*) AS total
         FROM sla_breaches sb
@@ -716,7 +716,7 @@ function getSlaStats() {
 }
 
 /**
- * سجل الخروقات مع تفاصيل المعاملة والموظف
+ * سجل التجاوزات مع تفاصيل المعاملة والموظف
  */
 function getSlaBreachLog($limit = 50, $filters = []) {
     $conn  = db();
@@ -751,7 +751,7 @@ function getSlaBreachLog($limit = 50, $filters = []) {
 }
 
 /**
- * تعليم خرق كـ"محلول"
+ * تعليم تجاوزكـ"محلول"
  */
 function resolveSlaBreachById($id) {
     $conn = db();
@@ -859,7 +859,7 @@ function checkCorrespondenceSla($correspondenceId) {
 }
 
 /**
- * تسجيل خرق للمراسلة مع إطلاق الإشعارات
+ * تسجيل تجاوزللمراسلة مع إطلاق الإشعارات
  */
 function _recordCorrespondenceBreach($conn, $corrId, $stage, $type, $empId, $elapsed, $allowed, $pct, $supervisorId = null, $corrNumber = '') {
     $empIdVal   = $empId ? (int)$empId : 'NULL';
@@ -1016,7 +1016,7 @@ function manualEscalateStage($transactionId, $stage, $requesterId) {
     $escIdVal = $supervisorId ? (int)$supervisorId : 'NULL';
     $empIdVal = $empId ?: 'NULL';
 
-    // تحقق: هل يوجد خرق مسجّل بالفعل لهذه المرحلة؟
+    // تحقق: هل يوجد تجاوزمسجّل بالفعل لهذه المرحلة؟
     $existing = $conn->query("SELECT id FROM sla_breaches
         WHERE transaction_id=$txId AND stage='$stg'
           AND breach_type='ola_breach' AND resolved_at IS NULL
@@ -1042,7 +1042,7 @@ function manualEscalateStage($transactionId, $stage, $requesterId) {
         $msg = $conn->real_escape_string("تصعيد OLA: معاملة $txNum — مرحلة $stageLabel تجاوزت {$pct}%");
         // تحقق من عدم وجود إشعار سابق لنفس المعاملة والمرحلة
         $notifExists = $conn->query("SELECT id FROM system_notifications
-            WHERE user_id=$supervisorId
+            WHERE employee_id=$supervisorId
               AND transaction_id=$txId
               AND message LIKE '%$stg%'
               AND message LIKE '%تصعيد OLA%'
@@ -1051,11 +1051,11 @@ function manualEscalateStage($transactionId, $stage, $requesterId) {
 
         if (!$notifExists || $notifExists->num_rows === 0) {
             $conn->query("INSERT INTO system_notifications
-                (user_id, transaction_id, type, title, message, is_read, created_at)
+                (type, category, title, message, transaction_id, employee_id, is_read, created_at)
                 VALUES
-                ($supervisorId, $txId, 'escalation',
+                ('urgent', 'escalation',
                  'تصعيد OLA',
-                 '$msg', 0, '$now')");
+                 '$msg', $txId, $supervisorId, 0, '$now')");
         }
     }
 

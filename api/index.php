@@ -348,50 +348,8 @@ try {
             $events     = getAllEvents($limit, $stage, $employeeId);
             jsonResponse(['success' => true, 'data' => $events]);
             break;
-
-        // ─── الإشعارات (SLA/OLA مخصصة لكل موظف) ──────────────────
-        case 'notifications':
-            require_once __DIR__ . '/../includes/notification_functions.php';
-            $limit  = (int)($_GET['limit'] ?? 50);
-            $userId = (int)($_SESSION['user_id'] ?? 0);
-
-            // إشعارات SLA للمستخدم الحالي
-            $slaNotifs = $userId ? getSlaNotificationsForUser($userId, $limit) : [];
-
-            // إشعارات المعاملات القديمة (للتوافق — آخر 10 فقط)
-            $txNotifs = getRecentNotifications(10);
-
-            // دمج مع أولوية SLA
-            $all = array_merge($slaNotifs, $txNotifs);
-            usort($all, fn($a,$b) => strtotime($b['update_time'] ?? $b['created_at'] ?? 0)
-                                   - strtotime($a['update_time'] ?? $a['created_at'] ?? 0));
-
-            $unread = count(array_filter($all, fn($n) => !($n['is_read'] ?? false)));
-            jsonResponse([
-                'success'      => true,
-                'data'         => array_slice($all, 0, $limit),
-                'unread_count' => $unread,
-            ]);
-            break;
-
-        // ─── تحديد إشعار كمقروء ────────────────────────────────
-        case 'mark_notification_read':
-            require_once __DIR__ . '/../includes/notification_functions.php';
-            $data    = json_decode(file_get_contents('php://input'), true);
-            $notifId = (int)($data['notification_id'] ?? $data['id'] ?? 0);
-            $userId  = (int)$_SESSION['user_id'];
-            markNotificationRead($notifId, $userId);
-            jsonResponse(['success' => true]);
-            break;
-
-        // ─── تحديد الكل كمقروء ─────────────────────────────────
-        case 'mark_all_notifications_read':
-            require_once __DIR__ . '/../includes/notification_functions.php';
-            $userId = (int)$_SESSION['user_id'];
-            markAllNotificationsRead($userId);
-            jsonResponse(['success' => true]);
-            break;
-
+        
+            /* ── نهاية الـ PATCH ── أضف هذا قبل default: في الـ switch ── */
         // ═══════════════════════════════════════════════════════
         //  APIs الودائع البنكية
         // ═══════════════════════════════════════════════════════
@@ -778,112 +736,19 @@ try {
             jsonResponse(['success' => true, 'data' => checkTransactionSla($id)]);
             break;
 
-
-      
-      
-      
-            // ═══════════════════════════════════════════════════════
-        //  APIs الإشعارات ونظام الإعدادات
-        // ═══════════════════════════════════════════════════════
-
-        // ─── جلب الإشعارات الداخلية ──────────────────────────────
-        case 'system_notifications':
-            require_once __DIR__ . '/../includes/notification_functions.php';
-            $userId     = (int)($_SESSION['user_id'] ?? 0);
-            $limit      = (int)($_GET['limit'] ?? 50);
-            $unreadOnly = ($_GET['unread'] ?? '0') === '1';
-            jsonResponse(['success' => true, 'data' => getSystemNotifications($userId, $limit, $unreadOnly)]);
-            break;
-
-        // ─── عدد الإشعارات غير المقروءة ──────────────────────────
-        case 'unread_count':
-            require_once __DIR__ . '/../includes/notification_functions.php';
-            $userId = (int)($_SESSION['user_id'] ?? 0);
-            jsonResponse(['success' => true, 'count' => getUnreadNotificationCount($userId)]);
-            break;
-
-        // ─── تعليم إشعار كمقروء ──────────────────────────────────
-        case 'read_notification':
-            if ($method !== 'POST') jsonResponse(['success' => false, 'message' => 'طريقة غير صحيحة'], 405);
-            require_once __DIR__ . '/../includes/notification_functions.php';
-            $input  = json_decode(file_get_contents('php://input'), true);
-            $userId = (int)($_SESSION['user_id'] ?? 0);
-            jsonResponse(markNotificationRead((int)($input['id'] ?? 0), $userId));
-            break;
-
-        // ─── تعليم كل الإشعارات كمقروءة ─────────────────────────
-        case 'read_all_notifications':
-            if ($method !== 'POST') jsonResponse(['success' => false, 'message' => 'طريقة غير صحيحة'], 405);
-            require_once __DIR__ . '/../includes/notification_functions.php';
-            $userId = (int)($_SESSION['user_id'] ?? 0);
-            jsonResponse(markAllNotificationsRead($userId));
-            break;
-
-        // ─── جلب إعدادات الإشعارات ───────────────────────────────
-        case 'notification_settings':
-            require_once __DIR__ . '/../includes/notification_functions.php';
-            $settings = getNotificationSettings();
-            // إخفاء كلمات المرور في الاستجابة
-            foreach (['smtp_pass','ms_client_secret'] as $k) {
-                if (!empty($settings[$k])) $settings[$k] = '••••••••';
-            }
-            jsonResponse(['success' => true, 'data' => $settings]);
-            break;
-
-        // ─── حفظ إعدادات الإشعارات ───────────────────────────────
-        case 'save_notification_settings':
-            if ($method !== 'POST') jsonResponse(['success' => false, 'message' => 'طريقة غير صحيحة'], 405);
-            require_once __DIR__ . '/../includes/notification_functions.php';
-            $input = json_decode(file_get_contents('php://input'), true);
-            // لا نعيد كتابة كلمة المرور لو كانت نجوم
-            foreach (['smtp_pass','ms_client_secret'] as $k) {
-                if (isset($input[$k]) && strpos($input[$k], '•') !== false) unset($input[$k]);
-            }
-            jsonResponse(saveNotificationSettings($input));
-            break;
-
-        // ─── اختبار SMTP ──────────────────────────────────────────
-        case 'test_smtp':
-            if ($method !== 'POST') jsonResponse(['success' => false, 'message' => 'طريقة غير صحيحة'], 405);
-            require_once __DIR__ . '/../includes/notification_functions.php';
-            $input = json_decode(file_get_contents('php://input'), true);
-            $email = $input['test_email'] ?? '';
-            if (!filter_var($email, FILTER_VALIDATE_EMAIL))
-                jsonResponse(['success' => false, 'message' => 'بريد إلكتروني غير صالح'], 400);
-            jsonResponse(testSmtpConnection($email));
-            break;
-
-        // ─── اختبار Exchange ──────────────────────────────────────
-        case 'test_exchange':
-            if ($method !== 'POST') jsonResponse(['success' => false, 'message' => 'طريقة غير صحيحة'], 405);
-            require_once __DIR__ . '/../includes/notification_functions.php';
-            $input = json_decode(file_get_contents('php://input'), true);
-            $email = $input['test_email'] ?? '';
-            if (!filter_var($email, FILTER_VALIDATE_EMAIL))
-                jsonResponse(['success' => false, 'message' => 'بريد إلكتروني غير صالح'], 400);
-            jsonResponse(testExchangeConnection($email));
-            break;
-
-        // ─── SLA للمراسلات ────────────────────────────────────────
-        case 'sla_check_correspondence':
+        // ─── تصعيد يدوي لمرحلة ───────────────────────────────────
+        case 'sla_manual_escalate':
             if ($method !== 'POST') jsonResponse(['success' => false, 'message' => 'طريقة غير صحيحة'], 405);
             require_once __DIR__ . '/../includes/sla_functions.php';
             $input = json_decode(file_get_contents('php://input'), true);
-            $id    = (int)($input['id'] ?? 0);
-            if ($id <= 0) jsonResponse(['success' => false, 'message' => 'معرف غير صالح'], 400);
-            jsonResponse(['success' => true, 'data' => checkCorrespondenceSla($id)]);
+            $txId  = (int)($input['transaction_id'] ?? 0);
+            $stage = $input['stage'] ?? '';
+            if ($txId <= 0 || empty($stage))
+                jsonResponse(['success' => false, 'error' => 'بيانات ناقصة'], 400);
+            $userId = (int)($_SESSION['user_id'] ?? 0);
+            jsonResponse(manualEscalateStage($txId, $stage, $userId));
             break;
-
-        case 'sla_email_escalations':
-            require_once __DIR__ . '/../includes/sla_functions.php';
-            $params = ['type'=>$_GET['type']??'', 'date_from'=>$_GET['date_from']??'', 
-                    'date_to'=>$_GET['date_to']??'', 'limit'=>(int)($_GET['limit']??100)];
-            jsonResponse(['success'=>true, 'data'=>getSlaEmailEscalations($params)]);
-            break;
-
-      
-
-        // ─── جلب صلاحيات موظف ─────────────────────────────────────────
+            // ─── جلب صلاحيات موظف ─────────────────────────────────────────
         case 'get_employee_permissions':
             $empId = (int)($_GET['employee_id'] ?? 0);
             if (!$empId) {
@@ -930,7 +795,135 @@ try {
                 'page_permissions' => $_SESSION['page_permissions'],
             ]);
             break;
-        // ─── غير معروف ─────────────────────────────────────────
+        
+        // ─── الإشعارات (SLA/OLA مخصصة لكل موظف) ──────────────────
+        case 'notifications':
+            require_once __DIR__ . '/../includes/notification_functions.php';
+            $limit  = (int)($_GET['limit'] ?? 50);
+            $userId = (int)($_SESSION['user_id'] ?? 0);
+
+            $slaNotifs = $userId ? getSlaNotificationsForUser($userId, $limit) : [];
+            $txNotifs  = getRecentNotifications(10);
+
+            $all = array_merge($slaNotifs, $txNotifs);
+            usort($all, fn($a,$b) => strtotime($b['update_time'] ?? $b['created_at'] ?? 0)
+                                   - strtotime($a['update_time'] ?? $a['created_at'] ?? 0));
+
+            $unread = count(array_filter($all, fn($n) => !($n['is_read'] ?? false)));
+            jsonResponse([
+                'success'      => true,
+                'data'         => array_slice($all, 0, $limit),
+                'unread_count' => $unread,
+            ]);
+            break;
+
+        // ─── جلب الإشعارات الداخلية ──────────────────────────────
+        case 'system_notifications':
+            require_once __DIR__ . '/../includes/notification_functions.php';
+            $userId     = (int)($_SESSION['user_id'] ?? 0);
+            $limit      = (int)($_GET['limit'] ?? 50);
+            $unreadOnly = ($_GET['unread'] ?? '0') === '1';
+            jsonResponse(['success' => true, 'data' => getSystemNotifications($userId, $limit, $unreadOnly)]);
+            break;
+
+        // ─── عدد الإشعارات غير المقروءة ──────────────────────────
+        case 'unread_count':
+            require_once __DIR__ . '/../includes/notification_functions.php';
+            $userId = (int)($_SESSION['user_id'] ?? 0);
+            jsonResponse(['success' => true, 'count' => getUnreadNotificationCount($userId)]);
+            break;
+
+        // ─── تعليم إشعار كمقروء ──────────────────────────────────
+        case 'read_notification':
+        case 'mark_notification_read':
+            if ($method !== 'POST') jsonResponse(['success' => false, 'message' => 'طريقة غير صحيحة'], 405);
+            require_once __DIR__ . '/../includes/notification_functions.php';
+            $input   = json_decode(file_get_contents('php://input'), true);
+            $userId  = (int)($_SESSION['user_id'] ?? 0);
+            $notifId = (int)($input['notification_id'] ?? $input['id'] ?? 0);
+            if ($notifId <= 0) jsonResponse(['success' => false, 'message' => 'معرف غير صالح'], 400);
+            jsonResponse(markNotificationRead($notifId, $userId));
+            break;
+
+        // ─── تعليم كل الإشعارات كمقروءة ─────────────────────────
+        case 'mark_all_notifications_read':
+        case 'read_all_notifications':
+        case 'clear_all':
+            if ($method !== 'POST') jsonResponse(['success' => false, 'message' => 'طريقة غير صحيحة'], 405);
+            require_once __DIR__ . '/../includes/notification_functions.php';
+            $userId = (int)($_SESSION['user_id'] ?? 0);
+            jsonResponse(markAllNotificationsRead($userId));
+            break;
+
+        // ─── جلب إعدادات الإشعارات ───────────────────────────────
+        case 'notification_settings':
+            require_once __DIR__ . '/../includes/notification_functions.php';
+            $settings = getNotificationSettings();
+            foreach (['smtp_pass', 'ms_client_secret'] as $k) {
+                if (!empty($settings[$k])) $settings[$k] = '••••••••';
+            }
+            jsonResponse(['success' => true, 'data' => $settings]);
+            break;
+
+        // ─── حفظ إعدادات الإشعارات ───────────────────────────────
+        case 'save_notification_settings':
+            if ($method !== 'POST') jsonResponse(['success' => false, 'message' => 'طريقة غير صحيحة'], 405);
+            require_once __DIR__ . '/../includes/notification_functions.php';
+            $input = json_decode(file_get_contents('php://input'), true);
+            foreach (['smtp_pass', 'ms_client_secret'] as $k) {
+                if (isset($input[$k]) && strpos($input[$k], '•') !== false) unset($input[$k]);
+            }
+            jsonResponse(saveNotificationSettings($input));
+            break;
+
+        // ─── اختبار SMTP ──────────────────────────────────────────
+        case 'test_smtp':
+            if ($method !== 'POST') jsonResponse(['success' => false, 'message' => 'طريقة غير صحيحة'], 405);
+            require_once __DIR__ . '/../includes/notification_functions.php';
+            $input = json_decode(file_get_contents('php://input'), true);
+            $email = $input['test_email'] ?? '';
+            if (!filter_var($email, FILTER_VALIDATE_EMAIL))
+                jsonResponse(['success' => false, 'message' => 'بريد إلكتروني غير صالح'], 400);
+            jsonResponse(testSmtpConnection($email));
+            break;
+
+        // ─── اختبار Exchange ──────────────────────────────────────
+        case 'test_exchange':
+            if ($method !== 'POST') jsonResponse(['success' => false, 'message' => 'طريقة غير صحيحة'], 405);
+            require_once __DIR__ . '/../includes/notification_functions.php';
+            $input = json_decode(file_get_contents('php://input'), true);
+            $email = $input['test_email'] ?? '';
+            if (!filter_var($email, FILTER_VALIDATE_EMAIL))
+                jsonResponse(['success' => false, 'message' => 'بريد إلكتروني غير صالح'], 400);
+            jsonResponse(testExchangeConnection($email));
+            break;
+
+        // ─── SLA للمراسلات ────────────────────────────────────────
+        case 'sla_check_correspondence':
+            if ($method !== 'POST') jsonResponse(['success' => false, 'message' => 'طريقة غير صحيحة'], 405);
+            require_once __DIR__ . '/../includes/sla_functions.php';
+            $input = json_decode(file_get_contents('php://input'), true);
+            $id    = (int)($input['id'] ?? 0);
+            if ($id <= 0) jsonResponse(['success' => false, 'message' => 'معرف غير صالح'], 400);
+            jsonResponse(['success' => true, 'data' => checkCorrespondenceSla($id)]);
+            break;
+
+        case 'sla_email_escalations':
+            require_once __DIR__ . '/../includes/sla_functions.php';
+            $params = [
+                'type'      => $_GET['type']      ?? '',
+                'date_from' => $_GET['date_from']  ?? '',
+                'date_to'   => $_GET['date_to']    ?? '',
+                'limit'     => (int)($_GET['limit'] ?? 100),
+            ];
+            jsonResponse(['success' => true, 'data' => getSlaEmailEscalations($params)]);
+            break;
+        
+        
+        
+        
+        
+            // ─── غير معروف ─────────────────────────────────────────
         default:
             jsonResponse(['success' => false, 'message' => 'إجراء غير معروف: ' . $action], 400);
     }

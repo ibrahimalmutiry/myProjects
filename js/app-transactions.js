@@ -1359,7 +1359,7 @@ function renderEmployeesSection() {
             }
 
             html += '<div class="employee-card">';
-            html += '<div class="employee-avatar">' + emp.name.charAt(0) + '</div>';
+            html += '<div class="employee-avatar">' + emp.employee_number + '</div>';
             html += '<div class="employee-info">';
             html += '<h4>' + emp.name + '</h4>';
             html += '<span class="role-badge role-' + emp.role + '">' + getRoleName(emp.role) + '</span>';
@@ -2033,7 +2033,7 @@ async function renderPerformanceSection() {
                 <div id="slaStats" class="sla-stats-bar">
                     <div class="sla-stat sla-stat-breach">
                         <div class="sla-stat-num" id="slaBreachCount">—</div>
-                        <div class="sla-stat-label">خروقات مفتوحة</div>
+                        <div class="sla-stat-label">تجاوزات مفتوحة</div>
                     </div>
                     <div class="sla-stat sla-stat-warn">
                         <div class="sla-stat-num" id="slaWarnCount">—</div>
@@ -2041,7 +2041,7 @@ async function renderPerformanceSection() {
                     </div>
                     <div class="sla-stat sla-stat-today">
                         <div class="sla-stat-num" id="slaBreachToday">—</div>
-                        <div class="sla-stat-label">خروقات اليوم</div>
+                        <div class="sla-stat-label">تجاوزات اليوم</div>
                     </div>
                     <div class="sla-stat sla-stat-action">
                         <button class="btn btn-sm btn-primary" onclick="runSlaCheck()">🔄 فحص الآن</button>
