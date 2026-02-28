@@ -120,6 +120,22 @@ $userRole = $_SESSION['user_role'] ?? '';
                 <span class="nav-label">المعاملات المالية</span>
             </button>
 
+
+            <button class="nav-tab" data-tab="reservations" data-tooltip="الحجوزات">
+                <span class="nav-icon">
+
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                        <polyline points="14 2 14 8 20 8" />
+                        <line x1="16" y1="13" x2="8" y2="13" />
+                        <line x1="16" y1="17" x2="8" y2="17" />
+                        <line x1="10" y1="9" x2="8" y2="9" />
+                    </svg>
+                </span>
+
+                <span class="nav-label">الحجوزات</span>
+            </button>
+
             <button class="nav-tab" data-tab="bank-deposits" data-tooltip="الودائع البنكية">
                 <span class="nav-icon">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -142,16 +158,6 @@ $userRole = $_SESSION['user_role'] ?? '';
 
             <span class="nav-group-label">المتابعة</span>
 
-            <button class="nav-tab" data-tab="reservations" data-tooltip="الحجوزات">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                    <polyline points="14 2 14 8 20 8" />
-                    <line x1="16" y1="13" x2="8" y2="13" />
-                    <line x1="16" y1="17" x2="8" y2="17" />
-                    <line x1="10" y1="9" x2="8" y2="9" />
-                </svg>
-                <span class="nav-label">الحجوزات</span>
-            </button>
             <button class="nav-tab" data-tab="sla" data-tooltip="SLA / OLA">
                 <span class="nav-icon">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -192,13 +198,28 @@ $userRole = $_SESSION['user_role'] ?? '';
         <div class="sidebar-footer">
             <!-- بطاقة المستخدم -->
             <div class="sidebar-user">
-                <div class="user-avatar"><?= mb_substr($userName, 0, 1) ?></div>
+                <div class="user-avatar"><?= htmlspecialchars($_SESSION['employee_number']) ?></div>
                 <div class="user-details">
-                    <span class="user-name"><?= htmlspecialchars($userName) ?></span>
-                    <span class="user-role"><?= htmlspecialchars(getRoleName($userRole)) ?></span>
-                    <?php if (!empty($_SESSION['employee_number'])): ?>
-                    <span class="user-number"><?= htmlspecialchars($_SESSION['employee_number']) ?></span>
-                    <?php endif; ?>
+                    <div class="user-top-row">
+                        <span class="user-name"><?= htmlspecialchars($userName) ?></span>
+                    </div>
+                    <div class="user-top-row">
+                        <span class="user-role"><?= htmlspecialchars(getRoleName($userRole)) ?></span>
+                        <?php if (!empty($_SESSION['employee_number'])): ?>
+                        <span class="user-badge"><?= htmlspecialchars($_SESSION['department_name']) ?></span>
+                        <?php endif; ?>
+                    </div>
+
+                    <!-- <?php if (!empty($_SESSION['department_name'])): ?>
+                    <div class="user-dept">
+                        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2.5">
+                            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                            <polyline points="9 22 9 12 15 12 15 22" />
+                        </svg>
+                        <span><?= htmlspecialchars($_SESSION['department_name']) ?></span>
+                    </div>
+                    <?php endif; ?> -->
                 </div>
             </div>
 
@@ -362,7 +383,9 @@ if (isset($_SESSION['user_id'])) {
         permissionLevel: '<?= $_SESSION['permission_level'] ?? 'employee' ?>',
         canDelete: <?= !empty($_SESSION['can_delete']) ? 'true' : 'false' ?>,
         pagePermissions: <?= json_encode($_SESSION['page_permissions'] ?? []) ?>,
-        actionPermissions: <?= json_encode($_SESSION['action_permissions'] ?? []) ?>
+        actionPermissions: <?= json_encode($_SESSION['action_permissions'] ?? []) ?>,
+        departmentId: <?= isset($_SESSION['department_id']) && $_SESSION['department_id'] ? (int)$_SESSION['department_id'] : 'null' ?>,
+        departmentName: '<?= addslashes($_SESSION['department_name'] ?? '') ?>'
     };
 
     // ── تطبيق صلاحيات الصفحات على السايدبار ──────────────────

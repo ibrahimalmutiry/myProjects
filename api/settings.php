@@ -37,9 +37,10 @@ try {
             $phone       = $conn->real_escape_string($input['phone'] ?? '');
             $role        = $conn->real_escape_string($input['role']);
             $supervisorId = !empty($input['supervisor_id']) ? (int)$input['supervisor_id'] : 'NULL';
+            $departmentId = !empty($input['department_id']) ? (int)$input['department_id'] : 'NULL';
             
-            $sql = "INSERT INTO employees (name, email, phone, role, supervisor_id)
-                    VALUES ('$name', '$email', '$phone', '$role', $supervisorId)";
+            $sql = "INSERT INTO employees (name, email, phone, role, supervisor_id, department_id)
+                    VALUES ('$name', '$email', '$phone', '$role', $supervisorId, $departmentId)";
             
             if ($conn->query($sql)) {
                 jsonResponse(['success' => true, 'message' => 'تم إضافة الموظف', 'id' => $conn->insert_id]);
@@ -63,10 +64,11 @@ try {
             $phone       = $conn->real_escape_string($input['phone'] ?? '');
             $role        = $conn->real_escape_string($input['role']);
             $supervisorId = !empty($input['supervisor_id']) ? (int)$input['supervisor_id'] : 'NULL';
+            $departmentId = !empty($input['department_id']) ? (int)$input['department_id'] : 'NULL';
             
             $sql = "UPDATE employees
                     SET name='$name', email='$email', phone='$phone',
-                        role='$role', supervisor_id=$supervisorId
+                        role='$role', supervisor_id=$supervisorId, department_id=$departmentId
                     WHERE id=$id";
             
             if ($conn->query($sql)) {

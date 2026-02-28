@@ -24,6 +24,7 @@
 var SettingsData = {
     employees: [],
     types: [],
+    departments: [],
     currentFilter: 'all'
 };
 
@@ -753,7 +754,7 @@ async function editTransaction(id) {
             .replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
         const amount = tx.amount
-            ? Number(tx.amount).toLocaleString('ar-SA', { minimumFractionDigits: 2 }) + ' ر.س'
+            ? formatMoney(tx.amount)
             : '—';
 
         // تعريف التبويبات النشطة
@@ -1310,6 +1311,12 @@ async function loadSettingsEmployees() {
         if (data.success) {
             SettingsData.employees = data.data;
         }
+        // جلب الأقسام من API الحجوزات
+        var dRes = await fetch('api/budget.php?action=meta');
+        var dData = await dRes.json();
+        if (dData.success && dData.data.departments) {
+            SettingsData.departments = dData.data.departments;
+        }
     } catch (e) {
         console.error(e);
     }
@@ -1365,6 +1372,13 @@ function renderEmployeesSection() {
             html += '<span class="role-badge role-' + emp.role + '">' + getRoleName(emp.role) + '</span>';
             html += '<p class="employee-contact">' + (emp.email || '—') + '</p>';
             html += '<p class="employee-contact">' + (emp.phone || '—') + '</p>';
+            // عرض اسم القسم
+            if (emp.department_id) {
+                var dept = SettingsData.departments.find(function (d) { return d.id == emp.department_id; });
+                if (dept) {
+                    html += '<p class="employee-contact" style="color:var(--accent-purple);font-size:.8rem">🏢 ' + dept.name + '</p>';
+                }
+            }
             if (supervisorName) {
                 html += '<p class="employee-contact" style="color:var(--accent-blue);font-size:.8rem">';
                 html += '👤 المشرف: ' + supervisorName;
@@ -1426,6 +1440,10 @@ function openAddEmployeeModal() {
         .map(e => `<option value="${e.id}">${e.name} (${_roleLabel(e.role)})</option>`)
         .join('');
 
+    const departmentOptions = (SettingsData.departments || [])
+        .map(d => `<option value="${d.id}">${d.name}</option>`)
+        .join('');
+
     DOM.modalTitle.textContent = 'إضافة موظف جديد';
     DOM.modalBody.innerHTML = `
         <form id="employeeForm" onsubmit="saveEmployee(event)">
@@ -1457,6 +1475,18 @@ function openAddEmployeeModal() {
             </div>
             <div class="form-group" style="margin-top:.5rem">
                 <label class="form-label">
+                    🏢 القسم التنظيمي
+                    <span style="font-size:.78rem;color:var(--text-muted);font-weight:400">
+                        (يُحدد الحجوزات التي يستطيع الموظف رؤيتها)
+                    </span>
+                </label>
+                <select class="form-select" name="department_id" id="empDepartment">
+                    <option value="">— بدون قسم محدد —</option>
+                    ${departmentOptions}
+                </select>
+            </div>
+            <div class="form-group" style="margin-top:.5rem">
+                <label class="form-label">
                     👤 المشرف المباشر
                     <span style="font-size:.78rem;color:var(--text-muted);font-weight:400">
                         (يُصعَّد إليه عند تجاوزOLA/SLA)
@@ -1483,6 +1513,10 @@ function editEmployee(id) {
     const supervisorOptions = (SettingsData.employees || [])
         .filter(e => e.is_active != 0 && e.id != emp.id)
         .map(e => `<option value="${e.id}" ${emp.supervisor_id == e.id ? 'selected' : ''}>${e.name} (${_roleLabel(e.role)})</option>`)
+        .join('');
+
+    const departmentOptions = (SettingsData.departments || [])
+        .map(d => `<option value="${d.id}" ${emp.department_id == d.id ? 'selected' : ''}>${d.name}</option>`)
         .join('');
 
     DOM.modalTitle.textContent = 'تعديل موظف';
@@ -1515,6 +1549,18 @@ function editEmployee(id) {
             </div>
             <div class="form-group" style="margin-top:.5rem">
                 <label class="form-label">
+                    🏢 القسم التنظيمي
+                    <span style="font-size:.78rem;color:var(--text-muted);font-weight:400">
+                        (يُحدد الحجوزات التي يستطيع الموظف رؤيتها)
+                    </span>
+                </label>
+                <select class="form-select" name="department_id" id="empDepartment">
+                    <option value="">— بدون قسم محدد —</option>
+                    ${departmentOptions}
+                </select>
+            </div>
+            <div class="form-group" style="margin-top:.5rem">
+                <label class="form-label">
                     👤 المشرف المباشر
                     <span style="font-size:.78rem;color:var(--text-muted);font-weight:400">
                         (يُصعَّد إليه عند تجاوزOLA/SLA)
@@ -1539,12 +1585,14 @@ async function saveEmployee(e) {
 
     var id = document.getElementById('empId').value;
     var supervisorEl = document.getElementById('empSupervisor');
+    var departmentEl = document.getElementById('empDepartment');
     var data = {
         name: document.getElementById('empName').value,
         email: document.getElementById('empEmail').value,
         phone: document.getElementById('empPhone').value,
         role: document.getElementById('empRole').value,
-        supervisor_id: supervisorEl ? (supervisorEl.value || null) : null
+        supervisor_id: supervisorEl ? (supervisorEl.value || null) : null,
+        department_id: departmentEl ? (departmentEl.value || null) : null
     };
 
     if (id) data.id = id;

@@ -92,7 +92,14 @@ async function fetchBudgetMeta() {
     try {
         const res = await fetch('api/budget.php?action=meta');
         const data = await res.json();
-        if (data.success) BudgetState.meta = data.data;
+        if (data.success) {
+            BudgetState.meta = data.data;
+            // تحديث اسم قسم المستخدم الحالي إن لم يكن محدداً بعد
+            if (typeof currentUser !== 'undefined' && currentUser.departmentId && !currentUser.departmentName) {
+                const dept = (data.data.departments || []).find(d => d.id == currentUser.departmentId);
+                if (dept) currentUser.departmentName = dept.name;
+            }
+        }
     } catch (e) { console.error(e); }
 }
 
@@ -142,7 +149,7 @@ function renderBudgetPage() {
             <div class="budget-stat-card wide">
                 <div class="bsc-icon" style="background:rgba(139,92,246,.12);color:#8b5cf6">💰</div>
                 <div class="bsc-body">
-                    <div class="bsc-num">${fmtMoney ? fmtMoney(totalAmt) : totalAmt.toLocaleString('ar-SA')}</div>
+                    <div class="bsc-num">${formatMoney(totalAmt)}</div>
                     <div class="bsc-label">إجمالي المبالغ المطلوبة</div>
                 </div>
             </div>
@@ -177,6 +184,23 @@ function renderBudgetPage() {
             </button>` : ''}
         </div>`;
 
+    // بانر القسم — يظهر للموظف العادي فقط (غير المدير)
+    const isAdmin = (typeof currentUser !== 'undefined') &&
+        (currentUser.permissionLevel === 'system_admin' ||
+            currentUser.role === 'admin' ||
+            currentUser.role === 'budget');
+    const deptName = (typeof currentUser !== 'undefined') ? currentUser.departmentName : '';
+    const showDeptBanner = !canDo('reservation.view_all') && deptName;
+
+    const deptBannerHtml = showDeptBanner ? `
+        <div class="budget-dept-banner">
+            <div class="budget-dept-banner-icon">🏢</div>
+            <div class="budget-dept-banner-content">
+                <span class="budget-dept-banner-label">أنت تعرض حجوزات قسم</span>
+                <span class="budget-dept-banner-name">${deptName}</span>
+            </div>
+        </div>` : '';
+
     DOM.mainContent.innerHTML = `
         <div class="budget-page-wrap">
             <div class="budget-page-header">
@@ -185,6 +209,7 @@ function renderBudgetPage() {
                     <p class="budget-page-sub">إدارة حجوزات الموازنة المالية لكافة الأقسام</p>
                 </div>
             </div>
+            ${deptBannerHtml}
             ${statsHtml}
             ${filtersHtml}
             ${renderReservationsTable(reservations)}
@@ -203,7 +228,7 @@ function renderReservationsTable(list) {
     const rows = list.map(r => {
         const st = RES_STATUS[r.status] || RES_STATUS['مسودة'];
         const prColor = PRIORITY_COLOR[r.priority] || 'var(--text-muted)';
-        const amt = parseFloat(r.grand_total || 0).toLocaleString('ar-SA', { minimumFractionDigits: 2 });
+        const amt = formatMoney(parseFloat(r.grand_total || 0));
         const txBadge = r.transaction_number
             ? `<span class="res-tx-badge" title="مرتبط بمعاملة">${r.transaction_number}</span>`
             : `<span class="res-tx-badge unlinked">غير مرتبط</span>`;
@@ -223,8 +248,8 @@ function renderReservationsTable(list) {
                     ${r.quotation_number ? `<div class="res-date">عرض سعر: ${r.quotation_number}</div>` : ''}
                 </td>
                 <td class="res-amount">
-                    <div>${fmtMoney ? fmtMoney(parseFloat(r.grand_total || 0)) : amt} ${r.currency}</div>
-                    ${r.vat_amount > 0 ? `<div class="res-date">+ ض.ق.م ${fmtMoney ? fmtMoney(parseFloat(r.vat_amount)) : parseFloat(r.vat_amount).toLocaleString('ar-SA')}</div>` : ''}
+                    <div>${formatMoney(parseFloat(r.grand_total || 0))}</div>
+                    ${r.vat_amount > 0 ? `<div class="res-date">+ ض.ق.م ${formatMoney(parseFloat(r.vat_amount))}</div>` : ''}
                 </td>
                 <td>
                     <span class="res-status-badge" style="color:${st.color};background:${st.bg}">
@@ -500,9 +525,9 @@ function renderTotalsBox() {
     });
     const grand = subtotal + vatTotal;
     return `
-        <div class="rf-total-row"><span>المجموع قبل الضريبة</span><span>SAR ${subtotal.toFixed(2)}</span></div>
-        <div class="rf-total-row"><span>ضريبة القيمة المضافة (15%)</span><span>SAR ${vatTotal.toFixed(2)}</span></div>
-        <div class="rf-total-row grand"><span>الإجمالي الكلي</span><span>SAR ${grand.toFixed(2)}</span></div>`;
+        <div class="rf-total-row"><span>المجموع قبل الضريبة</span><span>${formatMoney(subtotal)}</span></div>
+        <div class="rf-total-row"><span>ضريبة القيمة المضافة (15%)</span><span>${formatMoney(vatTotal)}</span></div>
+        <div class="rf-total-row grand"><span>الإجمالي الكلي</span><span>${formatMoney(grand)}</span></div>`;
 }
 
 function updateItem(i, field, value) {
@@ -789,17 +814,17 @@ async function openReservationDetails(id) {
                 <div class="rdv-amount-parts">
                     <div class="rdv-amount-part">
                         <span class="rdv-amount-label">قبل الضريبة</span>
-                        <span class="rdv-amount-val">${parseFloat(r.total_amount || 0).toLocaleString('ar-SA', { minimumFractionDigits: 2 })}</span>
+                        <span class="rdv-amount-val">${formatMoney(parseFloat(r.total_amount || 0))}</span>
                     </div>
                     <div class="rdv-amount-sep">+</div>
                     <div class="rdv-amount-part">
                         <span class="rdv-amount-label">ضريبة 15%</span>
-                        <span class="rdv-amount-val">${parseFloat(r.vat_amount || 0).toLocaleString('ar-SA', { minimumFractionDigits: 2 })}</span>
+                        <span class="rdv-amount-val">${formatMoney(parseFloat(r.vat_amount || 0))}</span>
                     </div>
                     <div class="rdv-amount-sep">=</div>
                     <div class="rdv-amount-part grand">
                         <span class="rdv-amount-label">الإجمالي الكلي</span>
-                        <span class="rdv-amount-val grand">${parseFloat(r.grand_total || 0).toLocaleString('ar-SA', { minimumFractionDigits: 2 })} ${r.currency || 'SAR'}</span>
+                        <span class="rdv-amount-val grand">${formatMoney(parseFloat(r.grand_total || 0))}</span>
                     </div>
                 </div>
             </div>
@@ -817,13 +842,40 @@ async function openReservationDetails(id) {
                             <div class="rdv-purpose-text">${r.purpose || '—'}</div>
                         </div>
                     </div>
-
+   <!-- بند الموازنة + مركز التكلفة -->
+                    <div class="rdv-card rdv-info-chips">
+                        <div class="rdv-chip">
+                            <div class="rdv-chip-label">بند الموازنة</div>
+                            <div class="rdv-chip-val">${r.budget_category || '—'}</div>
+                        </div>
+                        <div class="rdv-chip">
+                            <div class="rdv-chip-label">مركز التكلفة</div>
+                            <div class="rdv-chip-val">${r.cost_center || '—'}</div>
+                        </div>
+                    </div>
                     <!-- المورد -->
                     <div class="rdv-card">
                         <div class="rdv-card-head">🏢 بيانات المورد</div>
                         <div class="rdv-row"><span>المورد</span><strong>${r.supplier_name || '—'}</strong></div>
                         ${r.quotation_number ? `<div class="rdv-row"><span>رقم العرض</span><strong>${r.quotation_number}</strong></div>` : ''}
                         ${r.quotation_date ? `<div class="rdv-row"><span>تاريخ العرض</span><strong>${r.quotation_date}</strong></div>` : ''}
+                    </div>
+
+                </div>
+
+                <!-- العمود الأيسر -->
+                <div class="rdv-col">
+                 
+
+                    <!-- الأصناف / الطلب -->
+                    <div class="rdv-card">
+                        <div class="rdv-card-head">📦 بيانات الطلب</div>
+                        ${itemsHtml || `
+                            <div class="rdv-row"><span>الوصف</span>
+                                <span style="white-space:pre-line;color:var(--text-secondary)">${r.items_description || '—'}</span></div>
+                            <div class="rdv-row"><span>الكمية</span>
+                                <strong>${r.quantity || '—'} ${r.unit || ''}</strong></div>
+                        `}
                     </div>
 
                     <!-- الموازنة -->
@@ -845,33 +897,6 @@ async function openReservationDetails(id) {
                                 <span>⛔</span><span>${r.rejection_reason}</span>
                             </div>` : ''}
                     </div>
-                </div>
-
-                <!-- العمود الأيسر -->
-                <div class="rdv-col">
-                    <!-- بند الموازنة + مركز التكلفة -->
-                    <div class="rdv-card rdv-info-chips">
-                        <div class="rdv-chip">
-                            <div class="rdv-chip-label">بند الموازنة</div>
-                            <div class="rdv-chip-val">${r.budget_category || '—'}</div>
-                        </div>
-                        <div class="rdv-chip">
-                            <div class="rdv-chip-label">مركز التكلفة</div>
-                            <div class="rdv-chip-val">${r.cost_center || '—'}</div>
-                        </div>
-                    </div>
-
-                    <!-- الأصناف / الطلب -->
-                    <div class="rdv-card">
-                        <div class="rdv-card-head">📦 بيانات الطلب</div>
-                        ${itemsHtml || `
-                            <div class="rdv-row"><span>الوصف</span>
-                                <span style="white-space:pre-line;color:var(--text-secondary)">${r.items_description || '—'}</span></div>
-                            <div class="rdv-row"><span>الكمية</span>
-                                <strong>${r.quantity || '—'} ${r.unit || ''}</strong></div>
-                        `}
-                    </div>
-
                     <!-- التوجيه -->
                     <div class="rdv-card rdv-dispatch-card">
                         <div class="rdv-card-head" style="color:#818cf8">🔀 التوجيه</div>
@@ -945,7 +970,7 @@ function openReviewModal(id) {
                     <select class="form-select" id="rev_transaction_id">
                         <option value="">-- بدون ربط --</option>
                         ${transactions.map(t =>
-        `<option value="${t.id}">${t.transaction_number} — ${parseFloat(t.amount).toLocaleString('ar-SA')} ريال
+        `<option value="${t.id}">${t.transaction_number} — ${formatMoney(parseFloat(t.amount))}
                              ${t.budget_status ? `(${t.budget_status})` : ''}</option>`
     ).join('')}
                     </select>
@@ -1040,7 +1065,7 @@ function calcVAT() {
     const vatEl = document.getElementById('rf_vat_amount');
     const dispEl = document.getElementById('rf_grand_total_display');
     if (vatEl) vatEl.value = vat.toFixed(2);
-    if (dispEl) dispEl.textContent = grand.toLocaleString('ar-SA', { minimumFractionDigits: 2 }) + ' ريال';
+    if (dispEl) dispEl.textContent = formatMoney(grand);
     _budgetFormData['rf_grand_total'] = grand.toFixed(2);
     _budgetFormData['rf_vat_amount'] = vat.toFixed(2);
 }
@@ -1069,6 +1094,30 @@ function injectBudgetStyles() {
     .budget-page-header { display:flex; align-items:flex-end; justify-content:space-between; }
     .budget-page-title  { font-size:1.3rem; font-weight:700; color:var(--text-primary); margin:0; }
     .budget-page-sub    { color:var(--text-muted); font-size:.82rem; margin:.2rem 0 0; }
+
+    /* ── بانر القسم ──────────────────────────────── */
+    .budget-dept-banner {
+        display:flex; align-items:center; gap:.85rem;
+        background: linear-gradient(135deg, rgba(99,102,241,.1), rgba(139,92,246,.08));
+        border: 1px solid rgba(99,102,241,.25);
+        border-radius: 14px; padding: .85rem 1.2rem;
+        backdrop-filter: blur(4px);
+    }
+    .budget-dept-banner-icon {
+        font-size: 1.6rem; width: 44px; height: 44px;
+        border-radius: 12px;
+        background: rgba(99,102,241,.15);
+        display:flex; align-items:center; justify-content:center;
+        flex-shrink:0;
+    }
+    .budget-dept-banner-content { display:flex; flex-direction:column; gap:.18rem; }
+    .budget-dept-banner-label { font-size:.77rem; color:var(--text-muted); font-weight:500; }
+    .budget-dept-banner-name {
+        font-size:1.05rem; font-weight:700;
+        background: linear-gradient(135deg, #6366f1, #8b5cf6);
+        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
 
     /* ── توسيع المودل لشاشة الحجوزات ───────────── */
     .budget-modal-wide { max-width: 860px !important; width: 92% !important; }
@@ -1206,8 +1255,8 @@ function injectBudgetStyles() {
     .rdv-amount-sep    { font-size:1.2rem; color:rgba(255,255,255,.25); }
 
     /* عمودان */
-    .rdv-cols { display:grid; grid-template-columns:1fr 1fr; gap:.85rem; align-items:start; }
-    .rdv-col  { display:flex; flex-direction:column; gap:.85rem; }
+    .rdv-cols { display:flow; grid-template-columns:1fr 1fr; gap:.85rem; align-items:start; }
+    .rdv-col  { display:flex; flex-direction:column; gap:.85rem; margin-top:.25rem; }
 
     /* البطاقات */
     .rdv-card { background:var(--bg-card); border:1px solid var(--border-color); border-radius:12px; padding:.85rem 1rem; }

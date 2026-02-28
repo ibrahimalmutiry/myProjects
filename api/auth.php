@@ -113,11 +113,18 @@ try {
                 $_SESSION['user_id'] = $employeeId;
                 $_SESSION['employee_number'] = $empNumber;
                 
-                // جلب اسم الموظف
-                $nameResult = $conn->query("SELECT name, role FROM employees WHERE id = $employeeId");
+                // جلب اسم الموظف والقسم
+                $nameResult = $conn->query("SELECT name, role, department_id FROM employees WHERE id = $employeeId");
                 if ($nameResult && $row = $nameResult->fetch_assoc()) {
                     $_SESSION['user_name'] = $row['name'];
                     $_SESSION['user_role'] = $row['role'];
+                    $_SESSION['department_id'] = $row['department_id'];
+                    if ($row['department_id']) {
+                        $deptRes = $conn->query("SELECT name FROM departments WHERE id=" . (int)$row['department_id'] . " LIMIT 1");
+                        if ($deptRes && $deptRow = $deptRes->fetch_assoc()) {
+                            $_SESSION['department_name'] = $deptRow['name'];
+                        }
+                    }
                 }
                 
                 jsonResponse(['success' => true, 'message' => 'تم التسجيل بنجاح']);
@@ -157,6 +164,19 @@ try {
             $_SESSION['user_name'] = $employee['name'];
             $_SESSION['user_role'] = $employee['role'];
             $_SESSION['employee_number'] = $empNumber;
+            
+            // جلب القسم وحفظه في الجلسة
+            $deptRes = $conn->query("SELECT department_id FROM employees WHERE id=" . (int)$employee['id'] . " LIMIT 1");
+            if ($deptRes && $deptRow = $deptRes->fetch_assoc()) {
+                $_SESSION['department_id'] = $deptRow['department_id'];
+                // جلب اسم القسم
+                if ($deptRow['department_id']) {
+                    $deptNameRes = $conn->query("SELECT name FROM departments WHERE id=" . (int)$deptRow['department_id'] . " LIMIT 1");
+                    if ($deptNameRes && $deptNameRow = $deptNameRes->fetch_assoc()) {
+                        $_SESSION['department_name'] = $deptNameRow['name'];
+                    }
+                }
+            }
             
             // تحديث آخر دخول
             $conn->query("UPDATE employees SET last_login = NOW() WHERE id = " . $employee['id']);

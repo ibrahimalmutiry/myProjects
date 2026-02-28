@@ -590,18 +590,21 @@ window.initLanguage = initLanguage;
 // ═══════════════════════════════════════════════════════════
 
 /**
- * تنسيق مبلغ مالي بالريال السعودي
- * @param {number} amount - المبلغ
- * @returns {string} "1,234 ر.س"
- */
-/**
- * تنسيق مبلغ مالي بالريال السعودي
- * @param {number} amount - المبلغ
- * @returns {string} مثال: "1,234 ر.س"
+ * تنسيق مبلغ مالي موحّد — الدالة المرجعية لكل الملفات
+ * الناتج دائماً: "1,234.50 ر.س"  (أرقام إنجليزية، منزلتان عشريتان، فاصلة آلاف)
+ * @param {number|string} amount - المبلغ
+ * @returns {string}
  */
 function formatMoney(amount) {
-    return new Intl.NumberFormat('en-US').format(amount || 0) + ' ر.س';
+    return (parseFloat(amount) || 0)
+        .toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+        + ' ر.س';
 }
+
+/**
+ * نفس formatMoney — اسم بديل للتوافق مع app-bank.js القديم
+ */
+var fmtMoney = formatMoney;
 
 /**
  * تنسيق رقم بفواصل الآلاف
@@ -609,7 +612,7 @@ function formatMoney(amount) {
  * @returns {string} مثال: "1,234"
  */
 function formatNumber(amount) {
-    return new Intl.NumberFormat('en-US').format(amount || 0);
+    return (parseFloat(amount) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 /**

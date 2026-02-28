@@ -2507,9 +2507,7 @@ async function submitCancelInv(id) {
 
 
 // ─── دوال مساعدة ────────────────────────────────────────────
-function fmtMoney(n) {
-    return (parseFloat(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ر.س';
-}
+// fmtMoney مُعرَّفة في app-common.js وتُستخدم مباشرة هنا
 function fmtDate(d) {
     if (!d) return '—';
     return new Date(d).toLocaleDateString('ar-SA', { year: 'numeric', month: 'short', day: 'numeric' });
