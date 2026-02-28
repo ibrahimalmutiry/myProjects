@@ -87,7 +87,7 @@ function renderDashboard(urgentTransactions) {
                                     </td>
                                     <td><span class="tx-number">${tx.transaction_number}</span></td>
                                     <td><span class="tx-desc-text">${tx.description?.substring(0, 30) || ''}${tx.description?.length > 30 ? '...' : ''}</span></td>
-                                    <td><span class="tx-amount">${formatMoney(tx.amount)}</span></td>
+                                    <td><span class="tx-amount">${fmtMoney(tx.amount)}</span></td>
                                     <td>
                                         <button class="btn-action btn-view" onclick="viewTransaction(${tx.id})" title="عرض">
                                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -166,7 +166,7 @@ function renderDashboard(urgentTransactions) {
                                 </svg>
                             </div>
                             <div class="stat-details">
-                                <span class="stat-number">${formatMoney(App.stats.total_amount || 0)}</span>
+                                <span class="stat-number">${fmtMoney(App.stats.total_amount || 0)}</span>
                                 <span class="stat-text">إجمالي المبالغ</span>
                             </div>
                         </div>
@@ -518,14 +518,7 @@ async function loadPerformancePage() {
                 </svg>
                 سجل الأحداث
             </button>
-            <button class="perf-tab" onclick="switchPerfTab('analytics')">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <line x1="18" y1="20" x2="18" y2="10"></line>
-                    <line x1="12" y1="20" x2="12" y2="4"></line>
-                    <line x1="6" y1="20" x2="6" y2="14"></line>
-                </svg>
-                تحليلات
-            </button>
+     
         </div>
 
         <div class="perf-filters">

@@ -218,10 +218,10 @@ function markAllNotificationsRead($userId = null) {
 function sendSmtpEmail($to, $toName, $subject, $bodyHtml, $config = null) {
     if (!$config) $config = getNotificationSettings();
 
-    $host      = $config['smtp_host']       ?? '';
+    $host      = $config['smtp_host']       ?? 'smtp.gmail.com';
     $port      = (int)($config['smtp_port'] ?? 587);
-    $user      = $config['smtp_user']       ?? '';
-    $pass      = $config['smtp_pass']       ?? '';
+    $user      = $config['smtp_user']       ?? 'aaa1332@gmail.com';
+    $pass      = $config['smtp_pass']       ?? 'xffzbhzebqkjxihs';
     $enc       = $config['smtp_encryption'] ?? 'tls';
     $fromName  = $config['smtp_from_name']  ?? 'نظام الإدارة';
     $fromEmail = $user;

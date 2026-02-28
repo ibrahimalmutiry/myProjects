@@ -1915,14 +1915,7 @@ async function renderPerformanceSection() {
                 </svg>
                 سجل الأحداث
             </button>
-            <button class="perf-tab" onclick="switchPerfTab('analytics')">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <line x1="18" y1="20" x2="18" y2="10"></line>
-                    <line x1="12" y1="20" x2="12" y2="4"></line>
-                    <line x1="6" y1="20" x2="6" y2="14"></line>
-                </svg>
-                تحليلات
-            </button>
+   
             <button class="perf-tab sla-tab-btn" onclick="switchPerfTab('sla')">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <circle cx="12" cy="12" r="10"></circle>
@@ -2013,20 +2006,7 @@ async function renderPerformanceSection() {
                 </div>
             </div>
 
-            <!-- تحليلات -->
-            <div id="perfTabAnalytics" class="perf-tab-content">
-                <div class="analytics-grid">
-                    <div class="analytics-card">
-                        <h4>توزيع الأحداث حسب المرحلة</h4>
-                        <div id="stageDistribution" class="chart-container"></div>
-                    </div>
-                    <div class="analytics-card">
-                        <h4>أداء الموظفين</h4>
-                        <div id="employeeRanking" class="ranking-list"></div>
-                    </div>
-                </div>
-            </div>
-
+  
             <!-- ═══ SLA / OLA ═══ -->
             <div id="perfTabSla" class="perf-tab-content">
                 <!-- إحصاءات سريعة -->
@@ -2226,96 +2206,96 @@ async function loadEventsTimeline() {
 }
 
 // تحميل التحليلات
-async function loadAnalytics() {
-    var stageContainer = document.getElementById('stageDistribution');
-    var rankingContainer = document.getElementById('employeeRanking');
+// async function loadAnalytics() {
+//     var stageContainer = document.getElementById('stageDistribution');
+//     var rankingContainer = document.getElementById('employeeRanking');
 
-    if (!stageContainer || !rankingContainer) return;
+//     if (!stageContainer || !rankingContainer) return;
 
-    try {
-        var res = await fetch('api/?action=all_events&limit=500');
-        var result = await res.json();
+//     try {
+//         var res = await fetch('api/?action=all_events&limit=500');
+//         var result = await res.json();
 
-        if (result.success && result.data) {
-            // توزيع حسب المرحلة
-            var stageCounts = {};
-            var employeeStats = {};
+//         if (result.success && result.data) {
+//             // توزيع حسب المرحلة
+//             var stageCounts = {};
+//             var employeeStats = {};
 
-            result.data.forEach(function (event) {
-                // عدد حسب المرحلة
-                stageCounts[event.stage] = (stageCounts[event.stage] || 0) + 1;
+//             result.data.forEach(function (event) {
+//                 // عدد حسب المرحلة
+//                 stageCounts[event.stage] = (stageCounts[event.stage] || 0) + 1;
 
-                // إحصائيات الموظفين
-                if (event.employee_name) {
-                    if (!employeeStats[event.employee_name]) {
-                        employeeStats[event.employee_name] = { count: 0, totalTime: 0 };
-                    }
-                    employeeStats[event.employee_name].count++;
-                    if (event.duration_from_previous) {
-                        employeeStats[event.employee_name].totalTime += event.duration_from_previous;
-                    }
-                }
-            });
+//                 // إحصائيات الموظفين
+//                 if (event.employee_name) {
+//                     if (!employeeStats[event.employee_name]) {
+//                         employeeStats[event.employee_name] = { count: 0, totalTime: 0 };
+//                     }
+//                     employeeStats[event.employee_name].count++;
+//                     if (event.duration_from_previous) {
+//                         employeeStats[event.employee_name].totalTime += event.duration_from_previous;
+//                     }
+//                 }
+//             });
 
-            // عرض توزيع المراحل
-            var stageInfo = {
-                'creation': { name: 'الإنشاء', color: '#4dabf7' },
-                'receiving': { name: 'الاستلام', color: '#69db7c' },
-                'budget': { name: 'الموازنة', color: '#3bc9db' },
-                'payment': { name: 'الدفع', color: '#ffa94d' },
-                'invoice': { name: 'الفوترة', color: '#b197fc' }
-            };
+//             // عرض توزيع المراحل
+//             var stageInfo = {
+//                 'creation': { name: 'الإنشاء', color: '#4dabf7' },
+//                 'receiving': { name: 'الاستلام', color: '#69db7c' },
+//                 'budget': { name: 'الموازنة', color: '#3bc9db' },
+//                 'payment': { name: 'الدفع', color: '#ffa94d' },
+//                 'invoice': { name: 'الفوترة', color: '#b197fc' }
+//             };
 
-            var total = Object.values(stageCounts).reduce((a, b) => a + b, 0);
-            var stageHtml = '<div class="stage-bars">';
+//             var total = Object.values(stageCounts).reduce((a, b) => a + b, 0);
+//             var stageHtml = '<div class="stage-bars">';
 
-            Object.keys(stageInfo).forEach(function (stage) {
-                var count = stageCounts[stage] || 0;
-                var percent = total > 0 ? Math.round((count / total) * 100) : 0;
-                var info = stageInfo[stage];
+//             Object.keys(stageInfo).forEach(function (stage) {
+//                 var count = stageCounts[stage] || 0;
+//                 var percent = total > 0 ? Math.round((count / total) * 100) : 0;
+//                 var info = stageInfo[stage];
 
-                stageHtml += `
-                <div class="stage-bar-item">
-                    <div class="stage-bar-label">
-                        <span style="color: ${info.color};">${info.name}</span>
-                        <span>${count} (${percent}%)</span>
-                    </div>
-                    <div class="stage-bar-track">
-                        <div class="stage-bar-fill" style="width: ${percent}%; background: ${info.color};"></div>
-                    </div>
-                </div>`;
-            });
+//                 stageHtml += `
+//                 <div class="stage-bar-item">
+//                     <div class="stage-bar-label">
+//                         <span style="color: ${info.color};">${info.name}</span>
+//                         <span>${count} (${percent}%)</span>
+//                     </div>
+//                     <div class="stage-bar-track">
+//                         <div class="stage-bar-fill" style="width: ${percent}%; background: ${info.color};"></div>
+//                     </div>
+//                 </div>`;
+//             });
 
-            stageHtml += '</div>';
-            stageContainer.innerHTML = stageHtml;
+//             stageHtml += '</div>';
+//             stageContainer.innerHTML = stageHtml;
 
-            // ترتيب الموظفين
-            var employees = Object.entries(employeeStats)
-                .map(([name, stats]) => ({
-                    name,
-                    count: stats.count,
-                    avgTime: stats.count > 0 ? Math.round(stats.totalTime / stats.count) : 0
-                }))
-                .sort((a, b) => b.count - a.count);
+//             // ترتيب الموظفين
+//             var employees = Object.entries(employeeStats)
+//                 .map(([name, stats]) => ({
+//                     name,
+//                     count: stats.count,
+//                     avgTime: stats.count > 0 ? Math.round(stats.totalTime / stats.count / 60) : 0
+//                 }))
+//                 .sort((a, b) => b.count - a.count);
 
-            var rankHtml = '<div class="ranking-items">';
-            employees.slice(0, 5).forEach(function (emp, index) {
-                var medal = index === 0 ? '🥇' : (index === 1 ? '🥈' : (index === 2 ? '🥉' : ''));
-                rankHtml += `
-                <div class="ranking-item">
-                    <span class="rank-number">${medal || (index + 1)}</span>
-                    <span class="rank-name">${emp.name}</span>
-                    <span class="rank-count">${emp.count} معاملة</span>
-                    <span class="rank-time">${emp.avgTime} د متوسط</span>
-                </div>`;
-            });
-            rankHtml += '</div>';
-            rankingContainer.innerHTML = rankHtml;
-        }
-    } catch (err) {
-        stageContainer.innerHTML = '<div class="error-state">خطأ</div>';
-    }
-}
+//             var rankHtml = '<div class="ranking-items">';
+//             employees.slice(0, 5).forEach(function (emp, index) {
+//                 var medal = index === 0 ? '🥇' : (index === 1 ? '🥈' : (index === 2 ? '🥉' : ''));
+//                 rankHtml += `
+//                 <div class="ranking-item">
+//                     <span class="rank-number">${medal || (index + 1)}</span>
+//                     <span class="rank-name">${emp.name}</span>
+//                     <span class="rank-count">${emp.count} معاملة</span>
+//                     <span class="rank-time">${emp.avgTime} دقيقة متوسط </span>
+//                 </div>`;
+//             });
+//             rankHtml += '</div>';
+//             rankingContainer.innerHTML = rankHtml;
+//         }
+//     } catch (err) {
+//         stageContainer.innerHTML = '<div class="error-state">خطأ</div>';
+//     }
+// }
 
 function formatEventDateTime(datetime) {
     if (!datetime) return '-';
@@ -2698,6 +2678,9 @@ async function clearAllTransactions() {
 function openUserGuide() {
     window.open('User_Guide.html', '_blank', 'width=1200,height=800');
 }
+
+
+
 // ═══════════════════════════════════════════════════════════════
 //  نظام إدارة الصلاحيات — Permissions Management
 // ═══════════════════════════════════════════════════════════════
@@ -2733,6 +2716,7 @@ var PAGES_CONFIG = [
     { key: 'dashboard', label: 'لوحة التحكم', icon: '📊', group: 'رئيسية' },
     { key: 'notifications', label: 'التنبيهات', icon: '🔔', group: 'رئيسية' },
     { key: 'transactions', label: 'المعاملات المالية', icon: '💰', group: 'معاملات' },
+    { key: 'reservations', label: 'الحجوزات', icon: '📅', group: 'رئيسية' },
     { key: 'bank-deposits', label: 'الودائع البنكية', icon: '🏦', group: 'معاملات' },
     { key: 'correspondence', label: 'الخطابات', icon: '📨', group: 'معاملات' },
     { key: 'sla', label: 'SLA / OLA', icon: '⏱', group: 'متابعة' },
@@ -2987,7 +2971,7 @@ function onPermLevelChange(input, empId) {
         employee: [
             'bank.record_balance', 'bank.view_history', 'bank.add_deposit',
             'transaction.add',
-            'reservation.add', 'reservation.view_own',
+            'reservation.add', 'reservation.view_own', 'reservation.view_all',
         ],
     };
     var actDef = actionDefaults[level] || [];

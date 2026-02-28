@@ -41,7 +41,10 @@ const DOM = {};
 document.addEventListener('DOMContentLoaded', () => {
     initDOM();
     initEventListeners();
-    loadDashboard();
+    const tab = (typeof window._firstAllowedTab === 'function')
+        ? (window._firstAllowedTab() || 'dashboard')
+        : 'dashboard';
+    switchTab(tab);
 });
 
 
@@ -686,14 +689,24 @@ var SettingsData = {
  * تُحدّث App.currentTab وتُفعّل التبويب المحدد وتستدعي دالة التحميل المناسبة
  */
 function switchTab(tab) {
-    // ── فحص الصلاحية قبل التبديل ────────────────────────────
-    if (typeof currentUser !== 'undefined' && currentUser.pagePermissions) {
-        if (currentUser.permissionLevel !== 'system_admin') {
-            var perms = currentUser.pagePermissions;
-            if (perms.hasOwnProperty(tab) && !perms[tab]) {
-                showToast('🔒 ليس لديك صلاحية الوصول لهذه الصفحة', 'error');
-                return;
+    // ── فحص الصلاحية — يمنع التحميل ويعرض رسالة ────────────
+    if (typeof currentUser !== 'undefined' && currentUser.permissionLevel !== 'system_admin') {
+        const perms = currentUser.pagePermissions || {};
+        if (perms.hasOwnProperty(tab) && !perms[tab]) {
+            if (DOM.mainContent) {
+                DOM.mainContent.innerHTML = `
+                    <div style="display:flex;flex-direction:column;align-items:center;
+                                justify-content:center;min-height:55vh;gap:.85rem;
+                                color:var(--text-muted);text-align:center;padding:2rem">
+                        <div style="font-size:3.5rem;opacity:.35">🔒</div>
+                        <h2 style="margin:0;color:var(--text-primary);font-size:1.2rem">غير مصرح بالوصول</h2>
+                        <p style="margin:0;font-size:.85rem;max-width:300px;line-height:1.6">
+                            ليس لديك صلاحية لعرض هذه الصفحة.<br>تواصل مع مدير النظام.
+                        </p>
+                    </div>`;
             }
+            showToast('🔒 ليس لديك صلاحية الوصول لهذه الصفحة', 'error');
+            return;
         }
     }
 
@@ -722,8 +735,6 @@ function switchTab(tab) {
         if (typeof loadBudgetReservationsPage === 'function') loadBudgetReservationsPage();
     } else if (tab === 'settings') {
         loadSettingsPage();
-    } else if (tab === 'db-admin') {
-        if (typeof loadDbAdminPage === 'function') loadDbAdminPage();
     }
 }
 

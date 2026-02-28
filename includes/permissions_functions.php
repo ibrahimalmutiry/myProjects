@@ -81,7 +81,7 @@ function getEmployeePermissions(int $userId): array {
     if (!$r || !($row = $r->fetch_assoc())) return [];
 
     $pages = [];
-    $allPages = ['dashboard','transactions','correspondence','bank-deposits','sla','performance','settings','notifications'];
+    $allPages = ['dashboard','transactions','correspondence','bank-deposits','sla','performance','settings','notifications','reservations'];
 
     if ($row['permission_level'] === 'system_admin') {
         foreach ($allPages as $p) $pages[$p] = true;
@@ -101,8 +101,8 @@ function getEmployeePermissions(int $userId): array {
 
         // دمج مع الافتراضيات
         $defaults = [
-            'manager'  => ['dashboard'=>1,'transactions'=>1,'correspondence'=>1,'bank-deposits'=>1,'sla'=>1,'performance'=>1,'settings'=>0,'notifications'=>1],
-            'employee' => ['dashboard'=>0,'transactions'=>1,'correspondence'=>1,'bank-deposits'=>1,'sla'=>0,'performance'=>0,'settings'=>0,'notifications'=>1],
+            'manager'  => ['dashboard'=>1,'transactions'=>1,'correspondence'=>1,'bank-deposits'=>1,'sla'=>1,'performance'=>1,'settings'=>0,'notifications'=>1,'reservations'=>1],
+            'employee' => ['dashboard'=>0,'transactions'=>1,'correspondence'=>1,'bank-deposits'=>1,'sla'=>0,'performance'=>0,'settings'=>0,'notifications'=>1,'reservations'=>1],
         ];
         $def = $defaults[$row['permission_level']] ?? [];
 
@@ -187,7 +187,7 @@ function loadUserPermissionsToSession(int $userId): void {
     $_SESSION['can_delete']       = (bool)$row['can_delete'];
 
     // تحميل صلاحيات الصفحات
-    $allPages = ['dashboard','transactions','correspondence','bank-deposits','sla','performance','settings','notifications'];
+    $allPages = ['dashboard','transactions','correspondence','bank-deposits','sla','performance','settings','notifications','reservations'];
     $pagePerms = [];
 
     if ($row['permission_level'] === 'system_admin') {
@@ -206,8 +206,8 @@ function loadUserPermissionsToSession(int $userId): void {
         }
 
         $defaults = [
-            'manager'  => ['dashboard'=>1,'transactions'=>1,'correspondence'=>1,'bank-deposits'=>1,'sla'=>1,'performance'=>1,'settings'=>0,'notifications'=>1],
-            'employee' => ['dashboard'=>0,'transactions'=>1,'correspondence'=>1,'bank-deposits'=>1,'sla'=>0,'performance'=>0,'settings'=>0,'notifications'=>1],
+            'manager'  => ['dashboard'=>1,'transactions'=>1,'correspondence'=>1,'bank-deposits'=>1,'sla'=>1,'performance'=>1,'settings'=>0,'notifications'=>1,'reservations'=>1],
+            'employee' => ['dashboard'=>0,'transactions'=>1,'correspondence'=>1,'bank-deposits'=>1,'sla'=>0,'performance'=>0,'settings'=>0,'notifications'=>1,'reservations'=>1],
         ];
         $def = $defaults[$row['permission_level']] ?? [];
 

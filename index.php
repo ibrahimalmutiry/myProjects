@@ -32,8 +32,6 @@ $userRole = $_SESSION['user_role'] ?? '';
     <link rel="stylesheet" href="css/bank_deposits_new.css">
     <link rel="stylesheet" href="css/investment_styles.css">
     <link rel="stylesheet" href="css/correspondence.css">
-    <link rel="stylesheet" href="css/db-admin.css">
-
     <link rel="icon"
         href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
 </head>
@@ -122,17 +120,6 @@ $userRole = $_SESSION['user_role'] ?? '';
                 <span class="nav-label">المعاملات المالية</span>
             </button>
 
-
-            <button class="nav-tab" data-tab="reservations" data-tooltip="الحجوزات">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                    <polyline points="14 2 14 8 20 8" />
-                    <line x1="16" y1="13" x2="8" y2="13" />
-                    <line x1="16" y1="17" x2="8" y2="17" />
-                    <line x1="10" y1="9" x2="8" y2="9" />
-                </svg>
-                <span class="nav-label">الحجوزات</span>
-            </button>
             <button class="nav-tab" data-tab="bank-deposits" data-tooltip="الودائع البنكية">
                 <span class="nav-icon">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -155,6 +142,16 @@ $userRole = $_SESSION['user_role'] ?? '';
 
             <span class="nav-group-label">المتابعة</span>
 
+            <button class="nav-tab" data-tab="reservations" data-tooltip="الحجوزات">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                    <line x1="16" y1="13" x2="8" y2="13" />
+                    <line x1="16" y1="17" x2="8" y2="17" />
+                    <line x1="10" y1="9" x2="8" y2="9" />
+                </svg>
+                <span class="nav-label">الحجوزات</span>
+            </button>
             <button class="nav-tab" data-tab="sla" data-tooltip="SLA / OLA">
                 <span class="nav-icon">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -177,18 +174,6 @@ $userRole = $_SESSION['user_role'] ?? '';
 
             <span class="nav-group-label">النظام</span>
 
-            <?php if (($userRole ?? '') === 'admin' || ($_SESSION['permission_level'] ?? '') === 'system_admin'): ?>
-            <button class="nav-tab" data-tab="db-admin" data-tooltip="إدارة قاعدة البيانات">
-                <span class="nav-icon">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <ellipse cx="12" cy="5" rx="9" ry="3" />
-                        <path d="M21 12c0 1.66-4 3-9 3S3 13.66 3 12" />
-                        <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
-                    </svg>
-                </span>
-                <span class="nav-label">إدارة قاعدة البيانات</span>
-            </button>
-            <?php endif; ?>
             <button class="nav-tab" data-tab="settings" data-tooltip="الإعدادات">
                 <span class="nav-icon">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -290,7 +275,6 @@ $userRole = $_SESSION['user_role'] ?? '';
     <script src="js/app-budget.js"></script>
     <script src="js/app-bank.js"></script>
     <script src="js/correspondence.js"></script>
-    <script src="js/app-db-admin.js"></script>
 
     <script>
     // معلومات المستخدم الحالي
@@ -313,7 +297,7 @@ function loadPermissionsForSession($userId) {
             $_SESSION['permission_level'] = 'employee';
             $_SESSION['can_delete'] = false;
         }
-        $allPages = ['dashboard','transactions','correspondence','bank-deposits','sla','performance','settings','notifications'];
+        $allPages = ['dashboard','transactions','correspondence','bank-deposits','sla','performance','settings','notifications','reservations'];
         $_SESSION['page_permissions'] = array_fill_keys($allPages, ($_SESSION['permission_level'] === 'system_admin'));
         return;
     }
@@ -331,12 +315,13 @@ function loadPermissionsForSession($userId) {
     $_SESSION['permission_level'] = $row['permission_level'];
     $_SESSION['can_delete'] = (bool)$row['can_delete'];
     
-    $allPages = ['dashboard','transactions','correspondence','bank-deposits','sla','performance','settings','notifications'];
+    $allPages = ['dashboard','transactions','correspondence','bank-deposits','sla','performance','settings','notifications','reservations'];
     
     if ($row['permission_level'] === 'system_admin') {
-        $_SESSION['page_permissions'] = array_fill_keys($allPages, true);
+        $_SESSION['page_permissions']   = array_fill_keys($allPages, true);
+        $_SESSION['action_permissions'] = [];
     } else {
-        // جلب من الجدول إن وجد
+        // جلب صلاحيات الصفحات
         $chkTbl = $conn->query("SHOW TABLES LIKE 'employee_page_permissions'");
         $stored = [];
         if ($chkTbl && $chkTbl->num_rows > 0) {
@@ -344,8 +329,8 @@ function loadPermissionsForSession($userId) {
             if ($r2) while ($pr = $r2->fetch_assoc()) $stored[$pr['page']] = (bool)$pr['can_access'];
         }
         $defaults = [
-            'manager'  => ['dashboard'=>1,'transactions'=>1,'correspondence'=>1,'bank-deposits'=>1,'sla'=>1,'performance'=>1,'settings'=>0,'notifications'=>1],
-            'employee' => ['dashboard'=>0,'transactions'=>1,'correspondence'=>1,'bank-deposits'=>1,'sla'=>0,'performance'=>0,'settings'=>0,'notifications'=>1],
+            'manager'  => ['dashboard'=>1,'transactions'=>1,'correspondence'=>1,'bank-deposits'=>1,'sla'=>1,'performance'=>1,'settings'=>0,'notifications'=>1,'reservations'=>1],
+            'employee' => ['dashboard'=>0,'transactions'=>1,'correspondence'=>1,'bank-deposits'=>1,'sla'=>0,'performance'=>0,'settings'=>0,'notifications'=>1,'reservations'=>1],
         ];
         $def = $defaults[$row['permission_level']] ?? [];
         $pagePerms = [];
@@ -353,11 +338,20 @@ function loadPermissionsForSession($userId) {
             $pagePerms[$p] = isset($stored[$p]) ? $stored[$p] : (bool)($def[$p] ?? false);
         }
         $_SESSION['page_permissions'] = $pagePerms;
+
+        // جلب صلاحيات الإجراءات
+        $actionPerms = [];
+        $chkAct = $conn->query("SHOW TABLES LIKE 'employee_action_permissions'");
+        if ($chkAct && $chkAct->num_rows > 0) {
+            $ra = $conn->query("SELECT action, can_do FROM employee_action_permissions WHERE employee_id=$userId");
+            if ($ra) while ($ar = $ra->fetch_assoc()) $actionPerms[$ar['action']] = (bool)$ar['can_do'];
+        }
+        $_SESSION['action_permissions'] = $actionPerms;
     }
 }
 
-// تحميل الصلاحيات إذا لم تكن في الجلسة
-if (!isset($_SESSION['permission_level']) && isset($_SESSION['user_id'])) {
+// تحميل/تحديث الصلاحيات في كل طلب لضمان تطبيق أي تغييرات
+if (isset($_SESSION['user_id'])) {
     loadPermissionsForSession((int)$_SESSION['user_id']);
 }
 ?>
@@ -377,12 +371,22 @@ if (!isset($_SESSION['permission_level']) && isset($_SESSION['user_id'])) {
 
         document.querySelectorAll('.nav-tab[data-tab]').forEach(function(btn) {
             var tab = btn.dataset.tab;
-            if (tab && perms.hasOwnProperty(tab)) {
-                if (!perms[tab]) {
-                    btn.style.display = 'none'; // إخفاء كامل من السايدبار
-                }
+            if (tab && perms.hasOwnProperty(tab) && !perms[tab]) {
+                btn.style.display = 'none';
             }
         });
+
+        // أول تبويب مسموح به (يُستخدم عند التحميل الأولي)
+        window._firstAllowedTab = function() {
+            var order = ['dashboard', 'notifications', 'transactions', 'bank-deposits',
+                'correspondence', 'reservations', 'sla', 'performance', 'settings'
+            ];
+            for (var i = 0; i < order.length; i++) {
+                var t = order[i];
+                if (!perms.hasOwnProperty(t) || perms[t]) return t;
+            }
+            return 'notifications';
+        };
     })();
 
     // ══════════════════════════════════════════════════════

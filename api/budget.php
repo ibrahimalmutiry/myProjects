@@ -30,9 +30,18 @@ try {
         // ── قائمة الحجوزات ──────────────────────────────────
         case 'list':
             $where = [];
-            if (!in_array($userRole, ['admin', 'budget'])) {
+            $permLevel = $_SESSION['permission_level']   ?? 'employee';
+            $actPerms  = $_SESSION['action_permissions'] ?? [];
+
+            $canViewAll = $permLevel === 'system_admin'
+                       || in_array($userRole, ['admin','budget'])
+                       || !empty($actPerms['reservation.view_all']);
+
+            if (!$canViewAll) {
                 $deptId = getDepartmentByEmployee($conn, $userId);
-                $where[] = $deptId ? "br.department_id = $deptId" : "br.requested_by = $userId";
+                $where[] = $deptId
+                    ? "br.department_id = $deptId"
+                    : "br.requested_by = $userId";
             }
             if (!empty($_GET['status']))
                 $where[] = "br.status = '".$conn->real_escape_string($_GET['status'])."'";

@@ -8,7 +8,7 @@ const BudgetState = {
     reservations: [],
     meta: { departments: [], suppliers: [], transactions: [] },
     filter: { status: '', department_id: '', fiscal_year: '', search: '' },
-    currentStep: 1,  // خطوات نموذج الإدخال
+    currentStep: 1,
     loaded: false,
 };
 
@@ -27,6 +27,26 @@ const PRIORITY_COLOR = {
     'عاجل': '#f59e0b',
     'حرج': '#ef4444',
 };
+
+// ── ثوابت نموذج الحجز ───────────────────────────────────────
+const BUDGET_CATEGORIES = [
+    'رأس المال', 'تشغيلي', 'صيانة وإصلاح', 'تقنية معلومات',
+    'تدريب وتطوير', 'خدمات استشارية', 'مستلزمات مكتبية',
+    'أثاث ومعدات', 'سيارات ومركبات', 'إنشاءات وبنية تحتية',
+];
+const COST_CENTERS = [
+    { id: 'CC-1001', name: 'الإدارة العامة' },
+    { id: 'CC-1002', name: 'التخطيط والميزانية' },
+    { id: 'CC-1003', name: 'الموارد البشرية' },
+    { id: 'CC-1004', name: 'تقنية المعلومات' },
+    { id: 'CC-1005', name: 'المشتريات' },
+    { id: 'CC-1006', name: 'المالية والحسابات' },
+    { id: 'CC-1007', name: 'الشؤون الإدارية' },
+    { id: 'CC-1008', name: 'التدريب والتطوير' },
+];
+
+// حالة أصناف الطلب (multi-item)
+let _rfItems = [];
 
 // ═══════════════════════════════════════════════════════════════
 //  نقطة الدخول
@@ -56,6 +76,12 @@ async function fetchReservations() {
         const params = new URLSearchParams(
             Object.fromEntries(Object.entries(BudgetState.filter).filter(([, v]) => v))
         );
+        // ── صلاحيات العرض ──────────────────────────────────
+        const canViewAll = canDo('reservation.view_all');
+        const canViewOwn = canDo('reservation.view_own');
+        if (!canViewAll && !canViewOwn) { BudgetState.reservations = []; return; }
+        if (!canViewAll) params.set('scope', 'own');
+
         const res = await fetch(`api/budget.php?action=list&${params}`);
         const data = await res.json();
         if (data.success) BudgetState.reservations = data.data;
@@ -142,16 +168,14 @@ function renderBudgetPage() {
     ).join('')}
             </select>
 
+            ${canDo('reservation.add') ? `
             <button class="btn btn-primary" onclick="openAddReservationModal()">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                     <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
                 </svg>
                 حجز جديد
-            </button>
+            </button>` : ''}
         </div>`;
-
-    // الجدول
-    const tableHtml = renderReservationsTable(reservations);
 
     DOM.mainContent.innerHTML = `
         <div class="budget-page-wrap">
@@ -163,7 +187,7 @@ function renderBudgetPage() {
             </div>
             ${statsHtml}
             ${filtersHtml}
-            ${tableHtml}
+            ${renderReservationsTable(reservations)}
         </div>`;
 }
 
@@ -214,7 +238,7 @@ function renderReservationsTable(list) {
                 <td onclick="event.stopPropagation()">
                     <div style="display:flex;gap:.35rem;justify-content:center">
                         <button class="btn-icon-sm" onclick="openReservationDetails(${r.id})" title="تفاصيل">👁</button>
-                        ${(currentUser?.role === 'budget' || currentUser?.role === 'admin') && r.status === 'قيد المراجعة'
+                        ${canDo('reservation.review') && r.status === 'قيد المراجعة'
                 ? `<button class="btn-icon-sm btn-success" onclick="event.stopPropagation();openReviewModal(${r.id})" title="مراجعة">✓</button>`
                 : ''}
                     </div>
@@ -258,8 +282,12 @@ function budgetFilterChange(key, value) {
 // ═══════════════════════════════════════════════════════════════
 function openAddReservationModal() {
     BudgetState.currentStep = 1;
+    _rfItems = Array.from({ length: 5 }, () => ({
+        description: '', qty: 1, unit: 'قطعة', price: 0, includeVat: false,
+    }));
     DOM.modalTitle.textContent = '📋 حجز جديد';
     DOM.modalBody.innerHTML = renderReservationForm();
+    document.querySelector('.modal')?.classList.add('budget-modal-wide');
     openModal();
 }
 
@@ -292,7 +320,8 @@ function renderReservationForm(step = BudgetState.currentStep) {
             <div class="res-form-grid">
                 <div class="res-form-group full">
                     <label>الغرض من الشراء <span class="req">*</span></label>
-                    <input type="text" class="form-input" id="rf_purpose" placeholder="مثال: شراء أجهزة حاسوب لقسم تقنية المعلومات">
+                    <input type="text" class="form-input" id="rf_purpose"
+                        placeholder="مثال: شراء أجهزة حاسوب لقسم تقنية المعلومات">
                 </div>
                 <div class="res-form-group">
                     <label>القسم الطالب <span class="req">*</span></label>
@@ -315,11 +344,19 @@ function renderReservationForm(step = BudgetState.currentStep) {
                 </div>
                 <div class="res-form-group">
                     <label>بند الموازنة</label>
-                    <input type="text" class="form-input" id="rf_budget_category" placeholder="مثال: رأس المال / تشغيلي">
+                    <select class="form-select" id="rf_budget_category">
+                        <option value="">-- اختر البند --</option>
+                        ${BUDGET_CATEGORIES.map(c => `<option value="${c}">${c}</option>`).join('')}
+                    </select>
                 </div>
                 <div class="res-form-group">
                     <label>مركز التكلفة</label>
-                    <input type="text" class="form-input" id="rf_cost_center" placeholder="مثال: CC-1001">
+                    <select class="form-select" id="rf_cost_center">
+                        <option value="">-- اختر مركز التكلفة --</option>
+                        ${COST_CENTERS.map(c =>
+            `<option value="${c.id}">${c.id} — ${c.name}</option>`
+        ).join('')}
+                    </select>
                 </div>
             </div>`;
     }
@@ -332,13 +369,19 @@ function renderReservationForm(step = BudgetState.currentStep) {
                     <label>المورد</label>
                     <select class="form-select" id="rf_supplier_id" onchange="onSupplierChange(this)">
                         <option value="">-- اختر من القائمة أو أدخل يدوياً --</option>
-                        ${suppliers.map(s => `<option value="${s.id}">${s.name} (${s.cr_number || '—'})</option>`).join('')}
+                        ${suppliers.map(s =>
+            `<option value="${s.id}">${s.name} (${s.cr_number || '—'})</option>`
+        ).join('')}
                         <option value="manual">➕ مورد غير موجود في القائمة</option>
                     </select>
                 </div>
                 <div class="res-form-group full" id="rf_manual_supplier_wrap" style="display:none">
                     <label>اسم المورد <span class="req">*</span></label>
-                    <input type="text" class="form-input" id="rf_supplier_name_manual" placeholder="أدخل اسم المورد">
+                    <input type="text" class="form-input" id="rf_supplier_name_manual"
+                        placeholder="أدخل اسم المورد">
+                    <small style="color:var(--text-muted);font-size:.74rem">
+                        💡 سيتم إضافة هذا المورد لقاعدة البيانات عند حفظ الحجز
+                    </small>
                 </div>
                 <div class="res-form-group">
                     <label>رقم عرض السعر</label>
@@ -351,56 +394,40 @@ function renderReservationForm(step = BudgetState.currentStep) {
             </div>`;
     }
 
-    // ── الخطوة 3: بيانات الطلب ──────────────────────────────
+    // ── الخطوة 3: جدول الأصناف ──────────────────────────────
     if (step === 3) {
         formBody = `
-            <div class="res-form-grid">
-                <div class="res-form-group full">
-                    <label>وصف البنود / الأصناف <span class="req">*</span></label>
-                    <textarea class="form-textarea" id="rf_items_description" rows="3"
-                        placeholder="اذكر الأصناف بالتفصيل: الكميات، المواصفات، الأوزان…"></textarea>
+            <div class="rf-items-wrap">
+                <div class="rf-items-header">
+                    <span style="flex:3;min-width:140px">الوصف / الصنف <span class="req">*</span></span>
+                    <span style="flex:.7;min-width:55px;text-align:center">الكمية</span>
+                    <span style="flex:1;min-width:80px;text-align:center">الوحدة</span>
+                    <span style="flex:1.1;min-width:85px;text-align:center">سعر الوحدة</span>
+                    <span style="flex:.8;min-width:70px;text-align:center">يشمل VAT</span>
+                    <span style="flex:1;min-width:80px;text-align:center">الإجمالي</span>
+                    <span style="width:30px"></span>
                 </div>
-                <div class="res-form-group">
-                    <label>الكمية</label>
-                    <input type="number" class="form-input" id="rf_quantity" value="1" min="1" oninput="calcReservationTotal()">
+                <div id="rf_items_list">
+                    ${_rfItems.map((it, i) => renderItemRow(it, i)).join('')}
                 </div>
-                <div class="res-form-group">
-                    <label>وحدة القياس</label>
-                    <select class="form-select" id="rf_unit">
-                        <option value="قطعة">قطعة</option>
-                        <option value="طن">طن</option>
-                        <option value="متر">متر</option>
-                        <option value="لتر">لتر</option>
-                        <option value="صندوق">صندوق</option>
-                        <option value="خدمة">خدمة</option>
-                        <option value="أخرى">أخرى</option>
-                    </select>
-                </div>
-                <div class="res-form-group">
-                    <label>سعر الوحدة (ريال)</label>
-                    <input type="number" class="form-input" id="rf_unit_price" value="0" min="0" step="0.01" oninput="calcReservationTotal()">
-                </div>
-                <div class="res-form-group">
-                    <label>الإجمالي قبل الضريبة</label>
-                    <input type="number" class="form-input" id="rf_total_amount" value="0" step="0.01" oninput="calcVAT()">
-                </div>
-                <div class="res-form-group">
-                    <label>ضريبة القيمة المضافة (15%)</label>
-                    <input type="number" class="form-input" id="rf_vat_amount" value="0" step="0.01" readonly
-                        style="background:var(--bg-surface);color:var(--text-muted)">
-                </div>
-                <div class="res-form-group full">
-                    <label>الإجمالي الكلي شامل الضريبة</label>
-                    <div class="res-grand-total" id="rf_grand_total_display">0.00 ريال</div>
-                </div>
-                <div class="res-form-group">
-                    <label>العملة</label>
-                    <select class="form-select" id="rf_currency">
-                        <option value="SAR" selected>ريال سعودي (SAR)</option>
-                        <option value="USD">دولار أمريكي (USD)</option>
-                        <option value="EUR">يورو (EUR)</option>
-                    </select>
-                </div>
+            </div>
+
+            <button class="rf-add-row-btn" onclick="addItemRow()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                </svg>
+                إضافة صف جديد
+            </button>
+
+            <div class="rf-totals-box" id="rf_totals_box">${renderTotalsBox()}</div>
+
+            <div class="res-form-group" style="margin-top:.25rem">
+                <label>العملة</label>
+                <select class="form-select" id="rf_currency" style="max-width:220px">
+                    <option value="SAR" selected>ريال سعودي (SAR)</option>
+                    <option value="USD">دولار أمريكي (USD)</option>
+                    <option value="EUR">يورو (EUR)</option>
+                </select>
             </div>`;
     }
 
@@ -410,39 +437,127 @@ function renderReservationForm(step = BudgetState.currentStep) {
             ? `<button class="btn btn-secondary" onclick="budgetFormStep(${step - 1})">← السابق</button>`
             : `<button class="btn btn-secondary" onclick="closeModal()">إلغاء</button>`}
             ${step < 3
-            ? `<button class="btn btn-primary" onclick="budgetFormStep(${step + 1})">التالي ←</button>`
+            ? `<button class="btn btn-primary" onclick="budgetFormStep(${step + 1})">التالي →</button>`
             : `<button class="btn btn-primary" onclick="submitReservation()">
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-                    حفظ الحجز
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                            <polyline points="20 6 9 17 4 12"/>
+                        </svg>
+                        حفظ الحجز
                    </button>`}
         </div>`;
 
     return `<div class="res-form-wrap">${stepsHtml}<div class="res-form-body">${formBody}</div>${navHtml}</div>`;
 }
 
+// ── جدول الأصناف ────────────────────────────────────────────
+function renderItemRow(item, i) {
+    const units = ['قطعة', 'طن', 'متر', 'لتر', 'صندوق', 'كيلوغرام', 'خدمة', 'أخرى'];
+    return `
+        <div class="rf-item-row" data-i="${i}">
+            <input class="form-input"
+                style="flex:3;min-width:140px"
+                placeholder="وصف الصنف…" value="${item.description || ''}"
+                oninput="updateItem(${i},'description',this.value)">
+            <input class="form-input" type="number" min="1"
+                style="flex:.7;min-width:55px;text-align:center"
+                value="${item.qty || 1}"
+                oninput="updateItem(${i},'qty',+this.value);refreshTotals()">
+            <select class="form-select" style="flex:1;min-width:80px"
+                onchange="updateItem(${i},'unit',this.value)">
+                ${units.map(u => `<option ${item.unit === u ? 'selected' : ''}>${u}</option>`).join('')}
+            </select>
+            <input class="form-input" type="number" min="0" step="0.01"
+                style="flex:1.1;min-width:85px;text-align:center;direction:ltr"
+                value="${item.price || 0}"
+                oninput="updateItem(${i},'price',+this.value);refreshTotals()">
+            <div style="flex:.8;min-width:70px;display:flex;align-items:center;justify-content:center">
+                <label class="rf-vat-toggle" title="السعر يشمل ضريبة القيمة المضافة (15%)">
+                    <input type="checkbox" ${item.includeVat ? 'checked' : ''}
+                        onchange="updateItem(${i},'includeVat',this.checked);refreshTotals()">
+                    <span class="rf-vat-slider"></span>
+                </label>
+            </div>
+            <div class="rf-item-line-total" id="rf_line_${i}"
+                 style="flex:1;min-width:80px;font-weight:600;font-size:.84rem;
+                        color:var(--accent-blue);text-align:center;direction:ltr">
+                ${calcLineTotal(item)}
+            </div>
+            <button class="rf-del-row" onclick="removeItemRow(${i})" title="حذف الصف">✕</button>
+        </div>`;
+}
+
+function calcLineTotal(item) {
+    const net = (item.qty || 0) * (item.price || 0) / (item.includeVat ? 1.15 : 1);
+    return net.toFixed(2);
+}
+
+function renderTotalsBox() {
+    let subtotal = 0, vatTotal = 0;
+    _rfItems.forEach(it => {
+        const net = (it.qty || 0) * (it.price || 0) / (it.includeVat ? 1.15 : 1);
+        subtotal += net;
+        vatTotal += net * 0.15;
+    });
+    const grand = subtotal + vatTotal;
+    return `
+        <div class="rf-total-row"><span>المجموع قبل الضريبة</span><span>SAR ${subtotal.toFixed(2)}</span></div>
+        <div class="rf-total-row"><span>ضريبة القيمة المضافة (15%)</span><span>SAR ${vatTotal.toFixed(2)}</span></div>
+        <div class="rf-total-row grand"><span>الإجمالي الكلي</span><span>SAR ${grand.toFixed(2)}</span></div>`;
+}
+
+function updateItem(i, field, value) {
+    if (_rfItems[i]) _rfItems[i][field] = value;
+}
+
+function refreshTotals() {
+    _rfItems.forEach((it, i) => {
+        const el = document.getElementById(`rf_line_${i}`);
+        if (el) el.textContent = calcLineTotal(it);
+    });
+    const box = document.getElementById('rf_totals_box');
+    if (box) box.innerHTML = renderTotalsBox();
+}
+
+function addItemRow() {
+    _rfItems.push({ description: '', qty: 1, unit: 'قطعة', price: 0, includeVat: false });
+    const list = document.getElementById('rf_items_list');
+    if (list) {
+        const tmp = document.createElement('div');
+        tmp.innerHTML = renderItemRow(_rfItems[_rfItems.length - 1], _rfItems.length - 1);
+        list.appendChild(tmp.firstElementChild);
+    }
+    refreshTotals();
+}
+
+function removeItemRow(i) {
+    if (_rfItems.length <= 1) {
+        showToast('⚠️ يجب الإبقاء على صف واحد على الأقل', 'warning');
+        return;
+    }
+    _rfItems.splice(i, 1);
+    const list = document.getElementById('rf_items_list');
+    if (list) list.innerHTML = _rfItems.map((it, idx) => renderItemRow(it, idx)).join('');
+    refreshTotals();
+}
+
 // ── التنقل بين الخطوات ──────────────────────────────────────
 function budgetFormStep(step) {
     if (step > BudgetState.currentStep) {
-        // التحقق من الخطوة الحالية
         if (!validateBudgetStep(BudgetState.currentStep)) return;
     }
-
-    // حفظ البيانات المُدخلة قبل تغيير الـ DOM
     saveBudgetFormData();
     BudgetState.currentStep = step;
     DOM.modalBody.innerHTML = renderReservationForm(step);
-
-    // استعادة البيانات المحفوظة
     restoreBudgetFormData();
 }
 
-// حفظ بيانات النموذج في حالة الشاشة
 const _budgetFormData = {};
 function saveBudgetFormData() {
     const fields = [
-        'rf_purpose', 'rf_department_id', 'rf_request_date', 'rf_priority', 'rf_budget_category', 'rf_cost_center',
+        'rf_purpose', 'rf_department_id', 'rf_request_date', 'rf_priority',
+        'rf_budget_category', 'rf_cost_center',
         'rf_supplier_id', 'rf_supplier_name_manual', 'rf_quotation_number', 'rf_quotation_date',
-        'rf_items_description', 'rf_quantity', 'rf_unit', 'rf_unit_price', 'rf_total_amount', 'rf_vat_amount', 'rf_currency',
+        'rf_currency',
     ];
     fields.forEach(id => {
         const el = document.getElementById(id);
@@ -455,13 +570,11 @@ function restoreBudgetFormData() {
         const el = document.getElementById(id);
         if (el) el.value = val;
     });
-    // إعادة حساب المجاميع
-    if (document.getElementById('rf_grand_total_display')) calcReservationTotal();
-    // إظهار حقل المورد اليدوي إن لزم
     if (_budgetFormData['rf_supplier_id'] === 'manual') {
         const wrap = document.getElementById('rf_manual_supplier_wrap');
         if (wrap) wrap.style.display = 'block';
     }
+    refreshTotals();
 }
 
 function validateBudgetStep(step) {
@@ -472,8 +585,8 @@ function validateBudgetStep(step) {
         if (!dept) { showToast('⚠️ اختر القسم الطالب', 'warning'); return false; }
     }
     if (step === 3) {
-        const items = document.getElementById('rf_items_description')?.value.trim();
-        if (!items) { showToast('⚠️ أدخل وصف البنود', 'warning'); return false; }
+        const hasDesc = _rfItems.some(it => it.description.trim());
+        if (!hasDesc) { showToast('⚠️ أدخل وصف صنف واحد على الأقل', 'warning'); return false; }
     }
     saveBudgetFormData();
     return true;
@@ -484,31 +597,18 @@ function onSupplierChange(sel) {
     if (wrap) wrap.style.display = (sel.value === 'manual') ? 'block' : 'none';
 }
 
-function calcReservationTotal() {
-    const qty = parseFloat(document.getElementById('rf_quantity')?.value || 0);
-    const price = parseFloat(document.getElementById('rf_unit_price')?.value || 0);
-    const total = qty * price;
-    const totEl = document.getElementById('rf_total_amount');
-    if (totEl) { totEl.value = total.toFixed(2); }
-    calcVAT();
-}
-
-function calcVAT() {
-    const total = parseFloat(document.getElementById('rf_total_amount')?.value || 0);
-    const vat = total * 0.15;
-    const grand = total + vat;
-    const vatEl = document.getElementById('rf_vat_amount');
-    const dispEl = document.getElementById('rf_grand_total_display');
-    if (vatEl) vatEl.value = vat.toFixed(2);
-    if (dispEl) dispEl.textContent = grand.toLocaleString('ar-SA', { minimumFractionDigits: 2 }) + ' ريال';
-    _budgetFormData['rf_grand_total'] = grand.toFixed(2);
-    _budgetFormData['rf_vat_amount'] = vat.toFixed(2);
-}
-
 // ── إرسال الحجز ─────────────────────────────────────────────
 async function submitReservation() {
     if (!validateBudgetStep(3)) return;
     saveBudgetFormData();
+
+    const activeItems = _rfItems.filter(it => it.description.trim());
+    let subtotal = 0, vatTotal = 0;
+    activeItems.forEach(it => {
+        const net = (it.qty || 0) * (it.price || 0) / (it.includeVat ? 1.15 : 1);
+        subtotal += net;
+        vatTotal += net * 0.15;
+    });
 
     const suppId = _budgetFormData['rf_supplier_id'];
     const body = {
@@ -522,14 +622,16 @@ async function submitReservation() {
         supplier_name_manual: suppId === 'manual' ? _budgetFormData['rf_supplier_name_manual'] : '',
         quotation_number: _budgetFormData['rf_quotation_number'],
         quotation_date: _budgetFormData['rf_quotation_date'],
-        items_description: _budgetFormData['rf_items_description'],
-        quantity: _budgetFormData['rf_quantity'],
-        unit: _budgetFormData['rf_unit'],
-        unit_price: _budgetFormData['rf_unit_price'],
-        total_amount: _budgetFormData['rf_total_amount'],
-        vat_amount: _budgetFormData['rf_vat_amount'],
-        grand_total: _budgetFormData['rf_grand_total'],
-        currency: _budgetFormData['rf_currency'],
+        currency: _budgetFormData['rf_currency'] || 'SAR',
+        items: activeItems,
+        // backward-compat fields
+        items_description: activeItems.map(it => `${it.description} (${it.qty} ${it.unit})`).join('\n'),
+        quantity: activeItems.reduce((s, it) => s + (it.qty || 0), 0),
+        unit: 'متعدد',
+        unit_price: activeItems[0]?.price || 0,
+        total_amount: subtotal.toFixed(2),
+        vat_amount: vatTotal.toFixed(2),
+        grand_total: (subtotal + vatTotal).toFixed(2),
     };
 
     try {
@@ -541,6 +643,11 @@ async function submitReservation() {
         const data = await res.json();
         if (data.success) {
             showToast(`✅ تم إنشاء الحجز رقم ${data.number}`, 'success');
+            if (data.new_supplier_id) {
+                BudgetState.meta.suppliers.push({
+                    id: data.new_supplier_id, name: body.supplier_name_manual,
+                });
+            }
             closeModal();
             await fetchReservations();
             renderBudgetPage();
@@ -553,145 +660,270 @@ async function submitReservation() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  تفاصيل الحجز + مراجعة موظف الموازنة
+//  تفاصيل الحجز — تصميم محدّث
 // ═══════════════════════════════════════════════════════════════
 async function openReservationDetails(id) {
-    DOM.modalTitle.textContent = '📋 تفاصيل الحجز';
-    DOM.modalBody.innerHTML = '<div style="text-align:center;padding:2rem"><div class="spinner"></div></div>';
+    DOM.modalTitle.textContent = 'تفاصيل الحجز';
+    DOM.modalBody.innerHTML = '<div style="text-align:center;padding:3rem"><div class="spinner"></div></div>';
+    document.querySelector('.modal')?.classList.add('budget-modal-wide');
     openModal();
 
     try {
         const res = await fetch(`api/budget.php?action=get&id=${id}`);
         const data = await res.json();
-        if (!data.success) { DOM.modalBody.innerHTML = '<p>خطأ في التحميل</p>'; return; }
+        if (!data.success) {
+            DOM.modalBody.innerHTML = '<p style="color:var(--accent-red);padding:2rem;text-align:center">خطأ في التحميل</p>';
+            return;
+        }
 
         const r = data.data;
         const st = RES_STATUS[r.status] || RES_STATUS['مسودة'];
         const log = r.log || [];
 
-        const logHtml = log.length ? log.map(l => `
-            <div class="res-log-item">
-                <div class="res-log-dot" style="background:var(--accent-blue)"></div>
-                <div class="res-log-content">
-                    <div class="res-log-action">${getLogActionLabel(l.action)}</div>
-                    <div class="res-log-meta">${l.employee_name || '—'} • ${l.created_at}</div>
-                    ${l.notes ? `<div class="res-log-notes">${l.notes}</div>` : ''}
-                    ${l.new_status ? `<div>→ <strong>${l.new_status}</strong></div>` : ''}
-                </div>
-            </div>`).join('') : '<p style="color:var(--text-muted)">لا يوجد سجل أحداث</p>';
+        // الأولوية
+        const prioMap = {
+            'عادي': { color: 'var(--text-muted)', bg: 'var(--bg-surface)', icon: '○' },
+            'عاجل': { color: '#d97706', bg: 'rgba(245,158,11,.12)', icon: '⚡' },
+            'حرج': { color: '#ef4444', bg: 'rgba(239,68,68,.12)', icon: '🔴' },
+        };
+        const prio = prioMap[r.priority] || prioMap['عادي'];
 
-        DOM.modalTitle.textContent = `📋 حجز #${r.reservation_number}`;
-        DOM.modalBody.innerHTML = `
-            <div class="res-details-wrap">
+        // ── أصناف الطلب ────────────────────────────────────
+        let itemsHtml = '';
+        const rawItems = r.items
+            ? (typeof r.items === 'string'
+                ? (() => { try { return JSON.parse(r.items); } catch { return null; } })()
+                : r.items)
+            : null;
 
-                <!-- الحالة والرقم -->
-                <div class="res-details-hero">
-                    <div>
-                        <div class="res-hero-num">${r.reservation_number}</div>
-                        <div style="color:var(--text-muted);font-size:.82rem">${r.request_date} · ${r.department_name || '—'}</div>
+        if (rawItems && rawItems.length) {
+            itemsHtml = `
+                <div class="rdv-items-table">
+                    <div class="rdv-items-head">
+                        <span style="flex:3">الصنف</span>
+                        <span style="flex:.8;text-align:center">الكمية</span>
+                        <span style="flex:1">الوحدة</span>
+                        <span style="flex:1.3;text-align:left">صافي الوحدة</span>
+                        <span style="flex:1.3;text-align:left">الإجمالي</span>
                     </div>
-                    <span class="res-status-badge lg" style="color:${st.color};background:${st.bg}">
-                        ${st.icon} ${r.status}
-                    </span>
-                </div>
-
-                <!-- معلومات أساسية -->
-                <div class="res-details-grid">
-                    <div class="res-detail-card">
-                        <h4>📌 البيانات الأساسية</h4>
-                        <div class="res-drow"><span>الغرض</span><span>${r.purpose}</span></div>
-                        <div class="res-drow"><span>القسم</span><span>${r.department_name || '—'}</span></div>
-                        <div class="res-drow"><span>مقدم الطلب</span><span>${r.requested_by_name || '—'}</span></div>
-                        <div class="res-drow"><span>الأولوية</span>
-                            <span style="color:${PRIORITY_COLOR[r.priority]};font-weight:600">${r.priority}</span></div>
-                        <div class="res-drow"><span>بند الموازنة</span><span>${r.budget_category || '—'}</span></div>
-                        <div class="res-drow"><span>مركز التكلفة</span><span>${r.cost_center || '—'}</span></div>
-                    </div>
-
-                    <div class="res-detail-card">
-                        <h4>🏢 بيانات المورد</h4>
-                        <div class="res-drow"><span>المورد</span><span>${r.supplier_name || '—'}</span></div>
-                        <div class="res-drow"><span>رقم عرض السعر</span><span>${r.quotation_number || '—'}</span></div>
-                        <div class="res-drow"><span>تاريخ عرض السعر</span><span>${r.quotation_date || '—'}</span></div>
-                    </div>
-
-                    <div class="res-detail-card">
-                        <h4>📦 بيانات الطلب</h4>
-                        <div class="res-drow"><span>الوصف</span><span>${r.items_description}</span></div>
-                        <div class="res-drow"><span>الكمية</span><span>${r.quantity} ${r.unit || ''}</span></div>
-                        <div class="res-drow"><span>سعر الوحدة</span><span>${r.unit_price} ${r.currency}</span></div>
-                        <div class="res-drow"><span>الإجمالي</span><span>${r.total_amount} ${r.currency}</span></div>
-                        <div class="res-drow"><span>ضريبة ق.م</span><span>${r.vat_amount} ${r.currency}</span></div>
-                        <div class="res-drow accent"><span>الإجمالي الكلي</span>
-                            <span style="font-weight:700;color:var(--accent-green)">${parseFloat(r.grand_total).toLocaleString('ar-SA')} ${r.currency}</span></div>
-                    </div>
-
-                    <div class="res-detail-card">
-                        <h4>⚖️ مرحلة الموازنة</h4>
-                        <div class="res-drow"><span>موظف الموازنة</span><span>${r.budget_employee_name || '—'}</span></div>
-                        <div class="res-drow"><span>رمز الموازنة</span>
-                            <span style="font-family:monospace;color:var(--accent-blue)">${r.budget_code || '—'}</span></div>
-                        <div class="res-drow"><span>تاريخ المراجعة</span><span>${r.budget_review_date || '—'}</span></div>
-                        <div class="res-drow"><span>المعاملة المرتبطة</span>
-                            <span>${r.transaction_number ? `<span class="res-tx-badge">${r.transaction_number}</span>` : 'غير مرتبط'}</span></div>
-                        ${r.budget_notes ? `<div class="res-drow"><span>ملاحظات</span><span>${r.budget_notes}</span></div>` : ''}
-                        ${r.rejection_reason ? `<div class="res-drow" style="color:#ef4444"><span>سبب الرفض</span><span>${r.rejection_reason}</span></div>` : ''}
-                    </div>
-
-                    ${(() => {
-                const dtLabels = { 'to_payment': '⚡ دفع مباشر', 'to_purchase_order': '📋 أمر شراء / تعميد', 'to_requester': '↩️ جهة طالبة' };
-                const dtColors = { 'to_payment': 'var(--accent-green)', 'to_purchase_order': 'var(--accent-amber)', 'to_requester': 'var(--accent-purple)' };
-                const hasDispatch = !!r.dispatch_type;
-                const isPaused = r.dispatch_ola_active == 0;
-                const label = dtLabels[r.dispatch_type] || '—';
-                const color = dtColors[r.dispatch_type] || 'var(--text-muted)';
+                    ${rawItems.map(it => {
+                const unitNet = (parseFloat(it.price) || 0) / (it.includeVat ? 1.15 : 1);
+                const lineNet = unitNet * (parseFloat(it.qty) || 0);
                 return `
-                        <div class="res-detail-card res-dispatch-card">
-                            <h4 style="color:#818cf8">🔀 التوجيه</h4>
-                            ${hasDispatch ? `
-                                <div class="res-dispatch-route-badge" style="--rc:${color}">${label}</div>
-                                <div class="res-drow"><span>الموظف</span><span>${r.dispatch_employee_name || '—'}</span></div>
-                                ${r.routed_to ? `<div class="res-drow"><span>الجهة</span><span>${r.routed_to}</span></div>` : ''}
-                                <div class="res-drow"><span>الحالة</span><span>${r.dispatch_status || '—'}</span></div>
-                                ${r.dispatched_at ? `<div class="res-drow"><span>التاريخ</span><span>${r.dispatched_at.slice(0, 10)}</span></div>` : ''}
-                                ${isPaused ? `<div class="res-dispatch-paused">
-                                    ⏸ OLA معلّق — بانتظار عودة أمر الشراء
+                        <div class="rdv-items-row">
+                            <span style="flex:3">${it.description || '—'}</span>
+                            <span style="flex:.8;text-align:center">${it.qty || 0}</span>
+                            <span style="flex:1">${it.unit || ''}</span>
+                            <span style="flex:1.3;text-align:left;direction:ltr">${unitNet.toFixed(2)}${it.includeVat ? ' <small style="color:var(--text-muted)">(شامل)</small>' : ''}</span>
+                            <span style="flex:1.3;text-align:left;font-weight:600;color:var(--accent-blue);direction:ltr">${lineNet.toFixed(2)}</span>
+                        </div>`;
+            }).join('')}
+                </div>`;
+        }
+
+        // ── سجل الأحداث ────────────────────────────────────
+        const logColors = {
+            create: 'var(--accent-blue)', review: 'var(--accent-amber)',
+            approve: 'var(--accent-green)', reject: 'var(--accent-red)',
+        };
+        const logHtml = log.length
+            ? log.map(l => `
+                <div class="rdv-log-item">
+                    <div class="rdv-log-dot" style="background:${logColors[l.action] || 'var(--text-muted)'}"></div>
+                    <div class="rdv-log-body">
+                        <div class="rdv-log-action">${getLogActionLabel(l.action)}
+                            ${l.new_status
+                    ? `<span class="rdv-log-status" style="color:${logColors[l.action] || 'var(--text-muted)'}">← ${l.new_status}</span>`
+                    : ''}
+                        </div>
+                        <div class="rdv-log-meta">
+                            <span>👤 ${l.employee_name || '—'}</span>
+                            <span>🕐 ${(l.created_at || '').slice(0, 16).replace('T', ' ')}</span>
+                        </div>
+                        ${l.notes ? `<div class="rdv-log-notes">${l.notes}</div>` : ''}
+                    </div>
+                </div>`).join('')
+            : '<p style="color:var(--text-muted);font-size:.82rem;padding:.5rem 0">لا يوجد سجل أحداث بعد</p>';
+
+        // ── التوجيه ────────────────────────────────────────
+        const dtLabels = {
+            'to_payment': '⚡ دفع مباشر',
+            'to_purchase_order': '📋 أمر شراء / تعميد',
+            'to_requester': '↩️ جهة طالبة',
+        };
+        const dtColors = {
+            'to_payment': 'var(--accent-green)',
+            'to_purchase_order': 'var(--accent-amber)',
+            'to_requester': 'var(--accent-purple)',
+        };
+        const hasDispatch = !!r.dispatch_type;
+        const isPaused = r.dispatch_ola_active == 0;
+        const dtColor = dtColors[r.dispatch_type] || 'var(--text-muted)';
+
+        DOM.modalTitle.textContent = `حجز #${r.reservation_number}`;
+        DOM.modalBody.innerHTML = `
+        <div class="rdv-wrap">
+
+            <!-- رأس الحجز -->
+            <div class="rdv-hero">
+                <div class="rdv-hero-left">
+                    <div class="rdv-num">${r.reservation_number}</div>
+                    <div class="rdv-hero-meta">
+                        <span>📅 ${r.request_date}</span>
+                        <span>🏢 ${r.department_name || '—'}</span>
+                        <span>👤 ${r.requested_by_name || '—'}</span>
+                    </div>
+                </div>
+                <div class="rdv-hero-right">
+                    <div class="rdv-status-pill" style="color:${st.color};background:${st.bg};border:1px solid ${st.color}30">
+                        ${st.icon} ${r.status}
+                    </div>
+                    <div class="rdv-priority-pill" style="color:${prio.color};background:${prio.bg}">
+                        ${prio.icon} ${r.priority}
+                    </div>
+                </div>
+            </div>
+
+            <!-- شريط المبلغ -->
+            <div class="rdv-amount-banner">
+                <div class="rdv-amount-parts">
+                    <div class="rdv-amount-part">
+                        <span class="rdv-amount-label">قبل الضريبة</span>
+                        <span class="rdv-amount-val">${parseFloat(r.total_amount || 0).toLocaleString('ar-SA', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                    <div class="rdv-amount-sep">+</div>
+                    <div class="rdv-amount-part">
+                        <span class="rdv-amount-label">ضريبة 15%</span>
+                        <span class="rdv-amount-val">${parseFloat(r.vat_amount || 0).toLocaleString('ar-SA', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                    <div class="rdv-amount-sep">=</div>
+                    <div class="rdv-amount-part grand">
+                        <span class="rdv-amount-label">الإجمالي الكلي</span>
+                        <span class="rdv-amount-val grand">${parseFloat(r.grand_total || 0).toLocaleString('ar-SA', { minimumFractionDigits: 2 })} ${r.currency || 'SAR'}</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- عمودان -->
+            <div class="rdv-cols">
+
+                <!-- العمود الأيمن -->
+                <div class="rdv-col">
+                    <!-- الغرض -->
+                    <div class="rdv-card rdv-purpose-card">
+                        <div class="rdv-card-icon">📌</div>
+                        <div>
+                            <div class="rdv-card-label">الغرض من الشراء</div>
+                            <div class="rdv-purpose-text">${r.purpose || '—'}</div>
+                        </div>
+                    </div>
+
+                    <!-- المورد -->
+                    <div class="rdv-card">
+                        <div class="rdv-card-head">🏢 بيانات المورد</div>
+                        <div class="rdv-row"><span>المورد</span><strong>${r.supplier_name || '—'}</strong></div>
+                        ${r.quotation_number ? `<div class="rdv-row"><span>رقم العرض</span><strong>${r.quotation_number}</strong></div>` : ''}
+                        ${r.quotation_date ? `<div class="rdv-row"><span>تاريخ العرض</span><strong>${r.quotation_date}</strong></div>` : ''}
+                    </div>
+
+                    <!-- الموازنة -->
+                    <div class="rdv-card">
+                        <div class="rdv-card-head">⚖️ مرحلة الموازنة</div>
+                        <div class="rdv-row"><span>موظف الموازنة</span><strong>${r.budget_employee_name || '—'}</strong></div>
+                        ${r.budget_code ? `<div class="rdv-row"><span>رمز الموازنة</span>
+                            <strong style="font-family:monospace;color:var(--accent-blue)">${r.budget_code}</strong></div>` : ''}
+                        ${r.budget_review_date ? `<div class="rdv-row"><span>تاريخ المراجعة</span>
+                            <strong>${r.budget_review_date.slice?.(0, 10)}</strong></div>` : ''}
+                        <div class="rdv-row"><span>معاملة مرتبطة</span>
+                            ${r.transaction_number
+                ? `<span class="res-tx-badge">${r.transaction_number}</span>`
+                : '<span style="color:var(--text-muted)">—</span>'}</div>
+                        ${r.budget_notes ? `<div class="rdv-row"><span>ملاحظات</span>
+                            <span style="color:var(--text-secondary);font-size:.79rem">${r.budget_notes}</span></div>` : ''}
+                        ${r.rejection_reason ? `
+                            <div class="rdv-rejection">
+                                <span>⛔</span><span>${r.rejection_reason}</span>
+                            </div>` : ''}
+                    </div>
+                </div>
+
+                <!-- العمود الأيسر -->
+                <div class="rdv-col">
+                    <!-- بند الموازنة + مركز التكلفة -->
+                    <div class="rdv-card rdv-info-chips">
+                        <div class="rdv-chip">
+                            <div class="rdv-chip-label">بند الموازنة</div>
+                            <div class="rdv-chip-val">${r.budget_category || '—'}</div>
+                        </div>
+                        <div class="rdv-chip">
+                            <div class="rdv-chip-label">مركز التكلفة</div>
+                            <div class="rdv-chip-val">${r.cost_center || '—'}</div>
+                        </div>
+                    </div>
+
+                    <!-- الأصناف / الطلب -->
+                    <div class="rdv-card">
+                        <div class="rdv-card-head">📦 بيانات الطلب</div>
+                        ${itemsHtml || `
+                            <div class="rdv-row"><span>الوصف</span>
+                                <span style="white-space:pre-line;color:var(--text-secondary)">${r.items_description || '—'}</span></div>
+                            <div class="rdv-row"><span>الكمية</span>
+                                <strong>${r.quantity || '—'} ${r.unit || ''}</strong></div>
+                        `}
+                    </div>
+
+                    <!-- التوجيه -->
+                    <div class="rdv-card rdv-dispatch-card">
+                        <div class="rdv-card-head" style="color:#818cf8">🔀 التوجيه</div>
+                        ${hasDispatch ? `
+                            <div class="rdv-dispatch-badge"
+                                 style="background:${dtColor}18;color:${dtColor};border:1px solid ${dtColor}30">
+                                ${dtLabels[r.dispatch_type] || r.dispatch_type}
+                            </div>
+                            <div class="rdv-row"><span>الموظف</span><strong>${r.dispatch_employee_name || '—'}</strong></div>
+                            ${r.routed_to ? `<div class="rdv-row"><span>الجهة</span><strong>${r.routed_to}</strong></div>` : ''}
+                            <div class="rdv-row"><span>الحالة</span><strong>${r.dispatch_status || '—'}</strong></div>
+                            ${r.dispatched_at ? `<div class="rdv-row"><span>التاريخ</span>
+                                <strong>${r.dispatched_at.slice(0, 10)}</strong></div>` : ''}
+                            ${isPaused ? `
+                                <div class="rdv-paused-bar">
+                                    <span>⏸ OLA معلّق — بانتظار عودة أمر الشراء</span>
                                     ${(currentUser?.role === 'dispatch' || currentUser?.role === 'admin') ? `
                                     <button onclick="closeModal();openResumeDispatchModal(${r.transaction_id})"
-                                            class="res-dispatch-resume-btn">▶ استئناف للدفع</button>` : ''}
+                                            class="rdv-resume-btn">▶ استئناف للدفع</button>` : ''}
                                 </div>` : ''}
-                                ${r.dispatch_notes ? `<div class="res-drow" style="margin-top:.35rem"><span>ملاحظات</span><span style="color:var(--text-muted);font-size:.82rem">${r.dispatch_notes}</span></div>` : ''}
-                            ` : `
-                                <div class="res-dispatch-pending">
-                                    <div style="font-size:1.5rem">🔀</div>
-                                    <div style="font-size:.82rem;color:var(--text-muted);margin-top:.3rem">
-                                        ${r.transaction_number ? 'لم يتم التوجيه بعد' : 'لا توجد معاملة مرتبطة'}
-                                    </div>
-                                </div>
-                            `}
-                        </div>`;
-            })()}
+                            ${r.dispatch_notes ? `<div class="rdv-row" style="margin-top:.35rem">
+                                <span>ملاحظات</span>
+                                <span style="color:var(--text-muted);font-size:.8rem">${r.dispatch_notes}</span>
+                            </div>` : ''}
+                        ` : `
+                            <div class="rdv-dispatch-empty">
+                                <span style="font-size:1.8rem;opacity:.3">🔀</span>
+                                <span>${r.transaction_number ? 'لم يتم التوجيه بعد' : 'لا توجد معاملة مرتبطة'}</span>
+                            </div>`}
+                    </div>
 
+                    <!-- سجل الأحداث -->
+                    <div class="rdv-card">
+                        <div class="rdv-card-head">📜 سجل الأحداث</div>
+                        <div class="rdv-log-list">${logHtml}</div>
+                    </div>
                 </div>
+            </div>
 
-                <!-- سجل الأحداث -->
-                <div class="res-log-section">
-                    <h4>📜 سجل الأحداث</h4>
-                    <div class="res-log-list">${logHtml}</div>
-                </div>
-
-                <!-- أزرار الإجراءات -->
-                <div class="res-details-footer">
-                    <button class="btn btn-secondary" onclick="closeModal()">إغلاق</button>
-                    ${(currentUser?.role === 'budget' || currentUser?.role === 'admin') && r.status === 'قيد المراجعة'
+            <!-- أزرار -->
+            <div class="rdv-footer">
+                <button class="btn btn-secondary" onclick="closeModal()">إغلاق</button>
+                ${canDo('reservation.review') && r.status === 'قيد المراجعة'
                 ? `<button class="btn btn-primary" onclick="closeModal();openReviewModal(${r.id})">
-                            ✓ مراجعة الحجز
-                           </button>`
+                           ✓ مراجعة الحجز
+                       </button>`
                 : ''}
-                </div>
-            </div>`;
+            </div>
+        </div>`;
+
     } catch (e) {
-        DOM.modalBody.innerHTML = '<p style="color:var(--accent-red)">خطأ في تحميل البيانات</p>';
+        DOM.modalBody.innerHTML = '<p style="color:var(--accent-red);padding:2rem;text-align:center">خطأ في تحميل البيانات</p>';
     }
 }
 
@@ -707,7 +939,6 @@ function openReviewModal(id) {
             <p style="color:var(--text-muted);margin-bottom:1.25rem;font-size:.88rem">
                 قم بمراجعة الحجز وتحديد حالته وربطه بالمعاملة المالية المناسبة إذا وُجدت.
             </p>
-
             <div class="res-form-grid">
                 <div class="res-form-group full">
                     <label>ربط بمعاملة مالية</label>
@@ -721,7 +952,8 @@ function openReviewModal(id) {
                 </div>
                 <div class="res-form-group">
                     <label>رمز الموازنة <span class="req">*</span></label>
-                    <input type="text" class="form-input" id="rev_budget_code" value="${reservationNumber}" placeholder="BUD-2026-XXXX">
+                    <input type="text" class="form-input" id="rev_budget_code"
+                        value="${reservationNumber}" placeholder="BUD-2026-XXXX">
                 </div>
                 <div class="res-form-group">
                     <label>الحالة الجديدة <span class="req">*</span></label>
@@ -733,26 +965,26 @@ function openReviewModal(id) {
                 </div>
                 <div class="res-form-group full" id="rev_rejection_wrap" style="display:none">
                     <label>سبب الرفض <span class="req">*</span></label>
-                    <textarea class="form-textarea" id="rev_rejection_reason" rows="2" placeholder="اذكر سبب الرفض بوضوح"></textarea>
+                    <textarea class="form-textarea" id="rev_rejection_reason" rows="2"
+                        placeholder="اذكر سبب الرفض بوضوح"></textarea>
                 </div>
                 <div class="res-form-group full">
                     <label>ملاحظات الموازنة</label>
-                    <textarea class="form-textarea" id="rev_budget_notes" rows="2" placeholder="ملاحظات إضافية…"></textarea>
+                    <textarea class="form-textarea" id="rev_budget_notes" rows="2"
+                        placeholder="ملاحظات إضافية…"></textarea>
                 </div>
             </div>
-
             <div class="res-form-nav">
                 <button class="btn btn-secondary" onclick="closeModal()">إلغاء</button>
                 <button class="btn btn-primary" onclick="submitReview(${id})">حفظ المراجعة</button>
             </div>
         </div>`;
 
-    // إظهار/إخفاء سبب الرفض
     document.getElementById('rev_status').addEventListener('change', function () {
         document.getElementById('rev_rejection_wrap').style.display =
             this.value === 'مرفوض' ? 'block' : 'none';
     });
-
+    document.querySelector('.modal')?.classList.add('budget-modal-wide');
     openModal();
 }
 
@@ -773,7 +1005,7 @@ async function submitReview(id) {
             body: JSON.stringify({
                 id, status, budget_code: code,
                 budget_notes: notes, transaction_id: txId,
-                rejection_reason: rejReason
+                rejection_reason: rejReason,
             }),
         });
         const data = await res.json();
@@ -781,7 +1013,7 @@ async function submitReview(id) {
             showToast(`✅ تم تحديث الحجز — ${status}`, 'success');
             closeModal();
             await fetchReservations();
-            await fetchBudgetMeta(); // تحديث قائمة المعاملات المتاحة
+            await fetchBudgetMeta();
             renderBudgetPage();
         } else {
             showToast('❌ ' + (data.error || 'خطأ'), 'error');
@@ -791,10 +1023,36 @@ async function submitReview(id) {
     }
 }
 
+// ── دوال حساب الإجمالي (توافق مع النماذج القديمة) ──────────
+function calcReservationTotal() {
+    const qty = parseFloat(document.getElementById('rf_quantity')?.value || 0);
+    const price = parseFloat(document.getElementById('rf_unit_price')?.value || 0);
+    const total = qty * price;
+    const totEl = document.getElementById('rf_total_amount');
+    if (totEl) totEl.value = total.toFixed(2);
+    calcVAT();
+}
+
+function calcVAT() {
+    const total = parseFloat(document.getElementById('rf_total_amount')?.value || 0);
+    const vat = total * 0.15;
+    const grand = total + vat;
+    const vatEl = document.getElementById('rf_vat_amount');
+    const dispEl = document.getElementById('rf_grand_total_display');
+    if (vatEl) vatEl.value = vat.toFixed(2);
+    if (dispEl) dispEl.textContent = grand.toLocaleString('ar-SA', { minimumFractionDigits: 2 }) + ' ريال';
+    _budgetFormData['rf_grand_total'] = grand.toFixed(2);
+    _budgetFormData['rf_vat_amount'] = vat.toFixed(2);
+}
+
 function getLogActionLabel(action) {
     return {
-        create: 'إنشاء الحجز', review: 'مراجعة الموازنة', approve: 'اعتماد',
-        reject: 'رفض', link_transaction: 'ربط بمعاملة', update: 'تعديل'
+        create: 'إنشاء الحجز',
+        review: 'مراجعة الموازنة',
+        approve: 'اعتماد',
+        reject: 'رفض',
+        link_transaction: 'ربط بمعاملة',
+        update: 'تعديل',
     }[action] || action;
 }
 
@@ -807,16 +1065,18 @@ function injectBudgetStyles() {
     s.id = 'budget-styles';
     s.textContent = `
     /* ── الصفحة ─────────────────────────────────── */
-    .budget-page-wrap { padding: .25rem 0; display:flex; flex-direction:column; gap:1.25rem; }
+    .budget-page-wrap   { padding:.25rem 0; display:flex; flex-direction:column; gap:1.25rem; }
     .budget-page-header { display:flex; align-items:flex-end; justify-content:space-between; }
     .budget-page-title  { font-size:1.3rem; font-weight:700; color:var(--text-primary); margin:0; }
     .budget-page-sub    { color:var(--text-muted); font-size:.82rem; margin:.2rem 0 0; }
 
+    /* ── توسيع المودل لشاشة الحجوزات ───────────── */
+    .budget-modal-wide { max-width: 860px !important; width: 92% !important; }
+
     /* ── الإحصائيات ─────────────────────────────── */
-    .budget-stats-row { display:grid; grid-template-columns: repeat(4, 1fr) 1.5fr; gap:.75rem; }
+    .budget-stats-row { display:grid; grid-template-columns:repeat(4,1fr) 1.5fr; gap:.75rem; }
     .budget-stat-card { background:var(--bg-card); border:1px solid var(--border-color);
                         border-radius:12px; padding:.85rem 1rem; display:flex; align-items:center; gap:.85rem; }
-    .budget-stat-card.wide { grid-column: span 1; }
     .bsc-icon { width:40px; height:40px; border-radius:10px; display:flex; align-items:center;
                 justify-content:center; font-size:1.1rem; flex-shrink:0; }
     .bsc-num  { font-size:1.4rem; font-weight:700; color:var(--text-primary); line-height:1; }
@@ -837,11 +1097,11 @@ function injectBudgetStyles() {
     .res-row:hover { background:var(--bg-surface); }
     .res-row td { padding:.75rem 1rem; border-bottom:1px solid var(--border-color);
                   font-size:.83rem; vertical-align:middle; }
-    .res-num  { font-weight:700; font-size:.88rem; color:var(--text-primary); font-family:monospace; }
-    .res-date { font-size:.74rem; color:var(--text-muted); margin-top:.15rem; }
+    .res-num     { font-weight:700; font-size:.88rem; color:var(--text-primary); font-family:monospace; }
+    .res-date    { font-size:.74rem; color:var(--text-muted); margin-top:.15rem; }
     .res-purpose { font-weight:500; color:var(--text-primary); }
-    .res-dept { font-size:.74rem; color:var(--text-muted); }
-    .res-amount { font-weight:600; color:var(--text-primary); text-align:left; direction:ltr; }
+    .res-dept    { font-size:.74rem; color:var(--text-muted); }
+    .res-amount  { font-weight:600; color:var(--text-primary); text-align:left; direction:ltr; }
     .res-status-badge { display:inline-flex; align-items:center; gap:.3rem; padding:.3rem .7rem;
                         border-radius:6px; font-size:.76rem; font-weight:600; white-space:nowrap; }
     .res-status-badge.lg { font-size:.88rem; padding:.4rem .9rem; }
@@ -851,9 +1111,10 @@ function injectBudgetStyles() {
     .budget-empty { text-align:center; padding:3rem; color:var(--text-muted); }
     .budget-empty h3 { margin:.75rem 0 .25rem; color:var(--text-secondary); }
 
-    /* ── نموذج الإدخال ───────────────────────────── */
-    .res-form-wrap { display:flex; flex-direction:column; gap:1.25rem; }
-    .res-steps-bar { display:flex; align-items:center; gap:0; }
+    /* ── نموذج الإدخال — خطوات ─────────────────── */
+    .res-form-wrap  { display:flex; flex-direction:column; gap:1.25rem; }
+    .res-form-body  { display:flex; flex-direction:column; gap:1rem; }
+    .res-steps-bar  { display:flex; align-items:center; gap:0; }
     .res-step { display:flex; align-items:center; gap:.5rem; }
     .res-step-circle { width:28px; height:28px; border-radius:50%; display:flex; align-items:center;
                        justify-content:center; font-size:.78rem; font-weight:700;
@@ -861,12 +1122,12 @@ function injectBudgetStyles() {
                        border:2px solid var(--border-color); transition:all .2s; flex-shrink:0; }
     .res-step.active .res-step-circle { background:var(--btn-primary-bg); color:var(--btn-primary-text);
                                         border-color:var(--btn-primary-bg); }
-    .res-step.done .res-step-circle   { background:var(--accent-green); color:#fff;
+    .res-step.done  .res-step-circle  { background:var(--accent-green); color:#fff;
                                         border-color:var(--accent-green); }
     .res-step-label { font-size:.78rem; color:var(--text-muted); white-space:nowrap; }
     .res-step.active .res-step-label  { color:var(--text-primary); font-weight:600; }
-    .res-step-line { flex:1; height:2px; background:var(--border-color); margin:0 .5rem; min-width:20px; }
-    .res-form-grid { display:grid; grid-template-columns:1fr 1fr; gap:.85rem; }
+    .res-step-line  { flex:1; height:2px; background:var(--border-color); margin:0 .5rem; min-width:20px; }
+    .res-form-grid  { display:grid; grid-template-columns:1fr 1fr; gap:.85rem; }
     .res-form-group { display:flex; flex-direction:column; gap:.35rem; }
     .res-form-group.full { grid-column:span 2; }
     .res-form-group label { font-size:.82rem; font-weight:600; color:var(--text-secondary); }
@@ -877,63 +1138,174 @@ function injectBudgetStyles() {
     .res-form-nav { display:flex; justify-content:space-between; padding-top:.5rem;
                     border-top:1px solid var(--border-color); }
 
-    /* ── تفاصيل الحجز ───────────────────────────── */
-    .res-details-wrap { display:flex; flex-direction:column; gap:1.25rem; }
-    .res-details-hero { display:flex; align-items:flex-start; justify-content:space-between;
-                        background:var(--bg-surface); padding:1rem; border-radius:10px; }
-    .res-hero-num { font-size:1.5rem; font-weight:700; font-family:monospace; color:var(--text-primary); }
-    .res-details-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:.85rem; }
-    .res-detail-card { background:var(--bg-surface); border-radius:10px; padding:.9rem 1rem; }
-    .res-detail-card h4 { font-size:.82rem; font-weight:700; color:var(--text-secondary);
-                          margin:0 0 .75rem; padding-bottom:.5rem; border-bottom:1px solid var(--border-color); }
-    .res-drow { display:flex; justify-content:space-between; gap:.5rem;
-                padding:.3rem 0; border-bottom:1px solid var(--border-color); font-size:.8rem; }
-    .res-drow:last-child { border-bottom:none; }
-    .res-drow span:first-child { color:var(--text-muted); flex-shrink:0; }
-    .res-drow span:last-child  { color:var(--text-primary); font-weight:500; text-align:left; }
+    /* ── جدول الأصناف (multi-item) ──────────────── */
+    .rf-items-wrap   { display:flex; flex-direction:column; gap:.4rem; }
+    .rf-items-header { display:flex; align-items:center; gap:.5rem; padding:.4rem .6rem;
+                       background:var(--bg-surface); border-radius:8px; direction:rtl;
+                       font-size:.74rem; font-weight:700; color:var(--text-muted); }
+    .rf-item-row     { display:flex; align-items:center; gap:.5rem; padding:.3rem 0;
+                       border-bottom:1px solid var(--border-color); direction:rtl; }
+    .rf-item-row .form-input,
+    .rf-item-row .form-select { padding:.42rem .6rem; font-size:.82rem; height:36px; }
+    .rf-del-row { width:26px; height:26px; flex-shrink:0; border:none; background:transparent;
+                  cursor:pointer; color:var(--accent-red); font-size:.95rem; border-radius:4px;
+                  display:flex; align-items:center; justify-content:center; opacity:.5; transition:.15s; }
+    .rf-del-row:hover { opacity:1; background:rgba(239,68,68,.1); }
 
-    /* ── بطاقة التوجيه ──────────────────────────── */
-    .res-dispatch-card { border:1px solid rgba(129,140,248,.25) !important;
-                         background:rgba(129,140,248,.04) !important; }
-    .res-dispatch-route-badge { display:inline-block; padding:.3rem .8rem;
-                                background:color-mix(in srgb, var(--rc) 12%, transparent);
-                                color:var(--rc); border:1px solid color-mix(in srgb, var(--rc) 30%, transparent);
-                                border-radius:20px; font-size:.78rem; font-weight:700;
-                                margin-bottom:.65rem; }
-    .res-dispatch-paused { background:rgba(234,179,8,.08); border:1px solid rgba(234,179,8,.25);
-                           border-radius:7px; padding:.5rem .7rem; font-size:.78rem;
-                           color:#b45309; margin-top:.6rem; display:flex;
-                           align-items:center; justify-content:space-between; gap:.5rem; flex-wrap:wrap; }
-    .res-dispatch-resume-btn { background:#818cf8; color:#fff; border:none; border-radius:6px;
-                                padding:.25rem .65rem; font-size:.74rem; font-family:inherit;
-                                cursor:pointer; white-space:nowrap; }
-    .res-dispatch-pending { text-align:center; padding:.75rem 0; }
+    /* VAT toggle */
+    .rf-vat-toggle  { position:relative; display:inline-block; width:36px; height:20px; cursor:pointer; }
+    .rf-vat-toggle input { opacity:0; width:0; height:0; position:absolute; }
+    .rf-vat-slider  { position:absolute; inset:0; background:#cbd5e1; border-radius:20px; transition:.2s; }
+    .rf-vat-slider::before { content:''; position:absolute; width:14px; height:14px;
+                              left:3px; top:3px; background:#fff; border-radius:50%; transition:.2s; }
+    .rf-vat-toggle input:checked + .rf-vat-slider { background:var(--accent-green); }
+    .rf-vat-toggle input:checked + .rf-vat-slider::before { transform:translateX(16px); }
 
-    /* ── سجل الأحداث ────────────────────────────── */
-    .res-log-section { background:var(--bg-surface); border-radius:10px; padding:.9rem 1rem; }
-    .res-log-section h4 { font-size:.82rem; font-weight:700; color:var(--text-secondary); margin:0 0 .85rem; }
-    .res-log-list { display:flex; flex-direction:column; gap:.625rem; }
-    .res-log-item { display:flex; gap:.75rem; align-items:flex-start; }
-    .res-log-dot  { width:10px; height:10px; border-radius:50%; flex-shrink:0; margin-top:.3rem; }
-    .res-log-action { font-size:.82rem; font-weight:600; color:var(--text-primary); }
-    .res-log-meta   { font-size:.74rem; color:var(--text-muted); }
-    .res-log-notes  { font-size:.78rem; color:var(--text-secondary); margin-top:.2rem; }
+    /* Add row button */
+    .rf-add-row-btn { display:flex; align-items:center; gap:.5rem; justify-content:center;
+                      width:100%; padding:.5rem; border:1.5px dashed var(--border-color);
+                      border-radius:8px; background:transparent; color:var(--text-muted);
+                      cursor:pointer; font-size:.82rem; font-family:inherit; transition:.15s; margin-top:.2rem; }
+    .rf-add-row-btn:hover { border-color:var(--btn-primary-bg); color:var(--btn-primary-bg);
+                            background:rgba(99,102,241,.04); }
 
+    /* Totals box */
+    .rf-totals-box  { background:var(--bg-surface); border-radius:10px; padding:.7rem 1rem;
+                      display:flex; flex-direction:column; gap:.35rem; }
+    .rf-total-row   { display:flex; justify-content:space-between; font-size:.82rem;
+                      color:var(--text-secondary); }
+    .rf-total-row.grand { font-weight:700; font-size:.95rem; color:var(--accent-green);
+                          border-top:1px solid var(--border-color); padding-top:.35rem; margin-top:.15rem; }
+
+    /* ══ تفاصيل الحجز (rdv) ════════════════════════ */
+    .rdv-wrap { display:flex; flex-direction:column; gap:1.1rem; }
+
+    /* رأس */
+    .rdv-hero { display:flex; align-items:flex-start; justify-content:space-between;
+                background:linear-gradient(135deg,var(--bg-surface),var(--bg-card));
+                border:1px solid var(--border-color); border-radius:14px; padding:1.1rem 1.25rem; gap:1rem; }
+    .rdv-hero-left  { display:flex; flex-direction:column; gap:.4rem; }
+    .rdv-hero-right { display:flex; flex-direction:column; align-items:flex-end; gap:.5rem; flex-shrink:0; }
+    .rdv-num        { font-size:1.6rem; font-weight:800; font-family:monospace; color:var(--text-primary); }
+    .rdv-hero-meta  { display:flex; flex-wrap:wrap; gap:.5rem; }
+    .rdv-hero-meta span { font-size:.76rem; color:var(--text-muted); background:var(--bg-card);
+                          border:1px solid var(--border-color); padding:.2rem .55rem; border-radius:20px; }
+    .rdv-status-pill   { display:inline-flex; align-items:center; gap:.35rem;
+                         padding:.4rem 1rem; border-radius:20px; font-size:.82rem; font-weight:700; }
+    .rdv-priority-pill { display:inline-flex; align-items:center; gap:.3rem;
+                         padding:.3rem .75rem; border-radius:20px; font-size:.76rem; font-weight:600; }
+
+    /* شريط المبلغ */
+    .rdv-amount-banner { background:linear-gradient(135deg,#1e293b,#0f172a); border-radius:14px; padding:1rem 1.5rem; }
+    .rdv-amount-parts  { display:flex; align-items:center; justify-content:center; gap:1.5rem; flex-wrap:wrap; }
+    .rdv-amount-part   { display:flex; flex-direction:column; align-items:center; gap:.2rem; }
+    .rdv-amount-part.grand { border-right:1px solid rgba(255,255,255,.1); padding-right:1.5rem; margin-right:.5rem; }
+    .rdv-amount-label  { font-size:.7rem; color:rgba(255,255,255,.5); letter-spacing:.5px; }
+    .rdv-amount-val    { font-size:1rem; font-weight:700; color:rgba(255,255,255,.85); font-family:monospace; direction:ltr; }
+    .rdv-amount-val.grand { font-size:1.35rem; color:#34d399; }
+    .rdv-amount-sep    { font-size:1.2rem; color:rgba(255,255,255,.25); }
+
+    /* عمودان */
+    .rdv-cols { display:grid; grid-template-columns:1fr 1fr; gap:.85rem; align-items:start; }
+    .rdv-col  { display:flex; flex-direction:column; gap:.85rem; }
+
+    /* البطاقات */
+    .rdv-card { background:var(--bg-card); border:1px solid var(--border-color); border-radius:12px; padding:.85rem 1rem; }
+    .rdv-card-head  { font-size:.76rem; font-weight:700; color:var(--text-muted); text-transform:uppercase;
+                      letter-spacing:.4px; padding-bottom:.5rem; margin-bottom:.5rem;
+                      border-bottom:1px solid var(--border-color); }
+    .rdv-card-icon  { font-size:1.2rem; flex-shrink:0; }
+    .rdv-card-label { font-size:.7rem; color:var(--text-muted); margin-bottom:.15rem; }
+    .rdv-purpose-card { display:flex; gap:.7rem; align-items:flex-start;
+                        background:rgba(99,102,241,.05); border-color:rgba(99,102,241,.2); }
+    .rdv-purpose-text { font-size:.9rem; color:var(--text-primary); font-weight:600; line-height:1.4; }
+    .rdv-row { display:flex; justify-content:space-between; align-items:baseline;
+               gap:.5rem; padding:.3rem 0; border-bottom:1px solid var(--border-color); font-size:.81rem; }
+    .rdv-row:last-child { border-bottom:none; }
+    .rdv-row span:first-child { color:var(--text-muted); flex-shrink:0; }
+    .rdv-row strong { color:var(--text-primary); text-align:left; }
+    .rdv-rejection  { display:flex; gap:.5rem; align-items:flex-start; margin-top:.5rem;
+                      background:rgba(239,68,68,.07); border:1px solid rgba(239,68,68,.2);
+                      border-radius:8px; padding:.5rem .7rem; font-size:.8rem; color:#ef4444; }
+    .rdv-info-chips { display:flex; gap:.6rem; }
+    .rdv-chip       { flex:1; background:var(--bg-surface); border:1px solid var(--border-color);
+                      border-radius:10px; padding:.6rem .8rem; }
+    .rdv-chip-label { font-size:.7rem; color:var(--text-muted); margin-bottom:.2rem; }
+    .rdv-chip-val   { font-size:.82rem; font-weight:600; color:var(--text-primary); }
+
+    /* جدول الأصناف في التفاصيل */
+    .rdv-items-table { display:flex; flex-direction:column; }
+    .rdv-items-head  { display:flex; gap:.5rem; padding:.3rem .4rem;
+                       background:var(--bg-surface); border-radius:6px; margin-bottom:.25rem;
+                       font-size:.7rem; font-weight:700; color:var(--text-muted); direction:rtl; }
+    .rdv-items-row   { display:flex; gap:.5rem; padding:.35rem .4rem; direction:rtl;
+                       border-bottom:1px solid var(--border-color); font-size:.8rem; }
+    .rdv-items-row:last-child { border-bottom:none; }
+
+    /* التوجيه */
+    .rdv-dispatch-card  { border-color:rgba(129,140,248,.2) !important; background:rgba(129,140,248,.03) !important; }
+    .rdv-dispatch-badge { display:inline-block; padding:.3rem .85rem; border-radius:20px;
+                          font-size:.78rem; font-weight:700; margin-bottom:.6rem; }
+    .rdv-dispatch-empty { display:flex; flex-direction:column; align-items:center;
+                          gap:.4rem; padding:.75rem 0; color:var(--text-muted); font-size:.82rem; }
+    .rdv-paused-bar { display:flex; justify-content:space-between; align-items:center; gap:.5rem;
+                      margin-top:.5rem; background:rgba(234,179,8,.08); border:1px solid rgba(234,179,8,.25);
+                      border-radius:8px; padding:.45rem .65rem; font-size:.78rem; color:#b45309; flex-wrap:wrap; }
+    .rdv-resume-btn { background:#818cf8; color:#fff; border:none; border-radius:6px;
+                      padding:.25rem .65rem; font-size:.74rem; cursor:pointer;
+                      font-family:inherit; white-space:nowrap; }
+
+    /* سجل الأحداث */
+    .rdv-log-list   { display:flex; flex-direction:column; gap:.75rem; max-height:220px;
+                      overflow-y:auto; padding-right:.25rem; }
+    .rdv-log-list::-webkit-scrollbar { width:3px; }
+    .rdv-log-list::-webkit-scrollbar-thumb { background:var(--border-color); border-radius:3px; }
+    .rdv-log-item   { display:flex; gap:.65rem; align-items:flex-start; }
+    .rdv-log-dot    { width:8px; height:8px; border-radius:50%; flex-shrink:0; margin-top:.35rem; }
+    .rdv-log-body   { flex:1; }
+    .rdv-log-action { font-size:.82rem; font-weight:600; color:var(--text-primary); }
+    .rdv-log-status { font-size:.75rem; font-weight:500; margin-right:.4rem; }
+    .rdv-log-meta   { display:flex; gap:.75rem; font-size:.72rem; color:var(--text-muted); margin-top:.15rem; }
+    .rdv-log-notes  { font-size:.76rem; color:var(--text-secondary); margin-top:.2rem;
+                      background:var(--bg-surface); padding:.3rem .5rem; border-radius:5px; }
+
+    /* أزرار التذييل */
+    .rdv-footer { display:flex; justify-content:flex-start; gap:.625rem;
+                  padding-top:.75rem; border-top:1px solid var(--border-color); }
+
+    /* مراجعة الموازنة */
+    .res-review-wrap .res-form-grid { gap:.85rem; }
     .res-details-footer { display:flex; justify-content:flex-start; gap:.625rem;
                           padding-top:.75rem; border-top:1px solid var(--border-color); }
 
-    /* ── مراجعة الموازنة ────────────────────────── */
-    .res-review-wrap .res-form-grid { gap:.85rem; }
-
+    /* ── Responsive ─────────────────────────────── */
     @media (max-width:1100px) {
-        .res-details-grid { grid-template-columns:1fr 1fr; }
+        .rdv-cols { grid-template-columns:1fr 1fr; }
+    }
+    @media (max-width:750px) {
+        .rdv-cols            { grid-template-columns:1fr; }
+        .rdv-amount-parts    { gap:1rem; }
+        .rdv-amount-part.grand { border:none; padding:0; margin:0; }
+        .rdv-info-chips      { flex-direction:column; }
     }
     @media (max-width:700px) {
-        .budget-stats-row  { grid-template-columns:1fr 1fr; }
-        .res-details-grid  { grid-template-columns:1fr; }
-        .res-form-grid     { grid-template-columns:1fr; }
+        .budget-stats-row    { grid-template-columns:1fr 1fr; }
+        .res-form-grid       { grid-template-columns:1fr; }
         .res-form-group.full { grid-column:span 1; }
+        .rf-items-header     { display:none; }
+        .rf-item-row         { flex-wrap:wrap; }
     }
     `;
     document.head.appendChild(s);
+
+    // إزالة budget-modal-wide تلقائياً عند إغلاق المودل
+    const _modalEl = document.querySelector('.modal-overlay');
+    if (_modalEl && !_modalEl._budgetObserver) {
+        _modalEl._budgetObserver = new MutationObserver(() => {
+            if (!_modalEl.classList.contains('active')) {
+                document.querySelector('.modal')?.classList.remove('budget-modal-wide');
+            }
+        });
+        _modalEl._budgetObserver.observe(_modalEl, { attributes: true, attributeFilter: ['class'] });
+    }
 }

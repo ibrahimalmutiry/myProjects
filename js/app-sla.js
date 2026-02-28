@@ -44,7 +44,7 @@ const SLA_STAGE_LABELS = {
 
 /**
  * تحميل إحصائيات SLA السريعة
- * تعرض: عدد المعاملات ضمن المدة / تحذير / خرق
+ * تعرض: عدد المعاملات ضمن المدة / تحذير /  تجاوز
  */
 async function loadSlaStats() {
     try {
@@ -92,7 +92,7 @@ async function loadSlaDashboard() {
 function renderSlaDashboardTable(rows) {
     const statusBadge = s => {
         const map = {
-            breached: ['🔴', 'خرق', 'var(--accent-red)'],
+            breached: ['🔴', ' تجاوز', 'var(--accent-red)'],
             warning: ['🟡', 'تحذير', 'var(--accent-orange)'],
             ok: ['🟢', 'ضمن المدة', 'var(--accent-green)'],
         };
@@ -296,7 +296,7 @@ async function escalateStage(txId, stage, stageLabel, btn) {
 // ─── عرض تفاصيل SLA / OLA ────────────────────────────────────
 function renderSlaDetailModal(d) {
     const SC = { ok: 'var(--accent-green)', warning: 'var(--accent-orange)', breached: 'var(--accent-red)' };
-    const SL = { ok: '✅ ضمن المدة', warning: '⚠️ تحذير', breached: '🔴 خرق' };
+    const SL = { ok: '✅ ضمن المدة', warning: '⚠️ تحذير', breached: '🔴 تجاوز' };
     const slaColor = SC[d.sla_status] || 'var(--text-muted)';
     const slaBarW = Math.min(d.sla_pct, 100);
 
@@ -682,7 +682,7 @@ async function loadSlaPage() {
             <div class="perf-section">
                 <div class="section-header">
                     <h3>📧 التصعيدات المُرسلة عبر البريد</h3>
-                    <button class="btn btn-sm btn-primary" onclick="loadSlaEmailEscalations()">🔄 تحديث</button>
+                    <button class="btn btn btn-primary" onclick="loadSlaEmailEscalations()">🔄 تحديث</button>
                 </div>
                 <div class="perf-filters" style="margin-bottom:1rem">
                     <div class="filter-group">

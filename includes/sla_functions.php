@@ -249,7 +249,7 @@ function checkTransactionSla($transactionId) {
 }
 
 /**
- * يُسجّل خرقاً واحداً إذا لم يكن مسجّلاً من قبل
+ * يُسجّل  تجاوزاً واحداً إذا لم يكن مسجّلاً من قبل
  * يمنع التكرار بفحص سجل موجود خلال آخر ساعة
  */
 function _recordBreach($conn, $txId, $stage, $type, $empId, $elapsed, $allowed, $pct, $supervisorId = null) {
