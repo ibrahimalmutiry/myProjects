@@ -98,7 +98,20 @@ try {
             break;
         
         // ==================== أنواع المعاملات ====================
-        
+
+        // جلب جميع الأنواع (مع parent_id للهرمية)
+        case 'get_types':
+            $conn = db();
+            $conn->query("ALTER TABLE transaction_types ADD COLUMN IF NOT EXISTS parent_id INT DEFAULT NULL");
+            $conn->query("ALTER TABLE transaction_types ADD COLUMN IF NOT EXISTS sort_order INT DEFAULT 0");
+            $r = $conn->query("SELECT id, name, description, parent_id, sort_order, is_active
+                               FROM transaction_types WHERE is_active=1
+                               ORDER BY COALESCE(parent_id, id), sort_order, name");
+            $types = [];
+            if ($r) while ($row = $r->fetch_assoc()) $types[] = $row;
+            jsonResponse(['success' => true, 'data' => $types]);
+            break;
+
         // إضافة نوع
         case 'add_type':
             if ($method !== 'POST') {
@@ -107,11 +120,18 @@ try {
             
             $input = json_decode(file_get_contents('php://input'), true);
             $conn = db();
+
+            // ضمان وجود عمود parent_id
+            $conn->query("ALTER TABLE transaction_types ADD COLUMN IF NOT EXISTS parent_id INT DEFAULT NULL");
+            $conn->query("ALTER TABLE transaction_types ADD COLUMN IF NOT EXISTS sort_order INT DEFAULT 0");
             
-            $name = $conn->real_escape_string($input['name']);
-            $desc = $conn->real_escape_string($input['description'] ?? '');
+            $name      = $conn->real_escape_string($input['name']);
+            $desc      = $conn->real_escape_string($input['description'] ?? '');
+            $parentId  = !empty($input['parent_id']) ? (int)$input['parent_id'] : 'NULL';
+            $sortOrder = (int)($input['sort_order'] ?? 0);
             
-            $sql = "INSERT INTO transaction_types (name, description) VALUES ('$name', '$desc')";
+            $sql = "INSERT INTO transaction_types (name, description, parent_id, sort_order)
+                    VALUES ('$name', '$desc', $parentId, $sortOrder)";
             
             if ($conn->query($sql)) {
                 jsonResponse(['success' => true, 'message' => 'تم إضافة النوع', 'id' => $conn->insert_id]);
@@ -129,11 +149,14 @@ try {
             $input = json_decode(file_get_contents('php://input'), true);
             $conn = db();
             
-            $id = (int)$input['id'];
-            $name = $conn->real_escape_string($input['name']);
-            $desc = $conn->real_escape_string($input['description'] ?? '');
+            $id        = (int)$input['id'];
+            $name      = $conn->real_escape_string($input['name']);
+            $desc      = $conn->real_escape_string($input['description'] ?? '');
+            $parentId  = !empty($input['parent_id']) ? (int)$input['parent_id'] : 'NULL';
+            $sortOrder = (int)($input['sort_order'] ?? 0);
             
-            $sql = "UPDATE transaction_types SET name='$name', description='$desc' WHERE id=$id";
+            $sql = "UPDATE transaction_types SET name='$name', description='$desc',
+                    parent_id=$parentId, sort_order=$sortOrder WHERE id=$id";
             
             if ($conn->query($sql)) {
                 jsonResponse(['success' => true, 'message' => 'تم تحديث النوع']);
@@ -149,21 +172,26 @@ try {
             }
             
             $input = json_decode(file_get_contents('php://input'), true);
-            $id = (int)$input['id'];
-            $conn = db();
-            
-            // التحقق من عدم وجود معاملات مرتبطة
-            $check = $conn->query("SELECT COUNT(*) as cnt FROM transactions WHERE type_id=$id");
-            $row = $check->fetch_assoc();
-            
+            $id    = (int)$input['id'];
+            $conn  = db();
+
+            // جمع IDs: النوع نفسه + أبناؤه
+            $ids = [$id];
+            $childRes = $conn->query("SELECT id FROM transaction_types WHERE parent_id=$id");
+            if ($childRes) while ($cr = $childRes->fetch_assoc()) $ids[] = (int)$cr['id'];
+            $idList = implode(',', $ids);
+
+            // التحقق من وجود معاملات مرتبطة
+            $check = $conn->query("SELECT COUNT(*) as cnt FROM transactions WHERE type_id IN ($idList)");
+            $row   = $check->fetch_assoc();
             if ($row['cnt'] > 0) {
-                jsonResponse(['success' => false, 'message' => 'لا يمكن الحذف، يوجد معاملات مرتبطة بهذا النوع'], 400);
+                jsonResponse(['success' => false, 'message' => 'لا يمكن الحذف — يوجد ' . $row['cnt'] . ' معاملة مرتبطة بهذا التصنيف أو تصنيفاته الفرعية'], 400);
             }
-            
-            $sql = "DELETE FROM transaction_types WHERE id=$id";
-            
-            if ($conn->query($sql)) {
-                jsonResponse(['success' => true, 'message' => 'تم حذف النوع']);
+
+            // حذف الأبناء أولاً ثم الأب
+            $conn->query("DELETE FROM transaction_types WHERE parent_id=$id");
+            if ($conn->query("DELETE FROM transaction_types WHERE id=$id")) {
+                jsonResponse(['success' => true, 'message' => 'تم الحذف']);
             } else {
                 jsonResponse(['success' => false, 'message' => 'فشل في الحذف'], 500);
             }

@@ -23,6 +23,77 @@ $userRole = $_SESSION['user_role'] ?? 'employee';
 
 try {
     $conn = db();
+
+        // ── جدول أصناف الحجز المستقل ──
+        $conn->query("CREATE TABLE IF NOT EXISTS budget_reservation_items (
+            id                INT AUTO_INCREMENT PRIMARY KEY,
+            reservation_id    INT           NOT NULL,
+            sort_order        TINYINT       DEFAULT 0,
+            description       TEXT          NOT NULL,
+            qty               DECIMAL(12,3) DEFAULT 1,
+            unit              VARCHAR(30)   DEFAULT NULL,
+            unit_price        DECIMAL(15,2) DEFAULT 0,
+            line_total        DECIMAL(15,2) DEFAULT 0,
+            notes             TEXT          DEFAULT NULL,
+            created_at        TIMESTAMP     DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (reservation_id) REFERENCES budget_reservations(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='أصناف وبنود حجوزات الموازنة'");
+
+        // ── ترحيل البيانات القديمة من items_json إلى الجدول الجديد ──
+        $migrRes = $conn->query("SELECT id, items_json, items_description, unit_price, grand_total, unit
+                                  FROM budget_reservations
+                                  WHERE items_json IS NOT NULL AND items_json != ''
+                                  AND id NOT IN (SELECT DISTINCT reservation_id FROM budget_reservation_items)");
+        if ($migrRes) {
+            while ($mr = $migrRes->fetch_assoc()) {
+                $rid   = (int)$mr['id'];
+                $items = json_decode($mr['items_json'], true);
+                if (is_array($items) && count($items)) {
+                    foreach ($items as $i => $it) {
+                        $desc  = $conn->real_escape_string($it['description'] ?? '');
+                        $qty   = (float)($it['qty']   ?? 1);
+                        $uprice= (float)($it['price']  ?? 0);
+                        $unit  = $conn->real_escape_string($it['unit'] ?? '');
+                        $ltotal= round($qty * $uprice, 2);
+                        $conn->query("INSERT INTO budget_reservation_items
+                            (reservation_id, sort_order, description, qty, unit, unit_price, line_total)
+                            VALUES ($rid, $i, '$desc', $qty, '$unit', $uprice, $ltotal)");
+                    }
+                }
+            }
+        }
+
+        // ── ترحيل البيانات القديمة من items_description فقط (بدون items_json) ──
+        $oldRes = $conn->query("SELECT id, items_description, unit_price, grand_total, unit
+                                 FROM budget_reservations
+                                 WHERE (items_json IS NULL OR items_json = '')
+                                 AND id NOT IN (SELECT DISTINCT reservation_id FROM budget_reservation_items)");
+        if ($oldRes) {
+            while ($or = $oldRes->fetch_assoc()) {
+                $rid   = (int)$or['id'];
+                $lines = array_filter(array_map('trim', preg_split('/\n|،/', $or['items_description'])));
+                $i = 0;
+                foreach ($lines as $line) {
+                    if (!$line) continue;
+                    // شكل: "وصف (qty وحدة)"
+                    if (preg_match('/^(.+?)\s*\((\d+(?:\.\d+)?)\s*(.*)\)\s*$/', $line, $m)) {
+                        $desc  = $conn->real_escape_string(trim($m[1]));
+                        $qty   = (float)$m[2];
+                        $unit  = $conn->real_escape_string(trim($m[3]));
+                    } else {
+                        $desc  = $conn->real_escape_string($line);
+                        $qty   = 1;
+                        $unit  = $conn->real_escape_string($or['unit'] ?? '');
+                    }
+                    $uprice = $i === 0 ? (float)($or['unit_price'] ?? 0) : 0;
+                    $ltotal = round($qty * $uprice, 2);
+                    $conn->query("INSERT INTO budget_reservation_items
+                        (reservation_id, sort_order, description, qty, unit, unit_price, line_total)
+                        VALUES ($rid, $i, '$desc', $qty, '$unit', $uprice, $ltotal)");
+                    $i++;
+                }
+            }
+        }
     ensureReservationsTables($conn);
 
     switch ($action) {
@@ -62,6 +133,7 @@ try {
                        eb.name AS budget_employee_name,
                        COALESCE(s.name, br.supplier_name_manual) AS supplier_name,
                        t.transaction_number,
+                       (SELECT COUNT(*) FROM budget_reservation_items bri WHERE bri.reservation_id = br.id) AS items_count,
                        dd.dispatch_type,
                        dd.routed_to,
                        dd.status       AS dispatch_status,
@@ -119,6 +191,18 @@ try {
             $log = [];
             if ($logRes) while ($lr = $logRes->fetch_assoc()) $log[] = $lr;
             $row['log'] = $log;
+
+            // ── جلب أصناف الحجز من الجدول المستقل ──
+            $itemsRes = $conn->query("
+                SELECT id, sort_order, description, qty, unit, unit_price, line_total, notes
+                FROM budget_reservation_items
+                WHERE reservation_id = $id
+                ORDER BY sort_order ASC, id ASC
+            ");
+            $items = [];
+            if ($itemsRes) while ($ir = $itemsRes->fetch_assoc()) $items[] = $ir;
+            $row['items'] = $items;
+
             jsonResponse(['success' => true, 'data' => $row]);
             break;
 
@@ -127,11 +211,27 @@ try {
             if ($method !== 'POST') { jsonResponse(['success'=>false,'error'=>'POST فقط']); break; }
             $body = json_decode(file_get_contents('php://input'), true) ?? [];
 
-            $deptId   = (int)($body['department_id'] ?? 0);
             $purpose  = $conn->real_escape_string($body['purpose'] ?? '');
-            $itemsDesc= $conn->real_escape_string($body['items_description'] ?? '');
-            if (!$deptId || !$purpose || !$itemsDesc) {
+            $itemsDesc    = $conn->real_escape_string($body['items_description'] ?? '');
+            $itemsJsonRaw = is_array($body['items'] ?? null) ? $body['items'] : null;
+            if (!$purpose || !$itemsDesc) {
                 jsonResponse(['success' => false, 'error' => 'البيانات الأساسية مطلوبة']); break;
+            }
+
+            // ── تحديد department_id الصحيح ──────────────────
+            // نأخذ أولاً من قسم الموظف المسجّل (foreign key صحيح)
+            $deptId = getDepartmentByEmployee($conn, $userId);
+            // إذا أُرسل department_id وهو رقم صغير (id حقيقي) نستخدمه
+            $sentDeptId = (int)($body['department_id'] ?? 0);
+            if ($sentDeptId > 0 && $sentDeptId < 100000) {
+                // رقم صغير = id حقيقي من جدول departments
+                $chk = $conn->query("SELECT id FROM departments WHERE id=$sentDeptId LIMIT 1");
+                if ($chk && $chk->num_rows > 0) $deptId = $sentDeptId;
+            }
+            // إذا لم نجد قسماً، نأخذ أول قسم متاح
+            if (!$deptId) {
+                $r = $conn->query("SELECT id FROM departments WHERE is_active=1 LIMIT 1");
+                if ($r && ($row = $r->fetch_assoc())) $deptId = (int)$row['id'];
             }
 
             $number      = generateReservationNumber($conn);
@@ -169,6 +269,22 @@ try {
 
             if ($conn->query($sql)) {
                 $newId = $conn->insert_id;
+
+                // ── حفظ الأصناف في جدول budget_reservation_items ──
+                if ($itemsJsonRaw && count($itemsJsonRaw)) {
+                    foreach ($itemsJsonRaw as $i => $it) {
+                        $iDesc   = $conn->real_escape_string($it['description'] ?? '');
+                        $iQty    = (float)($it['qty']   ?? 1);
+                        $iPrice  = (float)($it['price']  ?? 0);
+                        $iUnit   = $conn->real_escape_string($it['unit'] ?? '');
+                        $iTotal  = round($iQty * $iPrice, 2);
+                        $iNotes  = $conn->real_escape_string($it['notes'] ?? '');
+                        $conn->query("INSERT INTO budget_reservation_items
+                            (reservation_id, sort_order, description, qty, unit, unit_price, line_total, notes)
+                            VALUES ($newId, $i, '$iDesc', $iQty, '$iUnit', $iPrice, $iTotal, '$iNotes')");
+                    }
+                }
+
                 logReservation($conn, $newId, $userId, 'create', null, 'قيد المراجعة', 'تم إنشاء الحجز');
                 jsonResponse(['success' => true, 'id' => $newId, 'number' => $number]);
             } else {
@@ -177,6 +293,39 @@ try {
             break;
 
         // ── مراجعة موظف الموازنة ────────────────────────────
+        // ── تحديث أصناف حجز موجود ─────────────────────────────
+        case 'update_items':
+            if ($method !== 'POST') { jsonResponse(['success'=>false,'error'=>'POST فقط']); break; }
+            $body  = json_decode(file_get_contents('php://input'), true) ?? [];
+            $rid   = (int)($body['reservation_id'] ?? 0);
+            $items = is_array($body['items'] ?? null) ? $body['items'] : [];
+            if (!$rid) { jsonResponse(['success'=>false,'error'=>'reservation_id مطلوب']); break; }
+
+            // حذف الأصناف القديمة وإعادة الإدراج
+            $conn->query("DELETE FROM budget_reservation_items WHERE reservation_id=$rid");
+            $grand = 0;
+            foreach ($items as $i => $it) {
+                $iDesc  = $conn->real_escape_string($it['description'] ?? '');
+                $iQty   = (float)($it['qty']   ?? 1);
+                $iPrice = (float)($it['price']  ?? $it['unit_price'] ?? 0);
+                $iUnit  = $conn->real_escape_string($it['unit'] ?? '');
+                $iTotal = round($iQty * $iPrice, 2);
+                $iNotes = $conn->real_escape_string($it['notes'] ?? '');
+                $grand += $iTotal;
+                $conn->query("INSERT INTO budget_reservation_items
+                    (reservation_id, sort_order, description, qty, unit, unit_price, line_total, notes)
+                    VALUES ($rid, $i, '$iDesc', $iQty, '$iUnit', $iPrice, $iTotal, '$iNotes')");
+            }
+            // تحديث الإجماليات في الحجز الرئيسي
+            $iDescAll = $conn->real_escape_string(implode('\n', array_map(fn($it) =>
+                ($it['description']??'') . ' (' . ($it['qty']??1) . ' ' . ($it['unit']??'') . ')', $items)));
+            $conn->query("UPDATE budget_reservations
+                SET items_description='$iDescAll', total_amount=$grand, grand_total=$grand,
+                    quantity=" . count($items) . ", updated_at=NOW()
+                WHERE id=$rid");
+            jsonResponse(['success'=>true, 'grand_total'=>$grand]);
+            break;
+
         case 'review':
             if ($method !== 'POST') { jsonResponse(['success'=>false,'error'=>'POST فقط']); break; }
             if (!in_array($userRole, ['admin','budget'])) {
@@ -185,13 +334,20 @@ try {
             $body       = json_decode(file_get_contents('php://input'), true) ?? [];
             $id         = (int)($body['id'] ?? 0);
             $newStatus  = $conn->real_escape_string($body['status'] ?? '');
-            $budgetCode = $conn->real_escape_string($body['budget_code'] ?? '');
             $budgetNotes= $conn->real_escape_string($body['budget_notes'] ?? '');
             $txId       = !empty($body['transaction_id']) ? (int)$body['transaction_id'] : 'NULL';
             $rejReason  = $conn->real_escape_string($body['rejection_reason'] ?? '');
 
+            // ── رمز الموازنة = رقم الحجز دائماً ───────────────
+            // نجلب reservation_number من قاعدة البيانات مباشرة
+            $rRow = $conn->query("SELECT reservation_number FROM budget_reservations WHERE id=$id")->fetch_assoc();
+            $budgetCode = $conn->real_escape_string($rRow['reservation_number'] ?? ($body['budget_code'] ?? ''));
+            // تنظيف أي كود خاطئ (مثل TR-XXXX/ أو slash في النهاية)
+            $budgetCode = rtrim($budgetCode, '/');
+
             $old   = $conn->query("SELECT status FROM budget_reservations WHERE id=$id")->fetch_assoc();
             $oldSt = $old['status'] ?? '';
+
 
             $approvedFields = ($newStatus === 'معتمد') ? ", approved_by=$userId, approved_at=NOW()" : '';
 
@@ -229,6 +385,21 @@ try {
 
         // ── البيانات المساعدة ────────────────────────────────
         case 'meta':
+            // ── تصحيح تلقائي لأرقام الموازنة الخاطئة ──────────
+            // يُصلح أي budget_code يحتوي slash أو لا يطابق رقم الحجز
+            $conn->query("UPDATE budget_reservations br
+                SET br.budget_code = br.reservation_number
+                WHERE br.budget_code IS NOT NULL
+                  AND br.budget_code != ''
+                  AND (br.budget_code LIKE '%/%' OR br.budget_code != br.reservation_number)
+                  AND br.reservation_number IS NOT NULL");
+            // تصحيح في budget_data أيضاً
+            $conn->query("UPDATE budget_data bd
+                INNER JOIN budget_reservations br ON bd.transaction_id = br.transaction_id
+                SET bd.budget_code = br.reservation_number
+                WHERE bd.budget_code LIKE '%/%'
+                   OR (br.reservation_number IS NOT NULL AND bd.budget_code != br.reservation_number)");
+
             $depts = [];
             // ✅ departments فيها is_active
             $r = $conn->query("SELECT id, name, code FROM departments WHERE is_active=1 ORDER BY name");
@@ -238,6 +409,16 @@ try {
             // ✅ suppliers أُنشئت بـ ensureReservationsTables بدون is_active
             $r = $conn->query("SELECT id, name, cr_number, category FROM suppliers ORDER BY name");
             if ($r) while ($row = $r->fetch_assoc()) $suppliers[] = $row;
+
+            // ── مراكز التكلفة ─────────────────────────────────────
+            $costCenters = [];
+            $r = $conn->query("SELECT code, name FROM cost_centers WHERE is_active=1 ORDER BY code");
+            if ($r) while ($row = $r->fetch_assoc()) $costCenters[] = $row;
+
+            // ── بنود الموازنة ──────────────────────────────────────
+            $budgetCategories = [];
+            $r = $conn->query("SELECT id, name, code FROM budget_categories WHERE is_active=1 ORDER BY name");
+            if ($r) while ($row = $r->fetch_assoc()) $budgetCategories[] = $row;
 
             $transactions = [];
             if (in_array($userRole, ['admin','budget'])) {
@@ -254,10 +435,74 @@ try {
                 if ($r) while ($row = $r->fetch_assoc()) $transactions[] = $row;
             }
             jsonResponse(['success' => true, 'data' => [
-                'departments'  => $depts,
-                'suppliers'    => $suppliers,
-                'transactions' => $transactions,
+                'departments'      => $depts,
+                'suppliers'        => $suppliers,
+                'cost_centers'     => $costCenters,
+                'budget_categories'=> $budgetCategories,
+                'transactions'     => $transactions,
             ]]);
+            break;
+
+        // ── إدارة مراكز التكلفة ───────────────────────────────
+        case 'cost_centers_list':
+            $rows = [];
+            $r = $conn->query("SELECT * FROM cost_centers ORDER BY code");
+            if ($r) while ($row = $r->fetch_assoc()) $rows[] = $row;
+            jsonResponse(['success' => true, 'data' => $rows]);
+            break;
+
+        case 'cost_center_save':
+            $b    = json_decode(file_get_contents('php://input'), true) ?? [];
+            $code = $conn->real_escape_string(trim($b['code'] ?? ''));
+            $name = $conn->real_escape_string(trim($b['name'] ?? ''));
+            $active = isset($b['is_active']) ? (int)$b['is_active'] : 1;
+            if (!$code || !$name) jsonResponse(['success'=>false,'error'=>'الرقم والاسم مطلوبان'], 400);
+            if (!empty($b['id'])) {
+                $id = (int)$b['id'];
+                $conn->query("UPDATE cost_centers SET code='$code', name='$name', is_active=$active WHERE id=$id");
+            } else {
+                $conn->query("INSERT INTO cost_centers (code, name, is_active) VALUES ('$code','$name',$active)");
+            }
+            jsonResponse(['success' => true]);
+            break;
+
+        case 'cost_center_delete':
+            $b  = json_decode(file_get_contents('php://input'), true) ?? [];
+            $id = (int)($b['id'] ?? 0);
+            if (!$id) jsonResponse(['success'=>false,'error'=>'id مطلوب'], 400);
+            $conn->query("DELETE FROM cost_centers WHERE id=$id");
+            jsonResponse(['success' => true]);
+            break;
+
+        // ── إدارة بنود الموازنة ───────────────────────────────
+        case 'budget_categories_list':
+            $rows = [];
+            $r = $conn->query("SELECT * FROM budget_categories ORDER BY name");
+            if ($r) while ($row = $r->fetch_assoc()) $rows[] = $row;
+            jsonResponse(['success' => true, 'data' => $rows]);
+            break;
+
+        case 'budget_category_save':
+            $b    = json_decode(file_get_contents('php://input'), true) ?? [];
+            $name = $conn->real_escape_string(trim($b['name'] ?? ''));
+            $code = $conn->real_escape_string(trim($b['code'] ?? ''));
+            $active = isset($b['is_active']) ? (int)$b['is_active'] : 1;
+            if (!$name) jsonResponse(['success'=>false,'error'=>'الاسم مطلوب'], 400);
+            if (!empty($b['id'])) {
+                $id = (int)$b['id'];
+                $conn->query("UPDATE budget_categories SET name='$name', code='$code', is_active=$active WHERE id=$id");
+            } else {
+                $conn->query("INSERT INTO budget_categories (name, code, is_active) VALUES ('$name','$code',$active)");
+            }
+            jsonResponse(['success' => true]);
+            break;
+
+        case 'budget_category_delete':
+            $b  = json_decode(file_get_contents('php://input'), true) ?? [];
+            $id = (int)($b['id'] ?? 0);
+            if (!$id) jsonResponse(['success'=>false,'error'=>'id مطلوب'], 400);
+            $conn->query("DELETE FROM budget_categories WHERE id=$id");
+            jsonResponse(['success' => true]);
             break;
 
         default:
@@ -301,6 +546,48 @@ function logReservation($conn, $reservationId, $empId, $action, $oldStatus, $new
 }
 
 function ensureReservationsTables($conn) {
+    // ── جدول مراكز التكلفة ────────────────────────────────────
+    $conn->query("CREATE TABLE IF NOT EXISTS cost_centers (
+        id         INT AUTO_INCREMENT PRIMARY KEY,
+        code       VARCHAR(30)  NOT NULL UNIQUE COMMENT 'رقم المركز مثل 102200001',
+        name       VARCHAR(150) NOT NULL,
+        is_active  TINYINT(1)   NOT NULL DEFAULT 1,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+    // ── جدول بنود الموازنة ────────────────────────────────────
+    $conn->query("CREATE TABLE IF NOT EXISTS budget_categories (
+        id         INT AUTO_INCREMENT PRIMARY KEY,
+        name       VARCHAR(150) NOT NULL UNIQUE,
+        code       VARCHAR(30)  DEFAULT NULL,
+        is_active  TINYINT(1)   NOT NULL DEFAULT 1,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+    // ── بيانات أولية لمراكز التكلفة (تُضاف مرة واحدة) ─────────
+    $conn->query("INSERT IGNORE INTO cost_centers (code, name) VALUES
+        ('102200001', 'الإدارة العامة'),
+        ('102200002', 'التخطيط والميزانية'),
+        ('102200003', 'الموارد البشرية'),
+        ('102200004', 'تقنية المعلومات'),
+        ('102200005', 'المشتريات'),
+        ('102200006', 'المالية والحسابات'),
+        ('102200007', 'الشؤون الإدارية'),
+        ('102200008', 'التدريب والتطوير')");
+
+    // ── بيانات أولية لبنود الموازنة ─────────────────────────────
+    $conn->query("INSERT IGNORE INTO budget_categories (name) VALUES
+        ('رأس المال'),
+        ('تشغيلي'),
+        ('صيانة وإصلاح'),
+        ('تقنية معلومات'),
+        ('تدريب وتطوير'),
+        ('خدمات استشارية'),
+        ('مستلزمات مكتبية'),
+        ('أثاث ومعدات'),
+        ('سيارات ومركبات'),
+        ('إنشاءات وبنية تحتية')");
+
     // ✅ ينشئ الجداول تلقائياً بدل رمي exception
     $conn->query("CREATE TABLE IF NOT EXISTS suppliers (
         id           INT AUTO_INCREMENT PRIMARY KEY,

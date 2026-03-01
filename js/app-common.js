@@ -644,8 +644,11 @@ function showLoading() {
  * فتح النافذة المنبثقة العامة
  * تمنع التمرير في body أثناء فتح النافذة
  */
-function openModal() {
+function openModal(size) {
     DOM.modal.classList.add('active');
+    // حجم المودل: xl للسياسات والشاشات الكبيرة
+    DOM.modal.querySelector('.modal')?.classList.remove('modal-xl', 'modal-lg');
+    if (size) DOM.modal.querySelector('.modal')?.classList.add('modal-' + size);
     document.body.style.overflow = 'hidden';
 }
 
@@ -654,6 +657,7 @@ function openModal() {
  */
 function closeModal() {
     DOM.modal.classList.remove('active');
+    DOM.modal.querySelector('.modal')?.classList.remove('modal-xl', 'modal-lg');
     document.body.style.overflow = '';
     App.editingTransaction = null;
 }
@@ -796,7 +800,7 @@ document.addEventListener('DOMContentLoaded', function () {
  *   أحمر: مرفوض / ملغاة
  */
 function getStatusBadge(status) {
-    if (!status) return '<span class="badge badge-slate"><span class="badge-dot"></span>—</span>';
+    if (!status) return '<span class="badge badge-slate"></span>—</span>';
 
     let color = 'slate';
     if (status === 'مستلم' || status === 'تم الدفع' || status === 'صدرت الفاتورة' || status === 'معتمد') color = 'green';
@@ -804,7 +808,7 @@ function getStatusBadge(status) {
     else if (status === 'قيد المعالجة' || status === 'قيد الإصدار') color = 'blue';
     else if (status === 'مرفوض' || status === 'ملغاة') color = 'red';
 
-    return '<span class="badge badge-' + color + '"><span class="badge-dot"></span>' + status + '</span>';
+    return '<span class="badge badge-' + color + '"></span>' + status + '</span>';
 }
 
 /**
@@ -813,7 +817,7 @@ function getStatusBadge(status) {
  * @returns {string} HTML للـ badge مع أيقونة مناسبة
  */
 function getAlertBadge(alert) {
-    if (!alert) return '<span class="badge badge-slate"><span class="badge-dot"></span>—</span>';
+    if (!alert) return '<span class="badge badge-slate"></span>—</span>';
 
     let color = 'slate';
     let icon = '⏳';

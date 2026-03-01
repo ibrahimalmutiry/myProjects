@@ -473,112 +473,467 @@ async function resolveBreach(id) {
     } catch (e) { showToast('خطأ في الاتصال', 'error'); }
 }
 
-// ─── إعدادات SLA/OLA ─────────────────────────────────────────
+// ─── إعدادات SLA/OLA المتقدمة ────────────────────────────────
+
+/**
+ * فتح مدير السياسات — يعرض بطاقة لكل نوع معاملة رئيسي
+ * + السياسة الافتراضية
+ */
 async function openSlaSettingsModal() {
-    DOM.modalTitle.textContent = '⚙️ إعدادات SLA / OLA';
-    DOM.modalBody.innerHTML = '<div class="loading-placeholder" style="padding:2rem;text-align:center">جارٍ التحميل...</div>';
-    openModal();
+    DOM.modalTitle.textContent = '⚙️ إدارة سياسات SLA / OLA';
+    DOM.modalBody.innerHTML = `<div style="padding:2rem;text-align:center;color:var(--text-muted)">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 1s linear infinite">
+            <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+        </svg><br>جارٍ التحميل...
+    </div>`;
+    openModal('xl');
+    await _renderSlaPoliciesManager();
+}
+
+async function _renderSlaPoliciesManager() {
     try {
-        const res = await fetch('api/?action=sla_policies');
-        const data = await res.json();
-        if (!data.success || !data.data.length) {
-            DOM.modalBody.innerHTML = '<div class="empty-state-sm">لا توجد سياسات SLA. يرجى إضافة سياسة أولاً.</div>';
-            return;
-        }
-        DOM.modalBody.innerHTML = renderSlaSettingsForm(data.data[0]);
+        const [polRes, typesRes] = await Promise.all([
+            fetch('api/?action=sla_policies'),
+            fetch('api/settings.php?action=get_types')
+        ]);
+        const polData = await polRes.json();
+        const typesData = await typesRes.json();
+
+        const policies = polData.success ? polData.data : [];
+        const allTypes = typesData.success ? typesData.data : [];
+
+        // بناء الهيكل الهرمي
+        const parents = allTypes.filter(t => !t.parent_id || t.parent_id == 0);
+        const childOf = id => allTypes.filter(t => t.parent_id == id);
+
+        // فهرسة: type_id → policy
+        const policyByType = {};
+        policies.forEach(p => { if (p.transaction_type_id) policyByType[p.transaction_type_id] = p; });
+
+        const defaultPolicy = policies.find(p => !p.transaction_type_id) || null;
+        const sumOlaHours = p => (p && p.ola_rules ? p.ola_rules.reduce((s, r) => s + parseFloat(r.allowed_hours || 0), 0) : 0);
+
+        // ── السياسة الافتراضية ──
+        const defHtml = _buildPolicyCard({
+            icon: '🌐', name: 'السياسة الافتراضية',
+            badge: 'تُطبَّق على كل نوع لا توجد له سياسة خاصة',
+            badgeClass: 'sla-badge-default', policy: defaultPolicy,
+            sumOla: sumOlaHours(defaultPolicy),
+            typeId: null, hasOwn: true, canDelete: false
+        });
+
+        // ── لكل تصنيف رئيسي: بطاقته + أبنائه الفرعيين ──
+        let sectionsHtml = '';
+        parents.forEach(parent => {
+            const subs = childOf(parent.id);
+            const ownParent = policyByType[parent.id] || null;
+            const dispParent = ownParent || defaultPolicy;
+            const icon = typeof getTypeIcon === 'function' ? getTypeIcon(parent.name) : '📁';
+
+            // بطاقة الرئيسي
+            const parentCard = _buildPolicyCard({
+                icon, name: parent.name,
+                badge: ownParent ? '🎯 سياسة خاصة' : '🔄 يستخدم الافتراضية',
+                badgeClass: ownParent ? 'sla-badge-own' : 'sla-badge-default',
+                policy: dispParent, sumOla: sumOlaHours(dispParent),
+                typeId: parent.id, hasOwn: !!ownParent,
+                canDelete: !!ownParent, ownPolicyId: ownParent ? ownParent.id : null
+            });
+
+            // بطاقات التصنيفات الفرعية
+            let subCardsHtml = '';
+            if (subs.length > 0) {
+                const subCards = subs.map(sub => {
+                    const ownSub = policyByType[sub.id] || null;
+                    // التصنيف الفرعي: يستخدم سياسته الخاصة أو سياسة الأب أو الافتراضية
+                    const dispSub = ownSub || ownParent || defaultPolicy;
+                    return _buildPolicyCard({
+                        icon: '↳', name: sub.name,
+                        badge: ownSub ? '🎯 سياسة خاصة' : (ownParent ? '↑ يرث من الرئيسي' : '🔄 يستخدم الافتراضية'),
+                        badgeClass: ownSub ? 'sla-badge-own' : 'sla-badge-inherit',
+                        policy: dispSub, sumOla: sumOlaHours(dispSub),
+                        typeId: sub.id, hasOwn: !!ownSub,
+                        canDelete: !!ownSub, ownPolicyId: ownSub ? ownSub.id : null,
+                        isSub: true
+                    });
+                }).join('');
+                subCardsHtml = `<div class="sla-sub-section">${subCards}</div>`;
+            }
+
+            sectionsHtml += `<div class="sla-parent-section">${parentCard}${subCardsHtml}</div>`;
+        });
+
+        DOM.modalBody.innerHTML = `
+        <div class="sla-mgr-layout">
+
+            <!-- الشريط الجانبي: الافتراضية + أولوية -->
+            <div class="sla-sidebar">
+                <div class="sla-priority-note">
+                    <div class="sla-priority-title">ترتيب الأولوية</div>
+                    <div class="sla-priority-chain">
+                        <div class="sla-priority-item sla-p-sub">
+                            <span class="sla-p-dot"></span>
+                            <span>فرعي (الأعلى)</span>
+                        </div>
+                        <div class="sla-priority-arrow">↓</div>
+                        <div class="sla-priority-item sla-p-parent">
+                            <span class="sla-p-dot"></span>
+                            <span>رئيسي</span>
+                        </div>
+                        <div class="sla-priority-arrow">↓</div>
+                        <div class="sla-priority-item sla-p-default">
+                            <span class="sla-p-dot"></span>
+                            <span>افتراضية</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="sla-default-wrap">${defHtml}</div>
+            </div>
+
+            <!-- المنطقة الرئيسية: التصنيفات -->
+            <div class="sla-main-area">
+                <div class="sla-main-label">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+                        <rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
+                    </svg>
+                    أنواع المعاملات
+                </div>
+                <div class="sla-sections-wrap">${sectionsHtml}</div>
+            </div>
+        </div>`;
     } catch (e) {
-        DOM.modalBody.innerHTML = '<div style="color:var(--accent-red);padding:1rem">خطأ في تحميل الإعدادات</div>';
+        DOM.modalBody.innerHTML = `<div style="color:var(--accent-red);padding:1rem">خطأ: ${e.message}</div>`;
     }
 }
 
-function renderSlaSettingsForm(policy) {
-    const stageOrder = ['receiving', 'budget', 'dispatch', 'payment', 'invoice'];
-    const stageLabels = { receiving: 'الاستلام', budget: 'الموازنة', dispatch: 'التوجيه', payment: 'الدفع', invoice: 'الفوترة' };
-    const olaByStage = {};
-    (policy.ola_rules || []).forEach(r => olaByStage[r.stage] = r);
+function _buildPolicyCard({ icon, name, badge, badgeClass, policy, sumOla, typeId, hasOwn, canDelete, ownPolicyId, isSub = false }) {
+    const slaHours = policy ? parseFloat(policy.total_hours).toFixed(0) : '—';
+    const warnPct = policy ? policy.warning_pct : '—';
+    const olaSum = policy ? sumOla.toFixed(1) : '—';
 
-    const olaRows = stageOrder.map(stage => {
-        const r = olaByStage[stage] || {};
+    // OLA breakdown أعمدة
+    const stages = ['receiving', 'budget', 'dispatch', 'payment', 'invoice'];
+    const stageAr = { receiving: 'استلام', budget: 'موازنة', dispatch: 'توجيه', payment: 'دفع', invoice: 'فوترة' };
+    let olaBreakdown = '';
+    if (policy && policy.ola_rules && policy.ola_rules.length) {
+        const byStage = {};
+        policy.ola_rules.forEach(r => byStage[r.stage] = r);
+        olaBreakdown = `<div class="sla-card-ola-row">${stages.map(s => byStage[s] ? `
+            <div class="sla-ola-chip">
+                <span class="sla-ola-chip-stage">${stageAr[s]}</span>
+                <span class="sla-ola-chip-val">${parseFloat(byStage[s].allowed_hours).toFixed(1)}h</span>
+            </div>` : '').join('')
+            }</div>`;
+    }
+
+    // ── شريط OLA التفصيلي ──
+    const stageColors = { receiving: '#6366f1', budget: '#f59e0b', dispatch: '#10b981', payment: '#3b82f6', invoice: '#ec4899' };
+    let olaStripHtml = '';
+    if (policy && policy.ola_rules && policy.ola_rules.length) {
+        const byStage2 = {};
+        policy.ola_rules.forEach(r => byStage2[r.stage] = r);
+        const stages2 = ['receiving', 'budget', 'dispatch', 'payment', 'invoice'];
+        const stageAr2 = { receiving: 'استلام', budget: 'موازنة', dispatch: 'توجيه', payment: 'دفع', invoice: 'فوترة' };
+        olaStripHtml = `<div class="sla-card-ola-strip">${stages2.map(s => byStage2[s] ? `
+            <div class="sla-ola-pill" style="--pill-color:${stageColors[s] || '#6366f1'}">
+                <span class="sla-ola-pill-label">${stageAr2[s]}</span>
+                <span class="sla-ola-pill-val">${parseFloat(byStage2[s].allowed_hours).toFixed(1)}h</span>
+            </div>` : '').join('')
+            }</div>`;
+    }
+
+    const editPolicyId = hasOwn && policy ? policy.id : null;
+    const isCreate = typeId && !hasOwn;
+
+    return `
+    <div class="sla-policy-card ${isSub ? 'sla-card-sub' : 'sla-card-parent'} ${(typeId && hasOwn) ? 'sla-card-has-own' : ''}">
+        <div class="sla-card-row1">
+            <div class="sla-card-icon-wrap">${icon}</div>
+            <div class="sla-card-title-wrap">
+                <div class="sla-card-title-name">${name}</div>
+                <span class="sla-policy-badge ${badgeClass}">${badge}</span>
+            </div>
+            <div class="sla-card-kpis">
+                <div class="sla-kpi">
+                    <div class="sla-kpi-val">${slaHours}<span class="sla-kpi-unit">h</span></div>
+                    <div class="sla-kpi-lbl">SLA</div>
+                </div>
+                <div class="sla-kpi-sep"></div>
+                <div class="sla-kpi">
+                    <div class="sla-kpi-val">${olaSum}<span class="sla-kpi-unit">h</span></div>
+                    <div class="sla-kpi-lbl">OLA</div>
+                </div>
+                <div class="sla-kpi-sep"></div>
+                <div class="sla-kpi">
+                    <div class="sla-kpi-val">${warnPct}<span class="sla-kpi-unit">%</span></div>
+                    <div class="sla-kpi-lbl">تحذير</div>
+                </div>
+            </div>
+            <div class="sla-card-btns">
+                <button class="sla-action-btn ${isCreate ? 'sla-action-create' : 'sla-action-edit'}"
+                    onclick="_openSlaTypeEditor(${typeId ? typeId : 'null'}, '${name.replace(/'/g, "\'")}', ${editPolicyId ? editPolicyId : 'null'})">
+                    ${isCreate
+            ? `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> إنشاء`
+            : `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> تعديل`}
+                </button>
+                ${canDelete ? `
+                <button class="sla-action-btn sla-action-del"
+                    onclick="_deleteSlaTypePolicy(${typeId}, ${ownPolicyId}, '${name.replace(/'/g, "\'")}')">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                </button>` : ''}
+            </div>
+        </div>
+        ${olaStripHtml}
+    </div>`;
+}
+
+/**
+ * فتح محرر سياسة لنوع محدد أو الافتراضية
+ * typeId=null → افتراضية
+ */
+async function _openSlaTypeEditor(typeId, typeName, policyId) {
+    DOM.modalTitle.textContent = typeId
+        ? `⚙️ سياسة SLA/OLA — ${typeName}`
+        : '⚙️ السياسة الافتراضية — SLA/OLA';
+
+    DOM.modalBody.innerHTML = `<div style="padding:2rem;text-align:center;color:var(--text-muted)">جارٍ التحميل...</div>`;
+
+    let policy = null;
+    if (policyId) {
+        try {
+            const res = await fetch('api/?action=sla_policies');
+            const data = await res.json();
+            if (data.success) policy = data.data.find(p => p.id == policyId) || null;
+        } catch (e) { }
+    }
+    if (!policy) {
+        policy = { id: null, transaction_type_id: typeId, total_hours: 24, warning_pct: 80, ola_rules: [] };
+    }
+
+    DOM.modalBody.innerHTML = _renderSlaEditor(policy, typeId, typeName);
+    // ── تشغيل التحقق الحي بعد رسم الـ DOM ──
+    requestAnimationFrame(() => requestAnimationFrame(_initOlaLiveValidation));
+}
+
+function _renderSlaEditor(policy, typeId, typeName) {
+    const stages = ['receiving', 'budget', 'dispatch', 'payment', 'invoice'];
+    const stageLabels = { receiving: 'الاستلام', budget: 'الموازنة', dispatch: 'التوجيه', payment: 'الدفع', invoice: 'الفوترة' };
+    const stageIcons = { receiving: '📥', budget: '🏛️', dispatch: '🚀', payment: '💳', invoice: '🧾' };
+    const defaults = { receiving: 4, budget: 8, dispatch: 2, payment: 4, invoice: 2 };
+
+    const byStage = {};
+    (policy.ola_rules || []).forEach(r => byStage[r.stage] = r);
+
+    const rows = stages.map(s => {
+        const r = byStage[s] || {};
+        const hours = r.allowed_hours || defaults[s];
+        const warn = r.warn_at_pct || 75;
+        const esc = r.escalate_pct || 100;
         return `
-        <tr>
-            <td style="font-weight:600">${stageLabels[stage]}</td>
-            <td>
-                <input type="number" step="0.5" min="0.5" class="form-input ola-hours"
-                    data-stage="${stage}" value="${r.allowed_hours || 4}" style="width:80px">
-                <span style="font-size:.82rem;color:var(--text-muted)"> ساعة</span>
+        <tr class="sla-ola-editor-row">
+            <td class="sla-stage-cell">
+                <span class="sla-stage-emoji">${stageIcons[s]}</span>
+                <span class="sla-stage-name">${stageLabels[s]}</span>
             </td>
             <td>
-                <input type="number" min="10" max="90" class="form-input ola-warn"
-                    data-stage="${stage}" value="${r.warn_at_pct || 50}" style="width:65px">
-                <span style="font-size:.82rem;color:var(--text-muted)"> %</span>
+                <div class="sla-input-pill">
+                    <input type="number" step="0.5" min="0.5" class="sla-num-inp ola-hours"
+                        data-stage="${s}" value="${hours}">
+                    <span>ساعة</span>
+                </div>
             </td>
             <td>
-                <input type="number" min="50" max="200" class="form-input ola-esc"
-                    data-stage="${stage}" value="${r.escalate_pct || 100}" style="width:65px">
-                <span style="font-size:.82rem;color:var(--text-muted)"> %</span>
+                <div class="sla-input-pill">
+                    <input type="number" min="10" max="95" class="sla-num-inp ola-warn"
+                        data-stage="${s}" value="${warn}">
+                    <span>%</span>
+                </div>
+            </td>
+            <td>
+                <div class="sla-input-pill">
+                    <input type="number" min="50" max="200" class="sla-num-inp ola-esc"
+                        data-stage="${s}" value="${esc}">
+                    <span>%</span>
+                </div>
             </td>
         </tr>`;
     }).join('');
 
     return `
-    <div style="margin-bottom:1.25rem">
-        <div style="background:rgba(59,130,246,.08);border-radius:10px;padding:.85rem 1rem;font-size:.87rem;color:var(--text-muted);margin-bottom:1rem">
-            <strong>SLA:</strong> الوقت الكلي لإنجاز المعاملة من البداية للنهاية.<br>
-            <strong>OLA:</strong> الوقت المسموح لكل موظف في مرحلته.
-        </div>
-        <div class="modal-form-grid">
+    <input type="hidden" id="slaEditTypeId"   value="${typeId || ''}">
+    <input type="hidden" id="slaEditTypeName" value="${typeName || ''}">
+
+    <div class="sla-editor-hint">
+        <strong>SLA الكلي:</strong> أقصى وقت لإنجاز المعاملة من أولها لآخرها.&nbsp;
+        <strong>OLA لكل مرحلة:</strong> أقصى وقت لكل موظف في مرحلته.
+    </div>
+
+    <div class="sla-editor-section">
+        <div class="sla-editor-section-title">🎯 SLA الكلي للمعاملة</div>
+        <div class="sla-editor-row2">
             <div class="form-group">
-                <label class="form-label">⏱ SLA الكلي (ساعة)</label>
+                <label class="form-label">⏱ المدة الكلية المسموحة (ساعة)</label>
                 <input type="number" id="slaTotalHours" class="form-input" step="1" min="1"
-                    value="${policy.total_hours}" placeholder="24">
+                    value="${policy.total_hours || 24}">
             </div>
             <div class="form-group">
-                <label class="form-label">⚠️ تحذير SLA عند (%)</label>
+                <label class="form-label">⚠️ تحذير مبكر عند (%)</label>
                 <input type="number" id="slaWarnPct" class="form-input" min="50" max="95"
-                    value="${policy.warning_pct}" placeholder="80">
+                    value="${policy.warning_pct || 80}">
             </div>
         </div>
     </div>
-    <div style="font-weight:700;margin-bottom:.75rem">📊 أوقات OLA لكل مرحلة</div>
-    <table class="deposits-table" style="margin-bottom:1.25rem">
-        <thead><tr><th>المرحلة</th><th>الوقت</th><th>تحذير %</th><th>تصعيد %</th></tr></thead>
-        <tbody>${olaRows}</tbody>
-    </table>
-    <div style="display:flex;gap:.75rem;justify-content:flex-end">
-        <button class="btn btn-secondary" onclick="closeModal()">إلغاء</button>
-        <button class="btn btn-primary" onclick="saveSlaSettings(${policy.id})">💾 حفظ الإعدادات</button>
+
+    <div class="sla-editor-section">
+        <div class="sla-editor-section-title" style="display:flex;align-items:center;justify-content:space-between;">
+            <span>📊 أوقات OLA لكل مرحلة</span>
+            <span class="sla-ola-sum-badge" id="olaSum">
+                المجموع: <strong id="olaSumVal">0</strong> / <strong id="olaSumMax">${policy.total_hours || 24}</strong> ساعة
+            </span>
+        </div>
+        <div id="olaOverflowAlert" class="sla-ola-overflow-alert" style="display:none">
+            ⚠️ مجموع أوقات OLA (<span id="olaAlertSum"></span> ساعة) يتجاوز المدة الكلية المسموحة
+            (<span id="olaAlertMax"></span> ساعة). يجب تقليل مجموع المراحل.
+        </div>
+        <table class="sla-ola-editor-table">
+            <thead>
+                <tr>
+                    <th>المرحلة</th>
+                    <th>الوقت المسموح</th>
+                    <th>تحذير عند %</th>
+                    <th>تصعيد عند %</th>
+                </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+        </table>
+    </div>
+
+    <div class="sla-editor-footer">
+        <button class="btn btn-primary" id="slaSaveBtn" onclick="saveSlaSettings(${policy.id || 'null'})">
+            💾 حفظ السياسة
+        </button>
+        <button class="btn btn-secondary" onclick="_renderSlaPoliciesManager()">
+            ← رجوع للقائمة
+        </button>
     </div>`;
+
+}
+
+// ── تحقق حي من مجموع OLA vs SLA الكلي ──
+function _initOlaLiveValidation() {
+    const totalInp = document.getElementById('slaTotalHours');
+    if (!totalInp) return;
+    const update = () => {
+        const maxHours = parseFloat(totalInp.value) || 0;
+        const inputs = document.querySelectorAll('.ola-hours');
+        const sum = Array.from(inputs).reduce((t, i) => t + (parseFloat(i.value) || 0), 0);
+
+        const sumEl = document.getElementById('olaSumVal');
+        const maxEl = document.getElementById('olaSumMax');
+        const badge = document.getElementById('olaSum');
+        const alert = document.getElementById('olaOverflowAlert');
+        const saveBtn = document.getElementById('slaSaveBtn');
+        const alertSum = document.getElementById('olaAlertSum');
+        const alertMax = document.getElementById('olaAlertMax');
+
+        if (sumEl) sumEl.textContent = sum.toFixed(1);
+        if (maxEl) maxEl.textContent = maxHours.toFixed(0);
+        if (alertSum) alertSum.textContent = sum.toFixed(1);
+        if (alertMax) alertMax.textContent = maxHours.toFixed(0);
+
+        const overflow = maxHours > 0 && sum > maxHours;
+        if (badge) {
+            badge.className = 'sla-ola-sum-badge ' + (overflow ? 'sla-ola-sum-over' : sum > 0 ? 'sla-ola-sum-ok' : '');
+        }
+        if (alert) alert.style.display = overflow ? 'flex' : 'none';
+        if (saveBtn) saveBtn.disabled = overflow;
+        if (saveBtn) saveBtn.style.opacity = overflow ? '.5' : '1';
+    };
+    document.querySelectorAll('.ola-hours').forEach(i => i.addEventListener('input', update));
+    totalInp.addEventListener('input', () => {
+        const maxEl = document.getElementById('olaSumMax');
+        if (maxEl) maxEl.textContent = (parseFloat(totalInp.value) || 0).toFixed(0);
+        update();
+    });
+    update(); // initial
 }
 
 async function saveSlaSettings(policyId) {
     const totalHours = parseFloat(document.getElementById('slaTotalHours')?.value || 24);
     const warnPct = parseInt(document.getElementById('slaWarnPct')?.value || 80);
+    const typeId = document.getElementById('slaEditTypeId')?.value || '';
+    const typeName = document.getElementById('slaEditTypeName')?.value || 'السياسة الافتراضية';
 
+    // ── تحقق نهائي: مجموع OLA لا يتجاوز SLA الكلي ──
+    const inputs = document.querySelectorAll('.ola-hours');
+    const olaSum = Array.from(inputs).reduce((t, i) => t + (parseFloat(i.value) || 0), 0);
+    if (olaSum > totalHours) {
+        showToast(`⚠️ مجموع OLA (${olaSum.toFixed(1)}h) يتجاوز SLA الكلي (${totalHours}h)`, 'error');
+        return;
+    }
+
+    // ── حفظ SLA Policy ──
+    const slaPayload = {
+        id: policyId,
+        total_hours: totalHours,
+        warning_pct: warnPct,
+        name: typeId ? `سياسة ${typeName}` : 'السياسة الافتراضية',
+        transaction_type_id: typeId || null
+    };
     const slaRes = await fetch('api/?action=sla_save_policy', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: policyId, total_hours: totalHours, warning_pct: warnPct, name: 'السياسة الافتراضية' })
+        body: JSON.stringify(slaPayload)
     });
     const slaData = await slaRes.json();
     if (!slaData.success) return showToast('خطأ في حفظ SLA', 'error');
 
+    const realPolicyId = slaData.id || policyId;
+
+    // ── حفظ قواعد OLA ──
     const stageLabels = { receiving: 'الاستلام', budget: 'الموازنة', dispatch: 'التوجيه', payment: 'الدفع', invoice: 'الفوترة' };
-    const olaHours = document.querySelectorAll('.ola-hours');
-    let ok = 0;
-    for (const inp of olaHours) {
-        const stage = inp.dataset.stage;
+    const olaInputs = document.querySelectorAll('.ola-hours');
+    let saved = 0;
+    for (const inp of olaInputs) {
+        const s = inp.dataset.stage;
         const hours = parseFloat(inp.value);
-        const warn = parseInt(document.querySelector(`.ola-warn[data-stage="${stage}"]`)?.value || 50);
-        const esc = parseInt(document.querySelector(`.ola-esc[data-stage="${stage}"]`)?.value || 100);
+        const warn = parseInt(document.querySelector(`.ola-warn[data-stage="${s}"]`)?.value || 75);
+        const esc = parseInt(document.querySelector(`.ola-esc[data-stage="${s}"]`)?.value || 100);
         const r = await fetch('api/?action=sla_save_ola_rule', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ sla_policy_id: policyId, stage, stage_label: stageLabels[stage] || stage, allowed_hours: hours, warn_at_pct: warn, escalate_pct: esc })
+            body: JSON.stringify({
+                sla_policy_id: realPolicyId,
+                stage: s,
+                stage_label: stageLabels[s] || s,
+                allowed_hours: hours,
+                warn_at_pct: warn,
+                escalate_pct: esc
+            })
         });
-        const rd = await r.json();
-        if (rd.success) ok++;
+        if ((await r.json()).success) saved++;
     }
-    showToast(`تم الحفظ — SLA + ${ok} قاعدة OLA ✓`, 'success');
-    closeModal();
+
+    showToast(`✅ تم الحفظ — SLA + ${saved} مرحلة OLA`, 'success');
+    DOM.modalTitle.textContent = '⚙️ إدارة سياسات SLA / OLA';
+    await _renderSlaPoliciesManager();
     loadSlaStats();
+}
+
+async function _deleteSlaTypePolicy(typeId, policyId, typeName) {
+    if (!confirm(`حذف السياسة الخاصة بـ "${typeName}"؟\nسيعود النوع لاستخدام السياسة الافتراضية.`)) return;
+    try {
+        const res = await fetch('api/?action=sla_delete_policy', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: policyId })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast(`✅ تم حذف سياسة "${typeName}"`, 'success');
+            await _renderSlaPoliciesManager();
+        } else {
+            showToast(data.error || 'خطأ في الحذف', 'error');
+        }
+    } catch (e) { showToast('خطأ في الاتصال', 'error'); }
 }
 
 // ─── صفحة SLA/OLA المستقلة ───────────────────────────────────
@@ -784,12 +1139,17 @@ function renderSlaEmailEscalationsTable(rows) {
     </table></div>`;
 }
 
+
 // ─── CSS مضمّن ────────────────────────────────────────────────
 (function injectSlaStyles() {
     if (document.getElementById('sla-styles')) return;
     const s = document.createElement('style');
     s.id = 'sla-styles';
     s.textContent = `
+
+    /* ══════════════════════════════════
+       إحصائيات SLA
+       ══════════════════════════════════ */
     .sla-stats-bar { display:flex; gap:1rem; align-items:center; flex-wrap:wrap;
         background:var(--bg-card); border:1px solid var(--border-color);
         border-radius:12px; padding:1rem 1.25rem; }
@@ -805,9 +1165,10 @@ function renderSlaEmailEscalationsTable(rows) {
     tr.row-breach { background:rgba(239,68,68,.05); }
     tr.row-warn   { background:rgba(245,158,11,.05); }
 
-    /* ── modal تفاصيل SLA ── */
+    /* ══════════════════════════════════
+       نافذة تفاصيل SLA
+       ══════════════════════════════════ */
     .sla-detail-wrap { direction:rtl; }
-
     .sla-total-bar { background:var(--bg-surface); border-radius:12px; padding:1rem 1.25rem;
         margin-bottom:1.25rem; border:1px solid var(--border-color); }
     .sla-total-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:.75rem; }
@@ -817,13 +1178,8 @@ function renderSlaEmailEscalationsTable(rows) {
         overflow:hidden; margin-bottom:.4rem; }
     .sla-progress-fill  { height:100%; border-radius:6px; transition:width .5s; }
     .sla-progress-labels{ display:flex; justify-content:space-between; font-size:.82rem; }
-
-    .sla-stages-title { font-weight:700; color:var(--text-primary);
-        margin-bottom:1rem; font-size:.9rem; }
-
-    /* timeline */
+    .sla-stages-title { font-weight:700; color:var(--text-primary); margin-bottom:1rem; font-size:.9rem; }
     .sla-stages-timeline { display:flex; flex-direction:column; gap:0; }
-
     .sla-stage-item { display:flex; gap:.875rem; }
     .sla-stage-dot-col { display:flex; flex-direction:column; align-items:center; flex-shrink:0; }
     .sla-stage-dot { width:28px; height:28px; border-radius:50%; border:2px solid;
@@ -831,36 +1187,28 @@ function renderSlaEmailEscalationsTable(rows) {
         font-size:.72rem; font-weight:900; flex-shrink:0; }
     .sla-stage-line { width:2px; flex:1; min-height:16px; margin:2px 0; }
     .sla-stage-line-muted { background:var(--border-color) !important; }
-
     .sla-stage-body { flex:1; padding-bottom:1.25rem; }
     .sla-stage-item:last-child .sla-stage-body { padding-bottom:.25rem; }
-
     .sla-stage-title { display:flex; justify-content:space-between; align-items:center;
         flex-wrap:wrap; gap:.4rem; margin-bottom:.5rem; }
-
     .sla-employee-tag { font-size:.78rem; color:var(--text-muted);
         background:var(--bg-surface); border-radius:4px; padding:1px 6px; }
-
     .sla-badge { font-size:.74rem; font-weight:700; padding:2px 8px; border-radius:4px; }
     .sla-badge-done   { background:rgba(64,192,87,.15);  color:#40c057; }
     .sla-badge-esc    { background:rgba(239,68,68,.12);  color:var(--accent-red); }
     .sla-badge-breach { background:rgba(239,68,68,.12);  color:var(--accent-red); }
     .sla-badge-warn   { background:rgba(245,158,11,.12); color:var(--accent-orange); }
     .sla-badge-active { background:rgba(77,171,247,.12); color:var(--accent-blue); }
-
     .sla-time-grid { display:flex; gap:.5rem; flex-wrap:wrap; margin-bottom:.5rem; }
-    .sla-time-cell { background:var(--bg-surface); border-radius:7px;
-        padding:.4rem .65rem; min-width:90px; }
+    .sla-time-cell { background:var(--bg-surface); border-radius:7px; padding:.4rem .65rem; min-width:90px; }
     .sla-time-label { font-size:.72rem; color:var(--text-muted); margin-bottom:.1rem; }
     .sla-time-val   { font-size:.88rem; font-weight:700; }
-
     .sla-mini-bar { height:7px; border-radius:4px; background:var(--bg-card);
         overflow:hidden; margin-bottom:.25rem; position:relative; }
     .sla-mini-fill    { height:100%; border-radius:4px; transition:width .5s; }
     .sla-mini-overflow{ position:absolute; right:0; top:0; height:100%;
         background:repeating-linear-gradient(90deg,rgba(239,68,68,.4) 0,rgba(239,68,68,.4) 4px,transparent 4px,transparent 8px); }
     .sla-bar-labels { display:flex; justify-content:space-between; font-size:.75rem; margin-bottom:.5rem; }
-
     .sla-breach-actions { margin-top:.4rem; }
     .sla-esc-btn { background:var(--accent-red); color:#fff; border:none; border-radius:6px;
         padding:.3rem .8rem; font-size:.78rem; font-family:inherit; cursor:pointer;
@@ -868,9 +1216,259 @@ function renderSlaEmailEscalationsTable(rows) {
     .sla-esc-btn:hover { opacity:.85; }
     .sla-escalated-ok { font-size:.78rem; color:var(--accent-green);
         background:#16a34a18; padding:3px 8px; border-radius:4px; margin-top:.3rem; display:inline-block; }
-
     .sla-stage-paused .sla-stage-body { opacity:.8; }
     .sla-stage-note { font-size:.8rem; color:var(--text-muted); margin-top:.15rem; }
+
+    /* ══════════════════════════════════════════════════
+       مدير سياسات SLA/OLA — التصميم المُحسَّن
+       ══════════════════════════════════════════════════ */
+
+    /* Layout */
+    .sla-mgr-layout {
+        display: flow;
+        grid-template-columns: 230px 1fr;
+        gap: 1.25rem;
+        align-items: start;
+        direction: rtl;
+    }
+    @media (max-width: 720px) {
+        .sla-mgr-layout { grid-template-columns: 1fr; }
+    }
+
+    /* ── Sidebar ── */
+    .sla-sidebar { display:flex; flex-direction:column; gap:.85rem; }
+
+    .sla-priority-note {
+        background: var(--bg-surface);
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        padding: .85rem 1rem;
+    }
+    .sla-priority-title {
+        font-size:.72rem; font-weight:800; color:var(--text-muted);
+        text-transform:uppercase; letter-spacing:.5px; margin-bottom:.65rem;
+    }
+    .sla-priority-chain { display:flex; flex-direction:column; gap:.2rem; }
+    .sla-priority-item {
+        display:flex; align-items:center; gap:.5rem;
+        font-size:.8rem; font-weight:600;
+        padding:.22rem .3rem; border-radius:6px;
+        transition: background .15s;
+    }
+    .sla-priority-item:hover { background: rgba(255,255,255,.04); }
+    .sla-priority-arrow { font-size:.75rem; color:var(--text-muted); padding-right:1.1rem; opacity:.55; }
+    .sla-p-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+    .sla-p-sub    .sla-p-dot { background:#818cf8; box-shadow:0 0 6px rgba(129,140,248,.5); }
+    .sla-p-parent .sla-p-dot { background:#f59e0b; box-shadow:0 0 6px rgba(245,158,11,.4); }
+    .sla-p-default .sla-p-dot { background:var(--text-muted); }
+    .sla-p-sub    { color:#818cf8; }
+    .sla-p-parent { color:#d97706; }
+    .sla-p-default { color:var(--text-muted); }
+
+    /* الافتراضية في السايدبار */
+    .sla-default-wrap .sla-policy-card {
+        border-color: rgba(99,102,241,.28);
+        background: linear-gradient(135deg, var(--bg-card), rgba(99,102,241,.05));
+    }
+    .sla-default-wrap .sla-card-kpis { display:none; }
+    .sla-default-wrap .sla-card-ola-strip { display:none; }
+
+    /* ── Main area ── */
+    .sla-main-label {
+        display:flex; align-items:center; gap:.4rem;
+        font-size:.72rem; font-weight:800; color:var(--text-muted);
+        text-transform:uppercase; letter-spacing:.5px;
+        margin-bottom:.65rem;
+    }
+    .sla-sections-wrap { display:flex; flex-direction:column; gap:.6rem; }
+
+    /* ── Parent section block ── */
+    .sla-parent-section {
+        border: 1.5px solid var(--border-color);
+        border-radius: 12px;
+        overflow: hidden;
+        transition: border-color .2s, box-shadow .2s;
+    }
+    .sla-parent-section:hover {
+        border-color: rgba(148,137,121,.4);
+        box-shadow: 0 2px 12px rgba(0,0,0,.1);
+    }
+    .sla-parent-section > .sla-policy-card.sla-card-parent {
+        border: none; border-radius: 0;
+        border-bottom: 1px solid var(--border-color);
+        background: var(--bg-surface);
+    }
+
+    /* ── Sub cards ── */
+    .sla-sub-section {
+        padding: .4rem .65rem .5rem 1.25rem;
+        display: flex; flex-direction: column; gap: .3rem;
+        background: var(--bg-card);
+    }
+    .sla-card-sub {
+        border: 1px solid var(--border-color) !important;
+        border-radius: 9px !important;
+        padding: .5rem .75rem !important;
+        background: var(--bg-card) !important;
+        transition: background .15s, border-color .15s;
+    }
+    .sla-card-sub:hover { background: var(--bg-surface) !important; }
+    .sla-card-sub .sla-card-icon-wrap {
+        width:26px; height:26px; font-size:.9rem;
+        background:transparent; border:none; color:var(--text-muted);
+    }
+    .sla-card-sub .sla-card-title-name { font-size:.82rem; }
+    .sla-card-sub .sla-kpi-val         { font-size:.86rem; }
+    .sla-card-sub .sla-card-ola-strip  { display:none; }
+
+    /* ── Policy card ── */
+    .sla-policy-card {
+        display: flex; flex-direction: column; gap: .5rem;
+        padding: .85rem 1rem;
+        border: 1.5px solid var(--border-color);
+        border-radius: 12px;
+        background: var(--bg-card);
+        transition: box-shadow .2s;
+    }
+    .sla-policy-card:hover { box-shadow: 0 3px 14px rgba(0,0,0,.09); }
+    .sla-card-has-own {
+        border-color: rgba(99,102,241,.32) !important;
+        background: linear-gradient(135deg, var(--bg-card), rgba(99,102,241,.04)) !important;
+    }
+
+    /* Card row 1 */
+    .sla-card-row1 { display:flex; align-items:center; gap:.7rem; min-width:0; }
+    .sla-card-icon-wrap {
+        width:38px; height:38px; font-size:1.35rem;
+        display:flex; align-items:center; justify-content:center;
+        background:var(--bg-surface); border:1px solid var(--border-color);
+        border-radius:9px; flex-shrink:0;
+    }
+    .sla-card-title-wrap { flex:1; min-width:0; }
+    .sla-card-title-name {
+        font-weight:700; font-size:.88rem; color:var(--text-primary);
+        white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    }
+    .sla-policy-badge {
+        display:inline-block; font-size:.66rem; font-weight:700;
+        padding:.12rem .45rem; border-radius:20px; margin-top:.18rem;
+    }
+    .sla-badge-own     { background:rgba(99,102,241,.13); color:#818cf8; border:1px solid rgba(99,102,241,.25); }
+    .sla-badge-default { background:var(--bg-surface); color:var(--text-muted); border:1px solid var(--border-color); }
+    .sla-badge-inherit { background:rgba(16,185,129,.1); color:#34d399; border:1px solid rgba(16,185,129,.2); }
+
+    /* KPI chips */
+    .sla-card-kpis {
+        display:flex; align-items:center; gap:.35rem; flex-shrink:0;
+        background:var(--bg-surface); border:1px solid var(--border-color);
+        border-radius:8px; padding:.28rem .55rem;
+    }
+    .sla-kpi { text-align:center; min-width:32px; }
+    .sla-kpi-val { font-size:.92rem; font-weight:800; color:var(--text-primary); line-height:1; }
+    .sla-kpi-unit { font-size:.58rem; font-weight:600; color:var(--text-muted); }
+    .sla-kpi-lbl  { font-size:.58rem; color:var(--text-muted); margin-top:.1rem; }
+    .sla-kpi-sep  { width:1px; height:26px; background:var(--border-color); }
+
+    /* Action buttons */
+    .sla-card-btns { display:flex; gap:.3rem; flex-shrink:0; }
+    .sla-action-btn {
+        display:inline-flex; align-items:center; gap:.3rem;
+        padding:.3rem .68rem; border-radius:7px; font-size:.75rem; font-weight:700;
+        border:1.5px solid; cursor:pointer; font-family:inherit; transition:all .15s;
+        white-space:nowrap; line-height:1.4;
+    }
+    .sla-action-edit   { border-color:rgba(99,102,241,.3); color:#818cf8; background:rgba(99,102,241,.06); }
+    .sla-action-edit:hover { background:rgba(99,102,241,.14); border-color:#818cf8; }
+    .sla-action-create { border-color:rgba(16,185,129,.3); color:#34d399; background:rgba(16,185,129,.06); }
+    .sla-action-create:hover { background:rgba(16,185,129,.13); border-color:#34d399; }
+    .sla-action-del    { border-color:rgba(239,68,68,.25); color:var(--accent-red); background:transparent; padding:.3rem .5rem; }
+    .sla-action-del:hover { background:rgba(239,68,68,.08); border-color:var(--accent-red); }
+
+    /* OLA Pills strip */
+    .sla-card-ola-strip {
+        display:flex; flex-wrap:wrap; gap:.28rem;
+        padding-top:.35rem;
+        border-top:1px solid var(--border-color);
+    }
+    .sla-ola-pill {
+        display:flex; align-items:center; gap:.28rem;
+        background:var(--bg-surface); border:1px solid var(--border-color);
+        border-radius:5px; padding:.16rem .45rem;
+        transition: border-color .15s;
+    }
+    .sla-ola-pill:hover { border-color:var(--pill-color, var(--accent-blue)); }
+    .sla-ola-pill-label { font-size:.62rem; color:var(--text-muted); }
+    .sla-ola-pill-val   { font-size:.73rem; font-weight:800; color:var(--pill-color, var(--accent-blue)); }
+
+    /* ══════════════════════════════════
+       محرر السياسة
+       ══════════════════════════════════ */
+    .sla-editor-hint {
+        background:rgba(59,130,246,.07); border:1px solid rgba(59,130,246,.15);
+        border-radius:9px; padding:.65rem .9rem;
+        font-size:.82rem; color:var(--text-secondary);
+        margin-bottom:1rem; line-height:1.65;
+    }
+    .sla-editor-section { margin-bottom:1.1rem; }
+    .sla-editor-section-title {
+        font-weight:700; font-size:.88rem; margin-bottom:.65rem;
+        color:var(--text-primary);
+        display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:.4rem;
+    }
+    .sla-editor-row2 { display:grid; grid-template-columns:1fr 1fr; gap:.85rem; }
+
+    .sla-ola-editor-table { width:100%; border-collapse:collapse; }
+    .sla-ola-editor-table thead th {
+        text-align:right; font-size:.74rem; font-weight:700; color:var(--text-muted);
+        padding:.4rem .6rem; background:var(--bg-surface);
+        border-bottom:1.5px solid var(--border-color); white-space:nowrap;
+    }
+    .sla-ola-editor-row td { padding:.44rem .6rem; border-bottom:1px solid var(--border-color); vertical-align:middle; }
+    .sla-ola-editor-row:last-child td { border-bottom:none; }
+    .sla-ola-editor-row:hover { background:var(--bg-surface); }
+
+    .sla-stage-cell { display:flex; align-items:center; gap:.5rem; }
+    .sla-stage-emoji { font-size:1rem; }
+    .sla-stage-name  { font-weight:600; font-size:.84rem; color:var(--text-primary); }
+    .sla-stage-color-dot { width:6px; height:6px; border-radius:50%; opacity:.85; }
+
+    .sla-input-pill { display:flex; align-items:center; gap:.35rem; }
+    .sla-input-pill span { font-size:.78rem; color:var(--text-muted); white-space:nowrap; }
+    .sla-num-inp {
+        width:70px !important; padding:.3rem .5rem !important;
+        font-size:.85rem !important; text-align:center;
+        border-radius:7px !important;
+    }
+    .sla-num-inp:focus { border-color:var(--accent-blue) !important; }
+
+    .sla-editor-footer {
+        display:flex; gap:.65rem; padding-top:.65rem;
+        border-top:1px solid var(--border-color);
+        flex-wrap:wrap;
+    }
+
+    /* ── OLA sum badge ── */
+    .sla-ola-sum-badge {
+        font-size:.75rem; font-weight:600; color:var(--text-muted);
+        background:var(--bg-surface); border:1px solid var(--border-color);
+        padding:.2rem .65rem; border-radius:20px; transition:all .2s;
+    }
+    .sla-ola-sum-ok   { background:rgba(16,185,129,.1); color:#34d399; border-color:rgba(16,185,129,.3); }
+    .sla-ola-sum-over {
+        background:rgba(239,68,68,.1); color:var(--accent-red); border-color:rgba(239,68,68,.32);
+        animation: sla-pulse .6s ease infinite alternate;
+    }
+    @keyframes sla-pulse { from { opacity:.65; } to { opacity:1; } }
+
+    .sla-ola-overflow-alert {
+        display:flex; align-items:flex-start; gap:.5rem;
+        background:rgba(239,68,68,.08); border:1.5px solid rgba(239,68,68,.3);
+        border-radius:9px; padding:.65rem .9rem;
+        font-size:.82rem; font-weight:600; color:var(--accent-red);
+        margin:.5rem 0;
+        animation: sla-slide-in .2s ease;
+    }
+    @keyframes sla-slide-in { from { opacity:0; transform:translateY(-4px); } to { opacity:1; transform:none; } }
     `;
     document.head.appendChild(s);
 })();

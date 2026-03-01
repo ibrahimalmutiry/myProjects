@@ -6,7 +6,7 @@
 // ── حالة الشاشة ────────────────────────────────────────────
 const BudgetState = {
     reservations: [],
-    meta: { departments: [], suppliers: [], transactions: [] },
+    meta: { departments: [], suppliers: [], transactions: [], cost_centers: [], budget_categories: [] },
     filter: { status: '', department_id: '', fiscal_year: '', search: '' },
     currentStep: 1,
     loaded: false,
@@ -28,6 +28,31 @@ const PRIORITY_COLOR = {
     'حرج': '#ef4444',
 };
 
+// ── مساعد العملة ─────────────────────────────────────────────
+const CURRENCY_MAP = {
+    SAR: { symbol: 'ر.س', name: 'ريال سعودي' },
+    USD: { symbol: '$', name: 'دولار أمريكي' },
+    EUR: { symbol: '€', name: 'يورو' },
+    GBP: { symbol: '£', name: 'جنيه إسترليني' },
+    AED: { symbol: 'د.إ', name: 'درهم إماراتي' },
+    KWD: { symbol: 'د.ك', name: 'دينار كويتي' },
+    QAR: { symbol: 'ر.ق', name: 'ريال قطري' },
+};
+
+// العملة النشطة في فورم الحجز الحالي
+let _rfCurrency = 'SAR';
+
+function getCurrencySymbol(code) {
+    return (CURRENCY_MAP[code] || CURRENCY_MAP.SAR).symbol;
+}
+
+function fmtMoneyCur(amount, currencyCode) {
+    const sym = getCurrencySymbol(currencyCode || _rfCurrency || 'SAR');
+    const num = (parseFloat(amount) || 0).toLocaleString('en-US',
+        { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return num + ' ' + sym;
+}
+
 // ── ثوابت نموذج الحجز ───────────────────────────────────────
 const BUDGET_CATEGORIES = [
     'رأس المال', 'تشغيلي', 'صيانة وإصلاح', 'تقنية معلومات',
@@ -35,14 +60,14 @@ const BUDGET_CATEGORIES = [
     'أثاث ومعدات', 'سيارات ومركبات', 'إنشاءات وبنية تحتية',
 ];
 const COST_CENTERS = [
-    { id: 'CC-1001', name: 'الإدارة العامة' },
-    { id: 'CC-1002', name: 'التخطيط والميزانية' },
-    { id: 'CC-1003', name: 'الموارد البشرية' },
-    { id: 'CC-1004', name: 'تقنية المعلومات' },
-    { id: 'CC-1005', name: 'المشتريات' },
-    { id: 'CC-1006', name: 'المالية والحسابات' },
-    { id: 'CC-1007', name: 'الشؤون الإدارية' },
-    { id: 'CC-1008', name: 'التدريب والتطوير' },
+    { id: '102200001', name: 'الإدارة العامة' },
+    { id: '102200002', name: 'التخطيط والميزانية' },
+    { id: '102200003', name: 'الموارد البشرية' },
+    { id: '102200004', name: 'تقنية المعلومات' },
+    { id: '102200005', name: 'المشتريات' },
+    { id: '102200006', name: 'المالية والحسابات' },
+    { id: '102200007', name: 'الشؤون الإدارية' },
+    { id: '102200008', name: 'التدريب والتطوير' },
 ];
 
 // حالة أصناف الطلب (multi-item)
@@ -228,7 +253,7 @@ function renderReservationsTable(list) {
     const rows = list.map(r => {
         const st = RES_STATUS[r.status] || RES_STATUS['مسودة'];
         const prColor = PRIORITY_COLOR[r.priority] || 'var(--text-muted)';
-        const amt = formatMoney(parseFloat(r.grand_total || 0));
+        const amt = fmtMoneyCur(parseFloat(r.grand_total || 0), r.currency);
         const txBadge = r.transaction_number
             ? `<span class="res-tx-badge" title="مرتبط بمعاملة">${r.transaction_number}</span>`
             : `<span class="res-tx-badge unlinked">غير مرتبط</span>`;
@@ -248,8 +273,7 @@ function renderReservationsTable(list) {
                     ${r.quotation_number ? `<div class="res-date">عرض سعر: ${r.quotation_number}</div>` : ''}
                 </td>
                 <td class="res-amount">
-                    <div>${formatMoney(parseFloat(r.grand_total || 0))}</div>
-                    ${r.vat_amount > 0 ? `<div class="res-date">+ ض.ق.م ${formatMoney(parseFloat(r.vat_amount))}</div>` : ''}
+                    <div>${fmtMoneyCur(parseFloat(r.grand_total || 0), r.currency)}</div>
                 </td>
                 <td>
                     <span class="res-status-badge" style="color:${st.color};background:${st.bg}">
@@ -307,8 +331,9 @@ function budgetFilterChange(key, value) {
 // ═══════════════════════════════════════════════════════════════
 function openAddReservationModal() {
     BudgetState.currentStep = 1;
+    _rfCurrency = 'SAR'; // إعادة تعيين العملة عند فتح فورم جديد
     _rfItems = Array.from({ length: 5 }, () => ({
-        description: '', qty: 1, unit: 'قطعة', price: 0, includeVat: false,
+        description: '', qty: 1, unit: 'قطعة', price: 0,
     }));
     DOM.modalTitle.textContent = '📋 حجز جديد';
     DOM.modalBody.innerHTML = renderReservationForm();
@@ -317,8 +342,12 @@ function openAddReservationModal() {
 }
 
 function renderReservationForm(step = BudgetState.currentStep) {
-    const { departments, suppliers } = BudgetState.meta;
+    const { departments, suppliers, cost_centers, budget_categories } = BudgetState.meta;
     const today = new Date().toISOString().split('T')[0];
+
+    // fallback للثوابت المحلية لو لم تُحمَّل البيانات بعد
+    const ccList = cost_centers?.length ? cost_centers : COST_CENTERS.map(c => ({ code: c.id, name: c.name }));
+    const catList = budget_categories?.length ? budget_categories : BUDGET_CATEGORIES.map(n => ({ name: n }));
 
     const steps = [
         { n: 1, label: 'البيانات الأساسية', icon: '📌' },
@@ -341,48 +370,64 @@ function renderReservationForm(step = BudgetState.currentStep) {
 
     // ── الخطوة 1: البيانات الأساسية ─────────────────────────
     if (step === 1) {
+        const savedCC = _budgetFormData['rf_cost_center'] || '';
+        const savedDept = savedCC ? (COST_CENTERS.find(c => c.id === savedCC)?.name || '') : '';
         formBody = `
             <div class="res-form-grid">
-                <div class="res-form-group full">
-                    <label>الغرض من الشراء <span class="req">*</span></label>
-                    <input type="text" class="form-input" id="rf_purpose"
-                        placeholder="مثال: شراء أجهزة حاسوب لقسم تقنية المعلومات">
+                <div class="res-form-group">
+                    <label>مركز التكلفة <span class="req">*</span></label>
+                    ${searchableSelect({
+            id: 'rf_cost_center',
+            placeholder: 'ابحث بالرقم أو الاسم...',
+            value: savedCC,
+            options: [{ value: '', label: '-- اختر مركز التكلفة --' },
+            ...ccList.map(c => ({ value: c.code, label: `${c.code} — ${c.name}` }))]
+        })}
                 </div>
                 <div class="res-form-group">
-                    <label>القسم الطالب <span class="req">*</span></label>
-                    <select class="form-select" id="rf_department_id">
-                        <option value="">-- اختر القسم --</option>
-                        ${departments.map(d => `<option value="${d.id}">${d.name}</option>`).join('')}
-                    </select>
-                </div>
-                <div class="res-form-group">
-                    <label>تاريخ الطلب <span class="req">*</span></label>
-                    <input type="date" class="form-input" id="rf_request_date" value="${today}">
-                </div>
-                <div class="res-form-group">
-                    <label>الأولوية</label>
-                    <select class="form-select" id="rf_priority">
-                        <option value="عادي">عادي</option>
-                        <option value="عاجل">عاجل ⚡</option>
-                        <option value="حرج">حرج 🔴</option>
-                    </select>
+                    <label>القسم الطالب</label>
+                    <div class="dept-auto-field" id="rf_department_display">
+                        ${savedDept
+                ? `<span class="dept-auto-value">${savedDept}</span>`
+                : `<span class="dept-auto-placeholder">يتعبّأ تلقائياً عند اختيار مركز التكلفة</span>`}
+                    </div>
+                    <input type="hidden" id="rf_department_id" value="${_budgetFormData['rf_department_id'] || ''}">
+                    <input type="hidden" id="rf_department_name" value="${savedDept}">
                 </div>
                 <div class="res-form-group">
                     <label>بند الموازنة</label>
-                    <select class="form-select" id="rf_budget_category">
-                        <option value="">-- اختر البند --</option>
-                        ${BUDGET_CATEGORIES.map(c => `<option value="${c}">${c}</option>`).join('')}
-                    </select>
+                    ${searchableSelect({
+                    id: 'rf_budget_category',
+                    placeholder: 'ابحث عن البند...',
+                    value: _budgetFormData['rf_budget_category'] || '',
+                    options: [{ value: '', label: '-- اختر البند --' },
+                    ...catList.map(c => ({ value: c.name, label: c.code ? `${c.code} — ${c.name}` : c.name }))]
+                })}
+                </div>
+                      <div class="res-form-group">
+                    <label>الأولوية</label>
+                    ${searchableSelect({
+                    id: 'rf_priority',
+                    placeholder: 'اختر الأولوية',
+                    value: _budgetFormData['rf_priority'] || 'عادي',
+                    options: [
+                        { value: 'عادي', label: 'عادي' },
+                        { value: 'عاجل', label: 'عاجل ⚡' },
+                        { value: 'حرج', label: 'حرج 🔴' },
+                    ]
+                })}
+                </div>
+                <div class="res-form-group full">
+                    <label>الغرض من الشراء <span class="req">*</span></label>
+                    <input type="text" class="form-input" id="rf_purpose"
+                        placeholder="مثال: شراء أجهزة حاسوب لقسم تقنية المعلومات"
+                        value="${(_budgetFormData['rf_purpose'] || '').replace(/"/g, '&quot;')}">
                 </div>
                 <div class="res-form-group">
-                    <label>مركز التكلفة</label>
-                    <select class="form-select" id="rf_cost_center">
-                        <option value="">-- اختر مركز التكلفة --</option>
-                        ${COST_CENTERS.map(c =>
-            `<option value="${c.id}">${c.id} — ${c.name}</option>`
-        ).join('')}
-                    </select>
+                    <label>تاريخ الطلب <span class="req">*</span></label>
+                    <input type="date" class="form-input" id="rf_request_date" value="${_budgetFormData['rf_request_date'] || today}">
                 </div>
+          
             </div>`;
     }
 
@@ -392,13 +437,16 @@ function renderReservationForm(step = BudgetState.currentStep) {
             <div class="res-form-grid">
                 <div class="res-form-group full">
                     <label>المورد</label>
-                    <select class="form-select" id="rf_supplier_id" onchange="onSupplierChange(this)">
-                        <option value="">-- اختر من القائمة أو أدخل يدوياً --</option>
-                        ${suppliers.map(s =>
-            `<option value="${s.id}">${s.name} (${s.cr_number || '—'})</option>`
-        ).join('')}
-                        <option value="manual">➕ مورد غير موجود في القائمة</option>
-                    </select>
+                    ${searchableSelect({
+            id: 'rf_supplier_id',
+            placeholder: 'ابحث عن المورد...',
+            value: _budgetFormData['rf_supplier_id'] || '',
+            options: [
+                { value: '', label: '-- اختر من القائمة أو أدخل يدوياً --' },
+                ...suppliers.map(s => ({ value: String(s.id), label: `${s.name} (${s.cr_number || '—'})` })),
+                { value: 'manual', label: '➕ مورد غير موجود في القائمة' },
+            ]
+        })}
                 </div>
                 <div class="res-form-group full" id="rf_manual_supplier_wrap" style="display:none">
                     <label>اسم المورد <span class="req">*</span></label>
@@ -428,7 +476,6 @@ function renderReservationForm(step = BudgetState.currentStep) {
                     <span style="flex:.7;min-width:55px;text-align:center">الكمية</span>
                     <span style="flex:1;min-width:80px;text-align:center">الوحدة</span>
                     <span style="flex:1.1;min-width:85px;text-align:center">سعر الوحدة</span>
-                    <span style="flex:.8;min-width:70px;text-align:center">يشمل VAT</span>
                     <span style="flex:1;min-width:80px;text-align:center">الإجمالي</span>
                     <span style="width:30px"></span>
                 </div>
@@ -448,10 +495,15 @@ function renderReservationForm(step = BudgetState.currentStep) {
 
             <div class="res-form-group" style="margin-top:.25rem">
                 <label>العملة</label>
-                <select class="form-select" id="rf_currency" style="max-width:220px">
-                    <option value="SAR" selected>ريال سعودي (SAR)</option>
-                    <option value="USD">دولار أمريكي (USD)</option>
-                    <option value="EUR">يورو (EUR)</option>
+                <select class="form-select" id="rf_currency" style="max-width:220px"
+                    onchange="_onCurrencyChange(this.value)">
+                    <option value="SAR">ريال سعودي (SAR) ر.س</option>
+                    <option value="USD">دولار أمريكي (USD) $</option>
+                    <option value="EUR">يورو (EUR) €</option>
+                    <option value="GBP">جنيه إسترليني (GBP) £</option>
+                    <option value="AED">درهم إماراتي (AED) د.إ</option>
+                    <option value="KWD">دينار كويتي (KWD) د.ك</option>
+                    <option value="QAR">ريال قطري (QAR) ر.ق</option>
                 </select>
             </div>`;
     }
@@ -495,39 +547,37 @@ function renderItemRow(item, i) {
                 style="flex:1.1;min-width:85px;text-align:center;direction:ltr"
                 value="${item.price || 0}"
                 oninput="updateItem(${i},'price',+this.value);refreshTotals()">
-            <div style="flex:.8;min-width:70px;display:flex;align-items:center;justify-content:center">
-                <label class="rf-vat-toggle" title="السعر يشمل ضريبة القيمة المضافة (15%)">
-                    <input type="checkbox" ${item.includeVat ? 'checked' : ''}
-                        onchange="updateItem(${i},'includeVat',this.checked);refreshTotals()">
-                    <span class="rf-vat-slider"></span>
-                </label>
-            </div>
             <div class="rf-item-line-total" id="rf_line_${i}"
                  style="flex:1;min-width:80px;font-weight:600;font-size:.84rem;
                         color:var(--accent-blue);text-align:center;direction:ltr">
-                ${calcLineTotal(item)}
+                ${fmtMoneyCur(calcLineTotal(item), _rfCurrency)}
             </div>
             <button class="rf-del-row" onclick="removeItemRow(${i})" title="حذف الصف">✕</button>
         </div>`;
 }
 
 function calcLineTotal(item) {
-    const net = (item.qty || 0) * (item.price || 0) / (item.includeVat ? 1.15 : 1);
-    return net.toFixed(2);
+    return ((item.qty || 0) * (item.price || 0)).toFixed(2);
 }
 
 function renderTotalsBox() {
-    let subtotal = 0, vatTotal = 0;
-    _rfItems.forEach(it => {
-        const net = (it.qty || 0) * (it.price || 0) / (it.includeVat ? 1.15 : 1);
-        subtotal += net;
-        vatTotal += net * 0.15;
+    let total = 0;
+    _rfItems.forEach(it => { total += (it.qty || 0) * (it.price || 0); });
+    const sym = getCurrencySymbol(_rfCurrency);
+    return `<div class="rf-total-row grand">
+        <span>الإجمالي الكلي</span>
+        <span>${fmtMoneyCur(total, _rfCurrency)} <span class="rf-cur-badge">${_rfCurrency}</span></span>
+    </div>`;
+}
+
+function _onCurrencyChange(val) {
+    _rfCurrency = val;
+    // تحديث رمز العملة في كل الأرقام
+    refreshTotals();
+    // تحديث الشارة في العنوان
+    document.querySelectorAll('.rf-currency-live').forEach(el => {
+        el.textContent = getCurrencySymbol(val) + ' ' + val;
     });
-    const grand = subtotal + vatTotal;
-    return `
-        <div class="rf-total-row"><span>المجموع قبل الضريبة</span><span>${formatMoney(subtotal)}</span></div>
-        <div class="rf-total-row"><span>ضريبة القيمة المضافة (15%)</span><span>${formatMoney(vatTotal)}</span></div>
-        <div class="rf-total-row grand"><span>الإجمالي الكلي</span><span>${formatMoney(grand)}</span></div>`;
 }
 
 function updateItem(i, field, value) {
@@ -537,14 +587,14 @@ function updateItem(i, field, value) {
 function refreshTotals() {
     _rfItems.forEach((it, i) => {
         const el = document.getElementById(`rf_line_${i}`);
-        if (el) el.textContent = calcLineTotal(it);
+        if (el) el.textContent = fmtMoneyCur(calcLineTotal(it), _rfCurrency);
     });
     const box = document.getElementById('rf_totals_box');
     if (box) box.innerHTML = renderTotalsBox();
 }
 
 function addItemRow() {
-    _rfItems.push({ description: '', qty: 1, unit: 'قطعة', price: 0, includeVat: false });
+    _rfItems.push({ description: '', qty: 1, unit: 'قطعة', price: 0 });
     const list = document.getElementById('rf_items_list');
     if (list) {
         const tmp = document.createElement('div');
@@ -579,7 +629,7 @@ function budgetFormStep(step) {
 const _budgetFormData = {};
 function saveBudgetFormData() {
     const fields = [
-        'rf_purpose', 'rf_department_id', 'rf_request_date', 'rf_priority',
+        'rf_purpose', 'rf_department_id', 'rf_department_name', 'rf_request_date', 'rf_priority',
         'rf_budget_category', 'rf_cost_center',
         'rf_supplier_id', 'rf_supplier_name_manual', 'rf_quotation_number', 'rf_quotation_date',
         'rf_currency',
@@ -593,21 +643,49 @@ function saveBudgetFormData() {
 function restoreBudgetFormData() {
     Object.entries(_budgetFormData).forEach(([id, val]) => {
         const el = document.getElementById(id);
-        if (el) el.value = val;
+        if (!el) return;
+        el.value = val;
+        // للـ ss-wrap: حدّث العرض المرئي
+        const wrap = el.closest?.('.ss-wrap') || el.parentElement?.querySelector('.ss-wrap[data-id="' + id + '"]');
+        if (!wrap) {
+            // حقل عادي
+        } else {
+            const opt = wrap.querySelector(`.ss-option[data-value="${CSS.escape(val)}"]`);
+            if (opt) {
+                wrap.querySelector('.ss-display').innerHTML = opt.textContent;
+                wrap.querySelectorAll('.ss-option').forEach(o => o.classList.toggle('selected', o === opt));
+            }
+        }
+    });
+    // استعادة ss-wrap الصحيحة بطريقة مباشرة
+    document.querySelectorAll('.ss-wrap').forEach(wrap => {
+        const id = wrap.dataset.id;
+        const val = _budgetFormData[id];
+        if (val === undefined) return;
+        const hidden = wrap.querySelector(`#${id}`);
+        if (hidden) hidden.value = val;
+        const opt = wrap.querySelector(`.ss-option[data-value="${val}"]`);
+        if (opt) {
+            wrap.querySelector('.ss-display').innerHTML = opt.textContent;
+            wrap.querySelectorAll('.ss-option').forEach(o => o.classList.toggle('selected', o === opt));
+        }
     });
     if (_budgetFormData['rf_supplier_id'] === 'manual') {
         const wrap = document.getElementById('rf_manual_supplier_wrap');
         if (wrap) wrap.style.display = 'block';
     }
+    // ربط change event للمورد
+    const suppEl = document.getElementById('rf_supplier_id');
+    if (suppEl) suppEl.addEventListener('change', () => onSupplierChange(suppEl));
     refreshTotals();
 }
 
 function validateBudgetStep(step) {
     if (step === 1) {
         const purpose = document.getElementById('rf_purpose')?.value.trim();
-        const dept = document.getElementById('rf_department_id')?.value;
+        const cc = document.getElementById('rf_cost_center')?.value;
+        if (!cc) { showToast('⚠️ اختر مركز التكلفة', 'warning'); return false; }
         if (!purpose) { showToast('⚠️ أدخل الغرض من الشراء', 'warning'); return false; }
-        if (!dept) { showToast('⚠️ اختر القسم الطالب', 'warning'); return false; }
     }
     if (step === 3) {
         const hasDesc = _rfItems.some(it => it.description.trim());
@@ -617,9 +695,35 @@ function validateBudgetStep(step) {
     return true;
 }
 
-function onSupplierChange(sel) {
+function onSupplierChange(el) {
+    // يُستدعى من dispatchEvent('change') على hidden input
+    const val = el?.value ?? document.getElementById('rf_supplier_id')?.value ?? '';
     const wrap = document.getElementById('rf_manual_supplier_wrap');
-    if (wrap) wrap.style.display = (sel.value === 'manual') ? 'block' : 'none';
+    if (wrap) wrap.style.display = (val === 'manual') ? 'block' : 'none';
+}
+
+function onCostCenterChange(val) {
+    const ccList = BudgetState.meta.cost_centers?.length
+        ? BudgetState.meta.cost_centers
+        : COST_CENTERS.map(c => ({ code: c.id, name: c.name }));
+    const cc = ccList.find(c => c.code === val);
+    const display = document.getElementById('rf_department_display');
+    const hiddenId = document.getElementById('rf_department_id');
+    const hiddenNm = document.getElementById('rf_department_name');
+    if (!display) return;
+    if (cc) {
+        display.innerHTML = `<span class="dept-auto-value">${cc.name}</span>`;
+        if (hiddenId) hiddenId.value = cc.code;
+        if (hiddenNm) hiddenNm.value = cc.name;
+        _budgetFormData['rf_department_id'] = cc.code;
+        _budgetFormData['rf_department_name'] = cc.name;
+    } else {
+        display.innerHTML = `<span class="dept-auto-placeholder">يتعبّأ تلقائياً عند اختيار مركز التكلفة</span>`;
+        if (hiddenId) hiddenId.value = '';
+        if (hiddenNm) hiddenNm.value = '';
+        _budgetFormData['rf_department_id'] = '';
+        _budgetFormData['rf_department_name'] = '';
+    }
 }
 
 // ── إرسال الحجز ─────────────────────────────────────────────
@@ -628,35 +732,30 @@ async function submitReservation() {
     saveBudgetFormData();
 
     const activeItems = _rfItems.filter(it => it.description.trim());
-    let subtotal = 0, vatTotal = 0;
-    activeItems.forEach(it => {
-        const net = (it.qty || 0) * (it.price || 0) / (it.includeVat ? 1.15 : 1);
-        subtotal += net;
-        vatTotal += net * 0.15;
-    });
+    let total = 0;
+    activeItems.forEach(it => { total += (it.qty || 0) * (it.price || 0); });
 
     const suppId = _budgetFormData['rf_supplier_id'];
     const body = {
         purpose: _budgetFormData['rf_purpose'],
-        department_id: _budgetFormData['rf_department_id'],
         request_date: _budgetFormData['rf_request_date'],
         priority: _budgetFormData['rf_priority'],
         budget_category: _budgetFormData['rf_budget_category'],
         cost_center: _budgetFormData['rf_cost_center'],
+        cost_center_name: _budgetFormData['rf_department_name'],
         supplier_id: suppId !== 'manual' ? suppId : '',
         supplier_name_manual: suppId === 'manual' ? _budgetFormData['rf_supplier_name_manual'] : '',
         quotation_number: _budgetFormData['rf_quotation_number'],
         quotation_date: _budgetFormData['rf_quotation_date'],
-        currency: _budgetFormData['rf_currency'] || 'SAR',
+        currency: _budgetFormData['rf_currency'] || _rfCurrency || 'SAR',
         items: activeItems,
-        // backward-compat fields
         items_description: activeItems.map(it => `${it.description} (${it.qty} ${it.unit})`).join('\n'),
         quantity: activeItems.reduce((s, it) => s + (it.qty || 0), 0),
         unit: 'متعدد',
         unit_price: activeItems[0]?.price || 0,
-        total_amount: subtotal.toFixed(2),
-        vat_amount: vatTotal.toFixed(2),
-        grand_total: (subtotal + vatTotal).toFixed(2),
+        total_amount: total.toFixed(2),
+        vat_amount: '0.00',
+        grand_total: total.toFixed(2),
     };
 
     try {
@@ -705,251 +804,498 @@ async function openReservationDetails(id) {
         const st = RES_STATUS[r.status] || RES_STATUS['مسودة'];
         const log = r.log || [];
 
-        // الأولوية
         const prioMap = {
-            'عادي': { color: 'var(--text-muted)', bg: 'var(--bg-surface)', icon: '○' },
-            'عاجل': { color: '#d97706', bg: 'rgba(245,158,11,.12)', icon: '⚡' },
-            'حرج': { color: '#ef4444', bg: 'rgba(239,68,68,.12)', icon: '🔴' },
+            'عادي': { color: '#64748b', bg: '#f1f5f9', icon: '○', label: 'عادي' },
+            'عاجل': { color: '#d97706', bg: '#fffbeb', icon: '⚡', label: 'عاجل' },
+            'حرج': { color: '#ef4444', bg: '#fef2f2', icon: '●', label: 'حرج' },
         };
         const prio = prioMap[r.priority] || prioMap['عادي'];
 
         // ── أصناف الطلب ────────────────────────────────────
-        let itemsHtml = '';
-        const rawItems = r.items
-            ? (typeof r.items === 'string'
-                ? (() => { try { return JSON.parse(r.items); } catch { return null; } })()
-                : r.items)
-            : null;
+        // r.items يأتي كـ array من budget_reservation_items
+        let rawItems = null;
+        if (Array.isArray(r.items) && r.items.length) {
+            rawItems = r.items;
+        } else if (r.items_json) {
+            // fallback: items_json
+            try { rawItems = JSON.parse(r.items_json); } catch { rawItems = null; }
+        }
+        // fallback أخير: items_description نص
+        if (!rawItems || !rawItems.length) {
+            const descText = (r.items_description || '').trim();
+            if (descText) {
+                rawItems = descText.split(/\n/).map((line, i) => {
+                    const m = line.match(/^(.+?)\s*\((\d+(?:\.\d+)?)\s*(.*)\)\s*$/);
+                    if (m) return { description: m[1].trim(), qty: parseFloat(m[2]), unit: m[3].trim(), unit_price: 0, line_total: 0 };
+                    return line.trim() ? { description: line.trim(), qty: 1, unit: '', unit_price: 0, line_total: 0 } : null;
+                }).filter(Boolean);
+            }
+        }
 
+        let itemsRows = '';
+        let grandTotalFromItems = 0;
         if (rawItems && rawItems.length) {
-            itemsHtml = `
-                <div class="rdv-items-table">
-                    <div class="rdv-items-head">
-                        <span style="flex:3">الصنف</span>
-                        <span style="flex:.8;text-align:center">الكمية</span>
-                        <span style="flex:1">الوحدة</span>
-                        <span style="flex:1.3;text-align:left">صافي الوحدة</span>
-                        <span style="flex:1.3;text-align:left">الإجمالي</span>
-                    </div>
-                    ${rawItems.map(it => {
-                const unitNet = (parseFloat(it.price) || 0) / (it.includeVat ? 1.15 : 1);
-                const lineNet = unitNet * (parseFloat(it.qty) || 0);
+            itemsRows = rawItems.map((it, idx) => {
+                const price = parseFloat(it.unit_price || it.price) || 0;
+                const qty = parseFloat(it.qty) || 0;
+                const lineTotal = parseFloat(it.line_total) || (price * qty);
+                grandTotalFromItems += lineTotal;
                 return `
-                        <div class="rdv-items-row">
-                            <span style="flex:3">${it.description || '—'}</span>
-                            <span style="flex:.8;text-align:center">${it.qty || 0}</span>
-                            <span style="flex:1">${it.unit || ''}</span>
-                            <span style="flex:1.3;text-align:left;direction:ltr">${unitNet.toFixed(2)}${it.includeVat ? ' <small style="color:var(--text-muted)">(شامل)</small>' : ''}</span>
-                            <span style="flex:1.3;text-align:left;font-weight:600;color:var(--accent-blue);direction:ltr">${lineNet.toFixed(2)}</span>
-                        </div>`;
-            }).join('')}
-                </div>`;
+                <tr class="rv-item-row">
+                    <td class="rv-item-num">${idx + 1}</td>
+                    <td class="rv-item-desc">${it.description || '—'}</td>
+                    <td class="rv-item-qty">${qty > 0 ? qty : '—'}</td>
+                    <td class="rv-item-unit">${it.unit || '—'}</td>
+                    <td class="rv-item-price">${price > 0 ? fmtMoneyCur(price, r.currency) : '—'}</td>
+                    <td class="rv-item-total">${lineTotal > 0 ? fmtMoneyCur(lineTotal, r.currency) : '—'}</td>
+                </tr>`;
+            }).join('');
+        } else {
+            // لا يوجد بيانات كافية
+            itemsRows = `<tr class="rv-item-row">
+                <td class="rv-item-num">1</td>
+                <td class="rv-item-desc" colspan="4">${r.items_description || r.purpose || '—'}</td>
+                <td class="rv-item-total">${fmtMoneyCur(parseFloat(r.grand_total || 0), r.currency)}</td>
+            </tr>`;
         }
 
         // ── سجل الأحداث ────────────────────────────────────
         const logColors = {
-            create: 'var(--accent-blue)', review: 'var(--accent-amber)',
-            approve: 'var(--accent-green)', reject: 'var(--accent-red)',
+            create: '#3b82f6', review: '#f59e0b',
+            approve: '#10b981', reject: '#ef4444',
         };
         const logHtml = log.length
             ? log.map(l => `
-                <div class="rdv-log-item">
-                    <div class="rdv-log-dot" style="background:${logColors[l.action] || 'var(--text-muted)'}"></div>
-                    <div class="rdv-log-body">
-                        <div class="rdv-log-action">${getLogActionLabel(l.action)}
-                            ${l.new_status
-                    ? `<span class="rdv-log-status" style="color:${logColors[l.action] || 'var(--text-muted)'}">← ${l.new_status}</span>`
-                    : ''}
-                        </div>
-                        <div class="rdv-log-meta">
-                            <span>👤 ${l.employee_name || '—'}</span>
-                            <span>🕐 ${(l.created_at || '').slice(0, 16).replace('T', ' ')}</span>
-                        </div>
-                        ${l.notes ? `<div class="rdv-log-notes">${l.notes}</div>` : ''}
+                <div class="rdv2-log-row">
+                    <div class="rdv2-log-dot" style="background:${logColors[l.action] || '#94a3b8'}"></div>
+                    <div class="rdv2-log-body">
+                        <span class="rdv2-log-act">${getLogActionLabel(l.action)}</span>
+                        ${l.new_status ? `<span class="rdv2-log-st" style="color:${logColors[l.action] || '#94a3b8'}">${l.new_status}</span>` : ''}
+                        <span class="rdv2-log-who">· ${l.employee_name || '—'}</span>
+                        <span class="rdv2-log-when">${(l.created_at || '').slice(0, 16).replace('T', ' ')}</span>
+                        ${l.notes ? `<div class="rdv2-log-note">${l.notes}</div>` : ''}
                     </div>
                 </div>`).join('')
-            : '<p style="color:var(--text-muted);font-size:.82rem;padding:.5rem 0">لا يوجد سجل أحداث بعد</p>';
+            : '<p style="color:#94a3b8;font-size:.8rem;margin:0">لا يوجد سجل أحداث</p>';
 
         // ── التوجيه ────────────────────────────────────────
         const dtLabels = {
-            'to_payment': '⚡ دفع مباشر',
-            'to_purchase_order': '📋 أمر شراء / تعميد',
-            'to_requester': '↩️ جهة طالبة',
+            'to_payment': 'دفع مباشر',
+            'to_purchase_order': 'أمر شراء / تعميد',
+            'to_requester': 'إعادة لجهة طالبة',
         };
         const dtColors = {
-            'to_payment': 'var(--accent-green)',
-            'to_purchase_order': 'var(--accent-amber)',
-            'to_requester': 'var(--accent-purple)',
+            'to_payment': '#10b981',
+            'to_purchase_order': '#f59e0b',
+            'to_requester': '#8b5cf6',
         };
         const hasDispatch = !!r.dispatch_type;
         const isPaused = r.dispatch_ola_active == 0;
-        const dtColor = dtColors[r.dispatch_type] || 'var(--text-muted)';
+        const dtColor = dtColors[r.dispatch_type] || '#64748b';
 
         DOM.modalTitle.textContent = `حجز #${r.reservation_number}`;
         DOM.modalBody.innerHTML = `
-        <div class="rdv-wrap">
+        <div class="rdv2-shell" id="rdv2_printable">
 
-            <!-- رأس الحجز -->
-            <div class="rdv-hero">
-                <div class="rdv-hero-left">
-                    <div class="rdv-num">${r.reservation_number}</div>
-                    <div class="rdv-hero-meta">
-                        <span>📅 ${r.request_date}</span>
-                        <span>🏢 ${r.department_name || '—'}</span>
-                        <span>👤 ${r.requested_by_name || '—'}</span>
-                    </div>
+            <!-- ══ شريط الأدوات ══ -->
+            <div class="rdv2-toolbar no-print">
+                <div class="rdv2-toolbar-left">
+                    <button class="rdv2-tool-btn rdv2-print-btn" onclick="printReservation()">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+                            <rect x="6" y="14" width="12" height="8"/>
+                        </svg>
+                        طباعة
+                    </button>
+                    <button class="rdv2-tool-btn rdv2-pdf-btn" onclick="downloadReservationPDF(${r.id})">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                            <polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/>
+                            <polyline points="9 15 12 18 15 15"/>
+                        </svg>
+                        تنزيل PDF
+                    </button>
                 </div>
-                <div class="rdv-hero-right">
-                    <div class="rdv-status-pill" style="color:${st.color};background:${st.bg};border:1px solid ${st.color}30">
-                        ${st.icon} ${r.status}
-                    </div>
-                    <div class="rdv-priority-pill" style="color:${prio.color};background:${prio.bg}">
-                        ${prio.icon} ${r.priority}
-                    </div>
-                </div>
-            </div>
-
-            <!-- شريط المبلغ -->
-            <div class="rdv-amount-banner">
-                <div class="rdv-amount-parts">
-                    <div class="rdv-amount-part">
-                        <span class="rdv-amount-label">قبل الضريبة</span>
-                        <span class="rdv-amount-val">${formatMoney(parseFloat(r.total_amount || 0))}</span>
-                    </div>
-                    <div class="rdv-amount-sep">+</div>
-                    <div class="rdv-amount-part">
-                        <span class="rdv-amount-label">ضريبة 15%</span>
-                        <span class="rdv-amount-val">${formatMoney(parseFloat(r.vat_amount || 0))}</span>
-                    </div>
-                    <div class="rdv-amount-sep">=</div>
-                    <div class="rdv-amount-part grand">
-                        <span class="rdv-amount-label">الإجمالي الكلي</span>
-                        <span class="rdv-amount-val grand">${formatMoney(parseFloat(r.grand_total || 0))}</span>
-                    </div>
+                <div class="rdv2-toolbar-right">
+                    ${canDo('reservation.review') && r.status === 'قيد المراجعة'
+                ? `<button class="rdv2-tool-btn rdv2-review-btn" onclick="closeModal();openReviewModal(${r.id})">
+                               ✓ مراجعة الحجز
+                           </button>` : ''}
+                    <button class="rdv2-tool-btn" onclick="closeModal()">إغلاق</button>
                 </div>
             </div>
 
-            <!-- عمودان -->
-            <div class="rdv-cols">
+            <!-- ══ وثيقة الحجز ══ -->
+            <div class="rdv2-doc">
 
-                <!-- العمود الأيمن -->
-                <div class="rdv-col">
-                    <!-- الغرض -->
-                    <div class="rdv-card rdv-purpose-card">
-                        <div class="rdv-card-icon">📌</div>
+                <!-- رأس الوثيقة -->
+                <div class="rdv2-doc-header">
+                    <div class="rdv2-doc-logo">
+                        <div class="rdv2-logo-icon">⚡</div>
                         <div>
-                            <div class="rdv-card-label">الغرض من الشراء</div>
-                            <div class="rdv-purpose-text">${r.purpose || '—'}</div>
+                            <div class="rdv2-org-name">نظام إدارة المعاملات المالية</div>
+                            <div class="rdv2-org-sub">وثيقة حجز ميزانية رسمية</div>
                         </div>
                     </div>
-   <!-- بند الموازنة + مركز التكلفة -->
-                    <div class="rdv-card rdv-info-chips">
-                        <div class="rdv-chip">
-                            <div class="rdv-chip-label">بند الموازنة</div>
-                            <div class="rdv-chip-val">${r.budget_category || '—'}</div>
-                        </div>
-                        <div class="rdv-chip">
-                            <div class="rdv-chip-label">مركز التكلفة</div>
-                            <div class="rdv-chip-val">${r.cost_center || '—'}</div>
+                    <div class="rdv2-doc-id-block">
+                        <div class="rdv2-doc-num">${r.reservation_number}</div>
+                        <div class="rdv2-doc-date">📅 ${r.request_date}</div>
+                        <div class="rdv2-doc-badges">
+                            <span class="rdv2-status-badge" style="background:${st.bg};color:${st.color};border:1.5px solid ${st.color}40">
+                                ${st.icon} ${r.status}
+                            </span>
+                            <span class="rdv2-prio-badge" style="background:${prio.bg};color:${prio.color}">
+                                ${prio.icon} ${prio.label}
+                            </span>
                         </div>
                     </div>
-                    <!-- المورد -->
-                    <div class="rdv-card">
-                        <div class="rdv-card-head">🏢 بيانات المورد</div>
-                        <div class="rdv-row"><span>المورد</span><strong>${r.supplier_name || '—'}</strong></div>
-                        ${r.quotation_number ? `<div class="rdv-row"><span>رقم العرض</span><strong>${r.quotation_number}</strong></div>` : ''}
-                        ${r.quotation_date ? `<div class="rdv-row"><span>تاريخ العرض</span><strong>${r.quotation_date}</strong></div>` : ''}
-                    </div>
-
                 </div>
 
-                <!-- العمود الأيسر -->
-                <div class="rdv-col">
-                 
+                <div class="rdv2-divider"></div>
 
-                    <!-- الأصناف / الطلب -->
-                    <div class="rdv-card">
-                        <div class="rdv-card-head">📦 بيانات الطلب</div>
-                        ${itemsHtml || `
-                            <div class="rdv-row"><span>الوصف</span>
-                                <span style="white-space:pre-line;color:var(--text-secondary)">${r.items_description || '—'}</span></div>
-                            <div class="rdv-row"><span>الكمية</span>
-                                <strong>${r.quantity || '—'} ${r.unit || ''}</strong></div>
-                        `}
+                <!-- معلومات أساسية -->
+                <div class="rdv2-info-grid">
+                    <div class="rdv2-info-cell">
+                        <div class="rdv2-info-lbl">مقدم الطلب</div>
+                        <div class="rdv2-info-val">${r.requested_by_name || '—'}</div>
+                    </div>
+                    <div class="rdv2-info-cell">
+                        <div class="rdv2-info-lbl">القسم / الجهة الطالبة</div>
+                        <div class="rdv2-info-val">${r.department_name || '—'}</div>
+                    </div>
+                    <div class="rdv2-info-cell">
+                        <div class="rdv2-info-lbl">مركز التكلفة</div>
+                        <div class="rdv2-info-val rdv2-mono">${r.cost_center || '—'}</div>
+                    </div>
+                    <div class="rdv2-info-cell">
+                        <div class="rdv2-info-lbl">بند الموازنة</div>
+                        <div class="rdv2-info-val">${r.budget_category || '—'}</div>
+                    </div>
+                    <div class="rdv2-info-cell rdv2-span2">
+                        <div class="rdv2-info-lbl">الغرض من الشراء</div>
+                        <div class="rdv2-info-val rdv2-purpose">${r.purpose || '—'}</div>
+                    </div>
+                </div>
+
+                <div class="rdv2-divider"></div>
+
+                <!-- جدول الأصناف -->
+                <div class="rdv2-section-title">📦 الأصناف والبنود</div>
+                <table class="rdv2-items-tbl">
+                    <thead>
+                        <tr>
+                            <th style="width:40px">#</th>
+                            <th>الوصف / الصنف</th>
+                            <th style="width:70px;text-align:center">الكمية</th>
+                            <th style="width:80px;text-align:center">الوحدة</th>
+                            <th style="width:110px;text-align:left">سعر الوحدة</th>
+                            <th style="width:120px;text-align:left">الإجمالي</th>
+                        </tr>
+                    </thead>
+                    <tbody>${itemsRows}</tbody>
+                    <tfoot>
+                        <tr>
+                            <td colspan="5" style="text-align:right;font-weight:700;padding:.65rem 1rem;color:#1e293b">الإجمالي الكلي</td>
+                            <td style="text-align:left;direction:ltr;font-family:monospace;font-size:1.05rem;font-weight:800;color:#1e40af;padding:.65rem 1rem">
+                                ${fmtMoneyCur(parseFloat(r.grand_total || 0), r.currency)}
+                                <span class="rv-cur-badge">${r.currency || 'SAR'}</span>
+                            </td>
+                        </tr>
+                    </tfoot>
+                </table>
+
+                <!-- المورد + الموازنة في صفين -->
+                <div class="rdv2-lower-grid">
+
+                    <!-- المورد -->
+                    <div class="rdv2-panel">
+                        <div class="rdv2-panel-head">🏢 بيانات المورد</div>
+                        <div class="rdv2-panel-rows">
+                            <div class="rdv2-prow"><span>المورد</span><strong>${r.supplier_name || '—'}</strong></div>
+                            ${r.quotation_number ? `<div class="rdv2-prow"><span>رقم عرض السعر</span><strong>${r.quotation_number}</strong></div>` : ''}
+                            ${r.quotation_date ? `<div class="rdv2-prow"><span>تاريخ العرض</span><strong>${r.quotation_date}</strong></div>` : ''}
+                            ${r.currency ? `<div class="rdv2-prow"><span>العملة</span><strong>${r.currency}</strong></div>` : ''}
+                        </div>
                     </div>
 
                     <!-- الموازنة -->
-                    <div class="rdv-card">
-                        <div class="rdv-card-head">⚖️ مرحلة الموازنة</div>
-                        <div class="rdv-row"><span>موظف الموازنة</span><strong>${r.budget_employee_name || '—'}</strong></div>
-                        ${r.budget_code ? `<div class="rdv-row"><span>رمز الموازنة</span>
-                            <strong style="font-family:monospace;color:var(--accent-blue)">${r.budget_code}</strong></div>` : ''}
-                        ${r.budget_review_date ? `<div class="rdv-row"><span>تاريخ المراجعة</span>
-                            <strong>${r.budget_review_date.slice?.(0, 10)}</strong></div>` : ''}
-                        <div class="rdv-row"><span>معاملة مرتبطة</span>
-                            ${r.transaction_number
-                ? `<span class="res-tx-badge">${r.transaction_number}</span>`
-                : '<span style="color:var(--text-muted)">—</span>'}</div>
-                        ${r.budget_notes ? `<div class="rdv-row"><span>ملاحظات</span>
-                            <span style="color:var(--text-secondary);font-size:.79rem">${r.budget_notes}</span></div>` : ''}
-                        ${r.rejection_reason ? `
-                            <div class="rdv-rejection">
-                                <span>⛔</span><span>${r.rejection_reason}</span>
-                            </div>` : ''}
+                    <div class="rdv2-panel">
+                        <div class="rdv2-panel-head">⚖️ مرحلة الموازنة</div>
+                        <div class="rdv2-panel-rows">
+                            <div class="rdv2-prow"><span>موظف الموازنة</span><strong>${r.budget_employee_name || '—'}</strong></div>
+                            ${r.budget_code ? `<div class="rdv2-prow"><span>رمز الموازنة</span>
+                                <strong class="rdv2-mono" style="color:#1e40af">${r.budget_code}</strong></div>` : ''}
+                            ${r.budget_review_date ? `<div class="rdv2-prow"><span>تاريخ المراجعة</span>
+                                <strong>${(r.budget_review_date || '').slice(0, 10)}</strong></div>` : ''}
+                            <div class="rdv2-prow"><span>معاملة مرتبطة</span>
+                                ${r.transaction_number
+                ? `<span class="rdv2-tx-tag">${r.transaction_number}</span>`
+                : '<span style="color:#94a3b8">—</span>'}</div>
+                            ${r.budget_notes ? `<div class="rdv2-prow rdv2-prow-full"><span>ملاحظات</span>
+                                <span style="color:#475569;font-size:.8rem">${r.budget_notes}</span></div>` : ''}
+                            ${r.rejection_reason ? `
+                                <div class="rdv2-rejection-bar">⛔ ${r.rejection_reason}</div>` : ''}
+                        </div>
                     </div>
+
                     <!-- التوجيه -->
-                    <div class="rdv-card rdv-dispatch-card">
-                        <div class="rdv-card-head" style="color:#818cf8">🔀 التوجيه</div>
+                    <div class="rdv2-panel ${hasDispatch ? 'rdv2-panel-dispatch' : ''}">
+                        <div class="rdv2-panel-head" style="color:#818cf8">🔀 التوجيه</div>
                         ${hasDispatch ? `
-                            <div class="rdv-dispatch-badge"
-                                 style="background:${dtColor}18;color:${dtColor};border:1px solid ${dtColor}30">
+                        <div class="rdv2-panel-rows">
+                            <div class="rdv2-dispatch-badge-lg" style="background:${dtColor}15;color:${dtColor};border:1.5px solid ${dtColor}30">
                                 ${dtLabels[r.dispatch_type] || r.dispatch_type}
                             </div>
-                            <div class="rdv-row"><span>الموظف</span><strong>${r.dispatch_employee_name || '—'}</strong></div>
-                            ${r.routed_to ? `<div class="rdv-row"><span>الجهة</span><strong>${r.routed_to}</strong></div>` : ''}
-                            <div class="rdv-row"><span>الحالة</span><strong>${r.dispatch_status || '—'}</strong></div>
-                            ${r.dispatched_at ? `<div class="rdv-row"><span>التاريخ</span>
+                            <div class="rdv2-prow"><span>الموظف المسؤول</span><strong>${r.dispatch_employee_name || '—'}</strong></div>
+                            ${r.routed_to ? `<div class="rdv2-prow"><span>الجهة</span><strong>${r.routed_to}</strong></div>` : ''}
+                            <div class="rdv2-prow"><span>الحالة</span><strong>${r.dispatch_status || '—'}</strong></div>
+                            ${r.dispatched_at ? `<div class="rdv2-prow"><span>تاريخ التوجيه</span>
                                 <strong>${r.dispatched_at.slice(0, 10)}</strong></div>` : ''}
-                            ${isPaused ? `
-                                <div class="rdv-paused-bar">
-                                    <span>⏸ OLA معلّق — بانتظار عودة أمر الشراء</span>
-                                    ${(currentUser?.role === 'dispatch' || currentUser?.role === 'admin') ? `
-                                    <button onclick="closeModal();openResumeDispatchModal(${r.transaction_id})"
-                                            class="rdv-resume-btn">▶ استئناف للدفع</button>` : ''}
-                                </div>` : ''}
-                            ${r.dispatch_notes ? `<div class="rdv-row" style="margin-top:.35rem">
-                                <span>ملاحظات</span>
-                                <span style="color:var(--text-muted);font-size:.8rem">${r.dispatch_notes}</span>
+                            ${isPaused ? `<div class="rdv2-paused-bar no-print">
+                                ⏸ OLA معلّق — بانتظار عودة أمر الشراء
+                                ${(currentUser?.role === 'dispatch' || currentUser?.role === 'admin') ? `
+                                <button onclick="closeModal();openResumeDispatchModal(${r.transaction_id})" class="rdv2-resume-btn">▶ استئناف</button>` : ''}
                             </div>` : ''}
-                        ` : `
-                            <div class="rdv-dispatch-empty">
-                                <span style="font-size:1.8rem;opacity:.3">🔀</span>
-                                <span>${r.transaction_number ? 'لم يتم التوجيه بعد' : 'لا توجد معاملة مرتبطة'}</span>
-                            </div>`}
+                            ${r.dispatch_notes ? `<div class="rdv2-prow"><span>ملاحظات</span>
+                                <span style="color:#64748b;font-size:.8rem">${r.dispatch_notes}</span></div>` : ''}
+                        </div>` : `
+                        <div class="rdv2-dispatch-empty">
+                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".2">
+                                <polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+                                <polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+                            </svg>
+                            <span>${r.transaction_number ? 'لم يتم التوجيه بعد' : 'لا توجد معاملة مرتبطة'}</span>
+                        </div>`}
                     </div>
 
                     <!-- سجل الأحداث -->
-                    <div class="rdv-card">
-                        <div class="rdv-card-head">📜 سجل الأحداث</div>
-                        <div class="rdv-log-list">${logHtml}</div>
+                    <div class="rdv2-panel rdv2-log-panel">
+                        <div class="rdv2-panel-head">📜 سجل الأحداث</div>
+                        <div class="rdv2-log-scroll">${logHtml}</div>
                     </div>
                 </div>
-            </div>
 
-            <!-- أزرار -->
-            <div class="rdv-footer">
-                <button class="btn btn-secondary" onclick="closeModal()">إغلاق</button>
-                ${canDo('reservation.review') && r.status === 'قيد المراجعة'
-                ? `<button class="btn btn-primary" onclick="closeModal();openReviewModal(${r.id})">
-                           ✓ مراجعة الحجز
-                       </button>`
-                : ''}
-            </div>
-        </div>`;
+                <!-- تذييل الوثيقة -->
+                <div class="rdv2-doc-footer print-only">
+                    <span>تم إصدار هذه الوثيقة من نظام إدارة المعاملات المالية</span>
+                    <span>تاريخ الطباعة: ${new Date().toLocaleDateString('ar-SA')}</span>
+                </div>
+
+            </div><!-- /rdv2-doc -->
+        </div><!-- /rdv2-shell -->`;
 
     } catch (e) {
         DOM.modalBody.innerHTML = '<p style="color:var(--accent-red);padding:2rem;text-align:center">خطأ في تحميل البيانات</p>';
     }
+}
+
+// ── طباعة الحجز ─────────────────────────────────────────────
+function printReservation() {
+    const content = document.getElementById('rdv2_printable');
+    if (!content) return;
+    const win = window.open('', '_blank', 'width=900,height=700');
+    win.document.write(`<!DOCTYPE html><html dir="rtl" lang="ar"><head>
+        <meta charset="utf-8"><title>وثيقة حجز ميزانية</title>
+        <style>
+            @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&display=swap');
+            * { box-sizing:border-box; margin:0; padding:0; }
+            body { font-family:'IBM Plex Sans Arabic',sans-serif; color:#1e293b; background:#fff; }
+            .rdv2-toolbar,.no-print { display:none !important; }
+            ${getRdv2PrintCSS()}
+        </style></head><body>
+        ${content.innerHTML}
+        <script>
+            window.onload = function() {
+                setTimeout(function(){ window.print(); }, 800);
+            };
+        <\/script>
+        </body></html>`);
+    win.document.close();
+}
+
+// ── تنزيل PDF ───────────────────────────────────────────────
+async function downloadReservationPDF(id) {
+    const btn = document.querySelector('.rdv2-pdf-btn');
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ جاري التحضير...'; }
+    try {
+        const content = document.getElementById('rdv2_printable');
+        if (!content) return;
+        const win = window.open('', '_blank', 'width=900,height=700');
+        win.document.write(`<!DOCTYPE html><html dir="rtl" lang="ar"><head>
+            <meta charset="utf-8"><title>حجز ميزانية</title>
+            <style>
+                @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&display=swap');
+                * { box-sizing:border-box; margin:0; padding:0; }
+                body { font-family:'IBM Plex Sans Arabic',sans-serif; color:#1e293b; background:#fff; }
+                .rdv2-toolbar,.no-print { display:none !important; }
+                ${getRdv2PrintCSS()}
+            </style></head><body>
+            ${content.innerHTML}
+            <script>
+                window.onload = function() {
+                    setTimeout(function(){ window.print(); setTimeout(function(){ window.close(); }, 1500); }, 800);
+                };
+            <\/script>
+            </body></html>`);
+        win.document.close();
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><polyline points="9 15 12 18 15 15"/></svg> تنزيل PDF'; }
+    }
+}
+
+function getRdv2PrintCSS() {
+    return `
+        @page {
+            size: A4 portrait;
+            margin: 7mm 8mm;
+        }
+        * { box-sizing:border-box; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+        html, body { margin:0; padding:0; background:#fff; }
+        body { font-size:10.5px; font-family:'IBM Plex Sans Arabic',sans-serif; color:#1e293b; }
+
+        /* الهيكل العام */
+        .rdv2-shell { width:100%; }
+        .rdv2-doc   { background:#fff; border:none; box-shadow:none; border-radius:0; }
+
+        /* رأس الوثيقة */
+        .rdv2-doc-header {
+            display:flex; justify-content:space-between; align-items:center;
+            padding:.5rem .8rem;
+            background:linear-gradient(135deg,#1e3a5f,#1e40af) !important;
+            color:#fff;
+        }
+        .rdv2-doc-logo  { display:flex; align-items:center; gap:.4rem; }
+        .rdv2-logo-icon { font-size:1rem; width:28px; height:28px; background:rgba(255,255,255,.2);
+            border-radius:6px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+        .rdv2-org-name  { font-size:.78rem; font-weight:700; }
+        .rdv2-org-sub   { font-size:.58rem; opacity:.7; margin-top:.05rem; }
+        .rdv2-doc-id-block { display:flex; flex-direction:column; align-items:flex-start; gap:.12rem; }
+        .rdv2-doc-num   { font-size:.95rem; font-weight:800; font-family:monospace; letter-spacing:.5px; }
+        .rdv2-doc-date  { font-size:.6rem; opacity:.8; }
+        .rdv2-doc-badges { display:flex; gap:.3rem; }
+        .rdv2-status-badge,.rdv2-prio-badge {
+            font-size:.6rem; font-weight:700; padding:.08rem .4rem;
+            border-radius:20px; display:inline-flex; align-items:center; gap:.2rem; background:#fff;
+        }
+
+        /* فاصل ومعلومات أساسية */
+        .rdv2-divider   { height:1px; background:#e2e8f0; margin:.25rem 0; }
+        .rdv2-info-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:.3rem; padding:.3rem 0; }
+        .rdv2-span2     { grid-column:span 2; }
+        .rdv2-info-cell { background:#f8fafc; border:1px solid #e2e8f0; border-radius:4px; padding:.28rem .45rem; }
+        .rdv2-info-lbl  { font-size:.56rem; color:#64748b; font-weight:700;
+            text-transform:uppercase; letter-spacing:.3px; margin-bottom:.08rem; }
+        .rdv2-info-val  { font-size:.72rem; font-weight:600; color:#1e293b; line-height:1.3; }
+        .rdv2-info-val.rdv2-purpose { font-weight:500; font-size:.68rem; line-height:1.4; }
+        .rdv2-mono      { font-family:monospace; }
+
+        /* عنوان القسم */
+        .rdv2-section-title {
+            font-size:.6rem; font-weight:700; color:#64748b; text-transform:uppercase;
+            letter-spacing:.4px; display:flex; align-items:center; gap:.25rem;
+            padding:.1rem 0 .18rem; margin-top:.2rem;
+        }
+
+        /* شارة العملة */
+        .rv-cur-badge, .rf-cur-badge {
+            display:inline-block;
+            font-size:.62rem; font-weight:800;
+            padding:.1rem .38rem; border-radius:4px;
+            margin-right:.3rem;
+            background:rgba(30,64,175,.1); color:#1e40af;
+            border:1px solid rgba(30,64,175,.2);
+            font-family:sans-serif; letter-spacing:.03em;
+            vertical-align:middle;
+        }
+
+        /* جدول الأصناف */
+        .rdv2-items-tbl { width:100%; border-collapse:collapse; font-size:.82rem; }
+        .rdv2-items-tbl thead tr { background:#1e3a8a !important; color:#fff !important; }
+        .rdv2-items-tbl thead th {
+            padding:.5rem .7rem; font-weight:700; font-size:.76rem;
+            text-align:right; white-space:nowrap;
+        }
+        .rdv2-items-tbl tbody tr { border-bottom:1px solid #e2e8f0; }
+        .rdv2-items-tbl tbody tr:nth-child(even) { background:#f8fafc !important; }
+        .rdv2-items-tbl tbody tr:hover { background:#eff6ff !important; }
+        .rdv2-items-tbl tbody td {
+            padding:.55rem .7rem; color:#1e293b; vertical-align:middle;
+        }
+        /* أعمدة محددة */
+        .rv-item-num   { text-align:center; color:#94a3b8; font-size:.75rem; width:32px; }
+        .rv-item-desc  { font-weight:500; min-width:160px; }
+        .rv-item-qty   { text-align:center; color:#475569; width:55px; }
+        .rv-item-unit  { text-align:center; color:#64748b; font-size:.78rem; width:55px; }
+        .rv-item-price { text-align:left; direction:ltr; font-family:monospace; color:#475569; width:80px; }
+        .rv-item-total {
+            text-align:left; direction:ltr; font-family:monospace;
+            font-weight:700; color:#1d4ed8; width:90px;
+        }
+        .rdv2-items-tbl tfoot tr { background:#dbeafe !important; }
+        .rdv2-items-tbl tfoot td {
+            border-top:2px solid #93c5fd; padding:.45rem .7rem;
+            font-size:.82rem; font-weight:800;
+        }
+
+        /* الشبكة السفلية */
+        .rdv2-lower-grid { display:grid; grid-template-columns:1fr 1fr; gap:.35rem; margin-top:.4rem; }
+        .rdv2-panel { background:#f8fafc !important; border:1px solid #e2e8f0; border-radius:5px; padding:.35rem .5rem; }
+        .rdv2-panel-dispatch { border-color:#c4b5fd !important; background:#faf5ff !important; }
+        .rdv2-panel-head {
+            font-size:.58rem; font-weight:700; color:#64748b; text-transform:uppercase;
+            letter-spacing:.4px; margin-bottom:.25rem; padding-bottom:.18rem; border-bottom:1px solid #e2e8f0;
+        }
+        .rdv2-panel-rows { display:flex; flex-direction:column; gap:.12rem; }
+        .rdv2-prow {
+            display:flex; justify-content:space-between; align-items:baseline;
+            font-size:.67rem; padding:.08rem 0; border-bottom:1px dashed #e2e8f0; gap:.25rem;
+        }
+        .rdv2-prow:last-child { border-bottom:none; }
+        .rdv2-prow span:first-child { color:#64748b; flex-shrink:0; }
+        .rdv2-prow strong { color:#1e293b; text-align:left; }
+        .rdv2-prow-full { flex-direction:column; gap:.08rem; }
+        .rdv2-tx-tag {
+            background:#dbeafe !important; color:#1e40af; font-size:.62rem;
+            font-weight:700; padding:.06rem .35rem; border-radius:3px; font-family:monospace;
+        }
+        .rdv2-rejection-bar {
+            background:#fef2f2 !important; color:#ef4444; font-size:.63rem;
+            padding:.15rem .4rem; border-radius:3px; border:1px solid #fecaca; margin-top:.15rem;
+        }
+        .rdv2-dispatch-badge-lg {
+            font-size:.67rem; font-weight:600; padding:.15rem .5rem;
+            border-radius:5px; display:inline-block; margin-bottom:.2rem;
+        }
+        .rdv2-dispatch-empty {
+            display:flex; flex-direction:column; align-items:center;
+            justify-content:center; gap:.25rem; color:#94a3b8; font-size:.67rem;
+            padding:.5rem; text-align:center;
+        }
+        .rdv2-paused-bar { display:none; }
+
+        /* سجل الأحداث */
+        .rdv2-log-panel  { grid-column:span 2; }
+        .rdv2-log-scroll { max-height:none; overflow:visible; display:flex; flex-direction:column; gap:.25rem; }
+        .rdv2-log-row    { display:flex; gap:.35rem; align-items:flex-start; }
+        .rdv2-log-dot    { width:6px; height:6px; border-radius:50%; flex-shrink:0; margin-top:.25rem; }
+        .rdv2-log-body   { flex:1; font-size:.63rem; }
+        .rdv2-log-act    { font-weight:600; color:#1e293b; }
+        .rdv2-log-st     { font-size:.6rem; font-weight:500; margin-right:.15rem; }
+        .rdv2-log-who    { color:#64748b; margin-right:.15rem; }
+        .rdv2-log-when   { color:#94a3b8; font-size:.6rem; }
+        .rdv2-log-note   {
+            color:#475569; font-size:.6rem; margin-top:.06rem;
+            background:#f1f5f9 !important; padding:.08rem .3rem; border-radius:3px;
+        }
+
+        /* التذييل */
+        .rdv2-doc-footer {
+            display:flex !important; justify-content:space-between;
+            font-size:.58rem; color:#94a3b8; margin-top:.4rem;
+            padding-top:.25rem; border-top:1px solid #e2e8f0;
+        }
+        .no-print { display:none !important; }
+    `;
 }
 
 // ── نموذج مراجعة موظف الموازنة ──────────────────────────────
@@ -957,6 +1303,9 @@ function openReviewModal(id) {
     const { transactions } = BudgetState.meta;
     const reservation = BudgetState.reservations.find(r => r.id === id);
     const reservationNumber = reservation?.reservation_number || '';
+
+    // رمز الموازنة يُولَّد تلقائياً = رقم الحجز
+    const autoCode = reservationNumber;
 
     DOM.modalTitle.textContent = '✅ مراجعة الحجز';
     DOM.modalBody.innerHTML = `
@@ -967,18 +1316,18 @@ function openReviewModal(id) {
             <div class="res-form-grid">
                 <div class="res-form-group full">
                     <label>ربط بمعاملة مالية</label>
-                    <select class="form-select" id="rev_transaction_id">
+                    <select class="form-select" id="rev_transaction_id" onchange="updateBudgetCode('${reservationNumber}', this.value)">
                         <option value="">-- بدون ربط --</option>
                         ${transactions.map(t =>
-        `<option value="${t.id}">${t.transaction_number} — ${formatMoney(parseFloat(t.amount))}
+        `<option value="${t.id}" data-num="${t.transaction_number}">${t.transaction_number} — ${formatMoney(parseFloat(t.amount))}
                              ${t.budget_status ? `(${t.budget_status})` : ''}</option>`
     ).join('')}
                     </select>
                 </div>
                 <div class="res-form-group">
-                    <label>رمز الموازنة <span class="req">*</span></label>
-                    <input type="text" class="form-input" id="rev_budget_code"
-                        value="${reservationNumber}" placeholder="BUD-2026-XXXX">
+                    <label>رمز الموازنة</label>
+                    <div class="rev-code-display" id="rev_budget_code_display">${autoCode}</div>
+                    <input type="hidden" id="rev_budget_code" value="${autoCode}">
                 </div>
                 <div class="res-form-group">
                     <label>الحالة الجديدة <span class="req">*</span></label>
@@ -1013,6 +1362,17 @@ function openReviewModal(id) {
     openModal();
 }
 
+// ── تحديث رمز الموازنة تلقائياً عند اختيار المعاملة ────────
+function updateBudgetCode(reservationNumber, txSelectEl) {
+    const display = document.getElementById('rev_budget_code_display');
+    const hidden = document.getElementById('rev_budget_code');
+    if (!display || !hidden) return;
+
+    // رمز الموازنة = رقم الحجز دائماً (ثابت بغض النظر عن المعاملة)
+    display.textContent = reservationNumber;
+    hidden.value = reservationNumber;
+}
+
 async function submitReview(id) {
     const status = document.getElementById('rev_status').value;
     const txId = document.getElementById('rev_transaction_id').value;
@@ -1020,7 +1380,6 @@ async function submitReview(id) {
     const notes = document.getElementById('rev_budget_notes').value.trim();
     const rejReason = document.getElementById('rev_rejection_reason')?.value.trim();
 
-    if (!code) { showToast('⚠️ أدخل رمز الموازنة', 'warning'); return; }
     if (status === 'مرفوض' && !rejReason) { showToast('⚠️ أدخل سبب الرفض', 'warning'); return; }
 
     try {
@@ -1055,19 +1414,8 @@ function calcReservationTotal() {
     const total = qty * price;
     const totEl = document.getElementById('rf_total_amount');
     if (totEl) totEl.value = total.toFixed(2);
-    calcVAT();
-}
-
-function calcVAT() {
-    const total = parseFloat(document.getElementById('rf_total_amount')?.value || 0);
-    const vat = total * 0.15;
-    const grand = total + vat;
-    const vatEl = document.getElementById('rf_vat_amount');
-    const dispEl = document.getElementById('rf_grand_total_display');
-    if (vatEl) vatEl.value = vat.toFixed(2);
-    if (dispEl) dispEl.textContent = formatMoney(grand);
-    _budgetFormData['rf_grand_total'] = grand.toFixed(2);
-    _budgetFormData['rf_vat_amount'] = vat.toFixed(2);
+    _budgetFormData['rf_grand_total'] = total.toFixed(2);
+    _budgetFormData['rf_vat_amount'] = '0.00';
 }
 
 function getLogActionLabel(action) {
@@ -1084,6 +1432,103 @@ function getLogActionLabel(action) {
 // ═══════════════════════════════════════════════════════════════
 //  CSS
 // ═══════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════
+//  مكوّن القائمة المنسدلة مع البحث (Searchable Select)
+//  الاستخدام: searchableSelect({ id, options:[{value,label}], placeholder, value })
+//  يُنتج HTML ويُشغَّل بـ initSearchableSelects() بعد إدراجه في DOM
+// ══════════════════════════════════════════════════════════════
+
+function searchableSelect({ id, options = [], placeholder = 'ابحث أو اختر...', value = '' }) {
+    const opts = options.map(o =>
+        `<div class="ss-option ${o.value === value ? 'selected' : ''}" data-value="${o.value}">${o.label}</div>`
+    ).join('');
+    const selectedLabel = options.find(o => o.value === value)?.label || '';
+    return `
+    <div class="ss-wrap" data-id="${id}" data-value="${value}">
+        <input type="hidden" id="${id}" value="${value}">
+        <div class="ss-trigger" onclick="toggleSS(this)">
+            <span class="ss-display">${selectedLabel || `<span class="ss-ph">${placeholder}</span>`}</span>
+            <svg class="ss-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <polyline points="6 9 12 15 18 9"/>
+            </svg>
+        </div>
+        <div class="ss-dropdown">
+            <div class="ss-search-wrap">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                </svg>
+                <input class="ss-search" type="text" placeholder="ابحث..." oninput="filterSS(this)" autocomplete="off">
+            </div>
+            <div class="ss-options">${opts}</div>
+        </div>
+    </div>`;
+}
+
+function toggleSS(trigger) {
+    const wrap = trigger.closest('.ss-wrap');
+    const isOpen = wrap.classList.contains('open');
+    // أغلق كل القوائم المفتوحة
+    document.querySelectorAll('.ss-wrap.open').forEach(w => {
+        w.classList.remove('open');
+        w.querySelector('.ss-arrow')?.classList.remove('flipped');
+    });
+    if (!isOpen) {
+        wrap.classList.add('open');
+        trigger.querySelector('.ss-arrow')?.classList.add('flipped');
+        wrap.querySelector('.ss-search')?.focus();
+    }
+}
+
+function filterSS(input) {
+    const q = input.value.trim().toLowerCase();
+    input.closest('.ss-dropdown').querySelectorAll('.ss-option').forEach(opt => {
+        opt.style.display = opt.textContent.toLowerCase().includes(q) ? '' : 'none';
+    });
+}
+
+function selectSSOption(opt) {
+    const wrap = opt.closest('.ss-wrap');
+    const id = wrap.dataset.id;
+    const val = opt.dataset.value;
+    const lbl = opt.textContent;
+
+    // تحديث الحالة
+    wrap.dataset.value = val;
+    wrap.querySelector(`#${id}`).value = val;
+    wrap.querySelector('.ss-display').innerHTML = lbl;
+    wrap.querySelectorAll('.ss-option').forEach(o => o.classList.toggle('selected', o === opt));
+
+    // إغلاق القائمة
+    wrap.classList.remove('open');
+    wrap.querySelector('.ss-arrow')?.classList.remove('flipped');
+    wrap.querySelector('.ss-search').value = '';
+    filterSS(wrap.querySelector('.ss-search'));
+
+    // تفعيل أي callback مرتبط
+    const hidden = wrap.querySelector(`#${id}`);
+    hidden.dispatchEvent(new Event('change', { bubbles: true }));
+
+    // callbacks مخصصة حسب الحقل
+    if (id === 'rf_cost_center') onCostCenterChange(val);
+    if (id === 'rf_supplier_id') onSupplierChange(hidden);
+}
+
+// تفعيل delegate listener مرة واحدة على الـ document
+if (!window._ssListenerAttached) {
+    document.addEventListener('click', e => {
+        const opt = e.target.closest('.ss-option');
+        if (opt) { selectSSOption(opt); return; }
+        // إغلاق عند الضغط خارج
+        if (!e.target.closest('.ss-wrap')) {
+            document.querySelectorAll('.ss-wrap.open').forEach(w => {
+                w.classList.remove('open');
+                w.querySelector('.ss-arrow')?.classList.remove('flipped');
+            });
+        }
+    });
+    window._ssListenerAttached = true;
+}
+
 function injectBudgetStyles() {
     if (document.getElementById('budget-styles')) return;
     const s = document.createElement('style');
@@ -1117,6 +1562,83 @@ function injectBudgetStyles() {
         background: linear-gradient(135deg, #6366f1, #8b5cf6);
         -webkit-background-clip: text; -webkit-text-fill-color: transparent;
         background-clip: text;
+    }
+
+    /* ── حقل القسم التلقائي ─────────────────────────────── */
+    .dept-auto-field {
+        display:flex; align-items:center;
+        min-height:42px; padding:.55rem .85rem;
+        border-radius:10px;
+        border:1px dashed var(--border-color);
+        background:var(--bg-surface);
+        transition:all .2s;
+    }
+    .dept-auto-value {
+        font-size:.85rem; font-weight:600;
+        color:var(--accent-blue);
+        display:flex; align-items:center; gap:.4rem;
+    }
+    .dept-auto-value::before {
+        content:'🏢'; font-size:.8rem;
+    }
+    .dept-auto-placeholder {
+        font-size:.78rem; color:var(--text-muted);
+        font-style:italic;
+    }
+
+    /* ── Searchable Select ───────────────────────────────── */
+    .ss-wrap { position:relative; width:100%; }
+    .ss-trigger {
+        display:flex; align-items:center; justify-content:space-between;
+        padding:.55rem .85rem; border-radius:10px;
+        border:1px solid var(--border-color);
+        background:var(--bg-card);
+        cursor:pointer; min-height:42px;
+        transition:border-color .15s, box-shadow .15s;
+        user-select:none;
+    }
+    .ss-wrap.open .ss-trigger,
+    .ss-trigger:hover { border-color:var(--accent-blue); }
+    .ss-wrap.open .ss-trigger { box-shadow:0 0 0 3px rgba(99,102,241,.15); }
+    .ss-display { font-size:.85rem; color:var(--text-primary); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .ss-ph { color:var(--text-muted); }
+    .ss-arrow { color:var(--text-muted); flex-shrink:0; transition:transform .2s; }
+    .ss-arrow.flipped { transform:rotate(180deg); }
+
+    .ss-dropdown {
+        display:none; position:absolute; top:calc(100% + 4px); right:0; left:0;
+        background:var(--bg-card); border:1px solid var(--border-color);
+        border-radius:12px; box-shadow:0 8px 32px rgba(0,0,0,.22);
+        z-index:9999; overflow:hidden;
+        animation:ssDrop .15s ease;
+    }
+    @keyframes ssDrop { from{opacity:0;transform:translateY(-6px)} to{opacity:1;transform:translateY(0)} }
+    .ss-wrap.open .ss-dropdown { display:block; }
+
+    .ss-search-wrap {
+        display:flex; align-items:center; gap:.5rem;
+        padding:.6rem .8rem; border-bottom:1px solid var(--border-color);
+        color:var(--text-muted);
+    }
+    .ss-search {
+        flex:1; border:none; background:transparent; outline:none;
+        font-size:.82rem; color:var(--text-primary); direction:rtl;
+    }
+    .ss-search::placeholder { color:var(--text-muted); }
+
+    .ss-options { max-height:220px; overflow-y:auto; padding:.35rem; }
+    .ss-options::-webkit-scrollbar { width:4px; }
+    .ss-options::-webkit-scrollbar-thumb { background:var(--border-color); border-radius:4px; }
+
+    .ss-option {
+        padding:.5rem .75rem; border-radius:8px; font-size:.83rem;
+        color:var(--text-primary); cursor:pointer; transition:background .12s;
+        white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    }
+    .ss-option:hover { background:rgba(99,102,241,.1); }
+    .ss-option.selected {
+        background:rgba(99,102,241,.15);
+        color:var(--accent-blue); font-weight:600;
     }
 
     /* ── توسيع المودل لشاشة الحجوزات ───────────── */
@@ -1201,15 +1723,6 @@ function injectBudgetStyles() {
                   display:flex; align-items:center; justify-content:center; opacity:.5; transition:.15s; }
     .rf-del-row:hover { opacity:1; background:rgba(239,68,68,.1); }
 
-    /* VAT toggle */
-    .rf-vat-toggle  { position:relative; display:inline-block; width:36px; height:20px; cursor:pointer; }
-    .rf-vat-toggle input { opacity:0; width:0; height:0; position:absolute; }
-    .rf-vat-slider  { position:absolute; inset:0; background:#cbd5e1; border-radius:20px; transition:.2s; }
-    .rf-vat-slider::before { content:''; position:absolute; width:14px; height:14px;
-                              left:3px; top:3px; background:#fff; border-radius:50%; transition:.2s; }
-    .rf-vat-toggle input:checked + .rf-vat-slider { background:var(--accent-green); }
-    .rf-vat-toggle input:checked + .rf-vat-slider::before { transform:translateX(16px); }
-
     /* Add row button */
     .rf-add-row-btn { display:flex; align-items:center; gap:.5rem; justify-content:center;
                       width:100%; padding:.5rem; border:1.5px dashed var(--border-color);
@@ -1226,104 +1739,121 @@ function injectBudgetStyles() {
     .rf-total-row.grand { font-weight:700; font-size:.95rem; color:var(--accent-green);
                           border-top:1px solid var(--border-color); padding-top:.35rem; margin-top:.15rem; }
 
-    /* ══ تفاصيل الحجز (rdv) ════════════════════════ */
-    .rdv-wrap { display:flex; flex-direction:column; gap:1.1rem; }
+    /* ══ تفاصيل الحجز — التصميم الجديد (rdv2) ══════════ */
+    .rdv2-shell { display:flex; flex-direction:column; gap:0; font-family:inherit; }
 
-    /* رأس */
-    .rdv-hero { display:flex; align-items:flex-start; justify-content:space-between;
-                background:linear-gradient(135deg,var(--bg-surface),var(--bg-card));
-                border:1px solid var(--border-color); border-radius:14px; padding:1.1rem 1.25rem; gap:1rem; }
-    .rdv-hero-left  { display:flex; flex-direction:column; gap:.4rem; }
-    .rdv-hero-right { display:flex; flex-direction:column; align-items:flex-end; gap:.5rem; flex-shrink:0; }
-    .rdv-num        { font-size:1.6rem; font-weight:800; font-family:monospace; color:var(--text-primary); }
-    .rdv-hero-meta  { display:flex; flex-wrap:wrap; gap:.5rem; }
-    .rdv-hero-meta span { font-size:.76rem; color:var(--text-muted); background:var(--bg-card);
-                          border:1px solid var(--border-color); padding:.2rem .55rem; border-radius:20px; }
-    .rdv-status-pill   { display:inline-flex; align-items:center; gap:.35rem;
-                         padding:.4rem 1rem; border-radius:20px; font-size:.82rem; font-weight:700; }
-    .rdv-priority-pill { display:inline-flex; align-items:center; gap:.3rem;
-                         padding:.3rem .75rem; border-radius:20px; font-size:.76rem; font-weight:600; }
+    /* شريط الأدوات */
+    .rdv2-toolbar { display:flex; justify-content:space-between; align-items:center;
+                    padding:.6rem .2rem .8rem; gap:.5rem; flex-wrap:wrap; }
+    .rdv2-toolbar-left,.rdv2-toolbar-right { display:flex; gap:.45rem; align-items:center; }
+    .rdv2-tool-btn { display:inline-flex; align-items:center; gap:.45rem; padding:.42rem .9rem;
+                     border-radius:8px; font-size:.8rem; font-weight:600; cursor:pointer;
+                     border:1px solid var(--border-color); background:var(--bg-card);
+                     color:var(--text-secondary); font-family:inherit; transition:.15s;
+                     white-space:nowrap; }
+    .rdv2-tool-btn:hover { border-color:var(--accent-blue); color:var(--accent-blue); background:rgba(99,102,241,.06); }
+    .rdv2-print-btn { border-color:#0ea5e9; color:#0ea5e9; }
+    .rdv2-print-btn:hover { background:#f0f9ff; }
+    .rdv2-pdf-btn   { border-color:#ef4444; color:#ef4444; }
+    .rdv2-pdf-btn:hover { background:#fef2f2; }
+    .rdv2-review-btn { background:#10b981; border-color:#10b981; color:#fff; }
+    .rdv2-review-btn:hover { background:#059669; border-color:#059669; color:#fff; }
 
-    /* شريط المبلغ */
-    .rdv-amount-banner { background:linear-gradient(135deg,#1e293b,#0f172a); border-radius:14px; padding:1rem 1.5rem; }
-    .rdv-amount-parts  { display:flex; align-items:center; justify-content:center; gap:1.5rem; flex-wrap:wrap; }
-    .rdv-amount-part   { display:flex; flex-direction:column; align-items:center; gap:.2rem; }
-    .rdv-amount-part.grand { border-right:1px solid rgba(255,255,255,.1); padding-right:1.5rem; margin-right:.5rem; }
-    .rdv-amount-label  { font-size:.7rem; color:rgba(255,255,255,.5); letter-spacing:.5px; }
-    .rdv-amount-val    { font-size:1rem; font-weight:700; color:rgba(255,255,255,.85); font-family:monospace; direction:ltr; }
-    .rdv-amount-val.grand { font-size:1.35rem; color:#34d399; }
-    .rdv-amount-sep    { font-size:1.2rem; color:rgba(255,255,255,.25); }
+    /* الوثيقة */
+    .rdv2-doc { background:#fff; border:1px solid #e2e8f0; border-radius:14px; overflow:hidden;
+                box-shadow:0 4px 24px rgba(0,0,0,.08); }
 
-    /* عمودان */
-    .rdv-cols { display:flow; grid-template-columns:1fr 1fr; gap:.85rem; align-items:start; }
-    .rdv-col  { display:flex; flex-direction:column; gap:.85rem; margin-top:.25rem; }
+    /* رأس الوثيقة */
+    .rdv2-doc-header { display:flex; justify-content:space-between; align-items:center;
+                       padding:1.1rem 1.4rem; background:linear-gradient(135deg,#1e3a5f,#1e40af);
+                       color:#fff; gap:1rem; }
+    .rdv2-doc-logo  { display:flex; align-items:center; gap:.7rem; }
+    .rdv2-logo-icon { font-size:1.6rem; width:44px; height:44px; background:rgba(255,255,255,.15);
+                      border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+    .rdv2-org-name  { font-size:.95rem; font-weight:700; }
+    .rdv2-org-sub   { font-size:.68rem; opacity:.65; margin-top:.1rem; }
+    .rdv2-doc-id-block { display:flex; flex-direction:column; align-items:flex-start; gap:.3rem; }
+    .rdv2-doc-num   { font-size:1.3rem; font-weight:800; font-family:monospace; letter-spacing:1px; }
+    .rdv2-doc-date  { font-size:.73rem; opacity:.75; }
+    .rdv2-doc-badges { display:flex; gap:.4rem; flex-wrap:wrap; }
+    .rdv2-status-badge,.rdv2-prio-badge { font-size:.71rem; font-weight:700; padding:.18rem .6rem;
+                        border-radius:20px; display:inline-flex; align-items:center; gap:.3rem; }
 
-    /* البطاقات */
-    .rdv-card { background:var(--bg-card); border:1px solid var(--border-color); border-radius:12px; padding:.85rem 1rem; }
-    .rdv-card-head  { font-size:.76rem; font-weight:700; color:var(--text-muted); text-transform:uppercase;
-                      letter-spacing:.4px; padding-bottom:.5rem; margin-bottom:.5rem;
-                      border-bottom:1px solid var(--border-color); }
-    .rdv-card-icon  { font-size:1.2rem; flex-shrink:0; }
-    .rdv-card-label { font-size:.7rem; color:var(--text-muted); margin-bottom:.15rem; }
-    .rdv-purpose-card { display:flex; gap:.7rem; align-items:flex-start;
-                        background:rgba(99,102,241,.05); border-color:rgba(99,102,241,.2); }
-    .rdv-purpose-text { font-size:.9rem; color:var(--text-primary); font-weight:600; line-height:1.4; }
-    .rdv-row { display:flex; justify-content:space-between; align-items:baseline;
-               gap:.5rem; padding:.3rem 0; border-bottom:1px solid var(--border-color); font-size:.81rem; }
-    .rdv-row:last-child { border-bottom:none; }
-    .rdv-row span:first-child { color:var(--text-muted); flex-shrink:0; }
-    .rdv-row strong { color:var(--text-primary); text-align:left; }
-    .rdv-rejection  { display:flex; gap:.5rem; align-items:flex-start; margin-top:.5rem;
-                      background:rgba(239,68,68,.07); border:1px solid rgba(239,68,68,.2);
-                      border-radius:8px; padding:.5rem .7rem; font-size:.8rem; color:#ef4444; }
-    .rdv-info-chips { display:flex; gap:.6rem; }
-    .rdv-chip       { flex:1; background:var(--bg-surface); border:1px solid var(--border-color);
-                      border-radius:10px; padding:.6rem .8rem; }
-    .rdv-chip-label { font-size:.7rem; color:var(--text-muted); margin-bottom:.2rem; }
-    .rdv-chip-val   { font-size:.82rem; font-weight:600; color:var(--text-primary); }
+    /* قسم المعلومات الأساسية */
+    .rdv2-divider   { height:1px; background:#f1f5f9; margin:0 1.25rem; }
+    .rdv2-info-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:.6rem; padding:.85rem 1.25rem; }
+    .rdv2-span2     { grid-column:span 2; }
+    .rdv2-info-cell { background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:.55rem .8rem; }
+    .rdv2-info-lbl  { font-size:.65rem; color:#64748b; font-weight:700; text-transform:uppercase;
+                      letter-spacing:.5px; margin-bottom:.22rem; }
+    .rdv2-info-val  { font-size:.86rem; font-weight:600; color:#1e293b; }
+    .rdv2-info-val.rdv2-purpose { font-weight:500; line-height:1.5; font-size:.82rem; }
+    .rdv2-mono      { font-family:monospace; }
+    .rdv2-section-title { font-size:.7rem; font-weight:700; color:#64748b; text-transform:uppercase;
+                          letter-spacing:.6px; display:flex; align-items:center; gap:.4rem;
+                          padding:.1rem 1.25rem .4rem; }
 
-    /* جدول الأصناف في التفاصيل */
-    .rdv-items-table { display:flex; flex-direction:column; }
-    .rdv-items-head  { display:flex; gap:.5rem; padding:.3rem .4rem;
-                       background:var(--bg-surface); border-radius:6px; margin-bottom:.25rem;
-                       font-size:.7rem; font-weight:700; color:var(--text-muted); direction:rtl; }
-    .rdv-items-row   { display:flex; gap:.5rem; padding:.35rem .4rem; direction:rtl;
-                       border-bottom:1px solid var(--border-color); font-size:.8rem; }
-    .rdv-items-row:last-child { border-bottom:none; }
+    /* جدول الأصناف */
+    .rdv2-items-tbl { width:100%; border-collapse:collapse; font-size:.81rem; }
+    .rdv2-items-tbl thead tr { background:#1e40af; color:#fff; }
+    .rdv2-items-tbl thead th { padding:.55rem 1rem; font-weight:600; font-size:.72rem; text-align:right; }
+    .rdv2-items-tbl tbody tr:nth-child(even) { background:#f8fafc; }
+    .rdv2-items-tbl tbody tr:hover { background:#eff6ff; transition:.1s; }
+    .rdv2-items-tbl tbody td { padding:.5rem 1rem; border-bottom:1px solid #e2e8f0; color:#334155; }
+    .rdv2-items-tbl tfoot tr { background:#dbeafe; }
+    .rdv2-items-tbl tfoot td { border-top:2px solid #93c5fd; padding:.6rem 1rem; }
 
-    /* التوجيه */
-    .rdv-dispatch-card  { border-color:rgba(129,140,248,.2) !important; background:rgba(129,140,248,.03) !important; }
-    .rdv-dispatch-badge { display:inline-block; padding:.3rem .85rem; border-radius:20px;
-                          font-size:.78rem; font-weight:700; margin-bottom:.6rem; }
-    .rdv-dispatch-empty { display:flex; flex-direction:column; align-items:center;
-                          gap:.4rem; padding:.75rem 0; color:var(--text-muted); font-size:.82rem; }
-    .rdv-paused-bar { display:flex; justify-content:space-between; align-items:center; gap:.5rem;
-                      margin-top:.5rem; background:rgba(234,179,8,.08); border:1px solid rgba(234,179,8,.25);
-                      border-radius:8px; padding:.45rem .65rem; font-size:.78rem; color:#b45309; flex-wrap:wrap; }
-    .rdv-resume-btn { background:#818cf8; color:#fff; border:none; border-radius:6px;
-                      padding:.25rem .65rem; font-size:.74rem; cursor:pointer;
-                      font-family:inherit; white-space:nowrap; }
-
-    /* سجل الأحداث */
-    .rdv-log-list   { display:flex; flex-direction:column; gap:.75rem; max-height:220px;
-                      overflow-y:auto; padding-right:.25rem; }
-    .rdv-log-list::-webkit-scrollbar { width:3px; }
-    .rdv-log-list::-webkit-scrollbar-thumb { background:var(--border-color); border-radius:3px; }
-    .rdv-log-item   { display:flex; gap:.65rem; align-items:flex-start; }
-    .rdv-log-dot    { width:8px; height:8px; border-radius:50%; flex-shrink:0; margin-top:.35rem; }
-    .rdv-log-body   { flex:1; }
-    .rdv-log-action { font-size:.82rem; font-weight:600; color:var(--text-primary); }
-    .rdv-log-status { font-size:.75rem; font-weight:500; margin-right:.4rem; }
-    .rdv-log-meta   { display:flex; gap:.75rem; font-size:.72rem; color:var(--text-muted); margin-top:.15rem; }
-    .rdv-log-notes  { font-size:.76rem; color:var(--text-secondary); margin-top:.2rem;
-                      background:var(--bg-surface); padding:.3rem .5rem; border-radius:5px; }
-
-    /* أزرار التذييل */
-    .rdv-footer { display:flex; justify-content:flex-start; gap:.625rem;
-                  padding-top:.75rem; border-top:1px solid var(--border-color); }
+    /* الشبكة السفلية */
+    .rdv2-lower-grid { display:grid; grid-template-columns:1fr 1fr; gap:.65rem; padding:.85rem 1.25rem 1.25rem; }
+    .rdv2-panel { background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:.8rem 1rem; }
+    .rdv2-panel-dispatch { border-color:#c4b5fd; background:#faf5ff; }
+    .rdv2-panel-head { font-size:.69rem; font-weight:700; color:#64748b; text-transform:uppercase;
+                       letter-spacing:.5px; margin-bottom:.55rem; padding-bottom:.4rem; border-bottom:1px solid #e2e8f0; }
+    .rdv2-panel-rows { display:flex; flex-direction:column; gap:.3rem; }
+    .rdv2-prow { display:flex; justify-content:space-between; align-items:baseline;
+                 font-size:.8rem; padding:.2rem 0; border-bottom:1px dashed #e2e8f0; gap:.5rem; }
+    .rdv2-prow:last-child { border-bottom:none; }
+    .rdv2-prow span:first-child { color:#64748b; flex-shrink:0; }
+    .rdv2-prow strong { color:#1e293b; text-align:left; }
+    .rdv2-prow-full { flex-direction:column; gap:.15rem; }
+    .rdv2-tx-tag { background:#dbeafe; color:#1e40af; font-size:.72rem; font-weight:700;
+                   padding:.12rem .55rem; border-radius:5px; font-family:monospace; }
+    .rdv2-rejection-bar { background:#fef2f2; color:#ef4444; font-size:.76rem; padding:.35rem .7rem;
+                          border-radius:6px; border:1px solid #fecaca; margin-top:.3rem; }
+    .rdv2-dispatch-badge-lg { font-size:.8rem; font-weight:600; padding:.3rem .85rem;
+                               border-radius:8px; display:inline-block; margin-bottom:.45rem; }
+    .rdv2-dispatch-empty { display:flex; flex-direction:column; align-items:center; justify-content:center;
+                            gap:.45rem; color:#94a3b8; font-size:.8rem; padding:1.2rem; text-align:center; }
+    .rdv2-paused-bar { background:#fffbeb; color:#92400e; font-size:.76rem; padding:.35rem .7rem;
+                       border-radius:6px; border:1px solid #fcd34d; display:flex;
+                       justify-content:space-between; align-items:center; gap:.4rem; margin-top:.3rem; }
+    .rdv2-resume-btn { background:#f59e0b; color:#fff; border:none; border-radius:6px;
+                       padding:.22rem .65rem; cursor:pointer; font-size:.72rem; font-family:inherit; }
+    .rdv2-log-panel  { grid-column:span 2; }
+    .rdv2-log-scroll { max-height:160px; overflow-y:auto; display:flex; flex-direction:column; gap:.5rem; }
+    .rdv2-log-scroll::-webkit-scrollbar { width:3px; }
+    .rdv2-log-scroll::-webkit-scrollbar-thumb { background:#e2e8f0; border-radius:3px; }
+    .rdv2-log-row    { display:flex; gap:.55rem; align-items:flex-start; }
+    .rdv2-log-dot    { width:7px; height:7px; border-radius:50%; flex-shrink:0; margin-top:.38rem; }
+    .rdv2-log-body   { flex:1; font-size:.78rem; }
+    .rdv2-log-act    { font-weight:600; color:#1e293b; }
+    .rdv2-log-st     { font-size:.7rem; font-weight:500; margin-right:.3rem; }
+    .rdv2-log-who    { color:#64748b; font-size:.75rem; margin-right:.25rem; }
+    .rdv2-log-when   { color:#94a3b8; font-size:.7rem; }
+    .rdv2-log-note   { color:#475569; font-size:.73rem; margin-top:.12rem;
+                       background:#f1f5f9; padding:.18rem .45rem; border-radius:4px; }
+    .rdv2-doc-footer { display:none; }
+    .print-only { display:none !important; }
 
     /* مراجعة الموازنة */
     .res-review-wrap .res-form-grid { gap:.85rem; }
+    .rev-code-display {
+        min-height: 42px; padding: .55rem .85rem;
+        background: rgba(30,64,175,.06); border: 1.5px solid rgba(30,64,175,.25);
+        border-radius: 8px; font-family: monospace; font-size: .9rem;
+        font-weight: 700; color: #1e40af; display: flex; align-items: center;
+        letter-spacing: .5px;
+    }
     .res-details-footer { display:flex; justify-content:flex-start; gap:.625rem;
                           padding-top:.75rem; border-top:1px solid var(--border-color); }
 

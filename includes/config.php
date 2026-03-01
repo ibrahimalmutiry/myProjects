@@ -10,6 +10,11 @@ if (!defined('APP_ROOT')) {
 }
 
 // إعدادات قاعدة البيانات
+// define('DB_HOST', 'localhost');
+// define('DB_NAME', 'u876202964_db_XKmWg7L7');
+// define('DB_USER', 'u876202964_usr_XKmWg7L7');
+// define('DB_PASS', 'Ibr@9000');
+// define('DB_CHARSET', 'utf8mb4');
 define('DB_HOST', 'localhost');
 define('DB_NAME', 'workflow_system');
 define('DB_USER', 'root');

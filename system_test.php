@@ -1,25 +1,9 @@
 <?php
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
- *    ملف الاختبار الشامل — نظام إدارة معاملات القطاع المالي
- *    Comprehensive System Test Suite — Workflow Management System
- * ───────────────────────────────────────────────────────────────────────────────
- *  الإصدار   : 2.0.0
- *  اللغة     : PHP 8.0+
- *  المتطلبات : MySQL 5.7+  |  PHP mysqli extension
- *
- *  الاستخدام عبر CLI :
- *    php system_test.php
- *    php system_test.php --suite=db
- *    php system_test.php --suite=sla
- *    php system_test.php --suite=permissions
- *    php system_test.php --suite=finance
- *    php system_test.php --suite=notifications
- *    php system_test.php --suite=log
- *
- *  الاستخدام عبر المتصفح :
- *    http://localhost/system_test.php
- *    http://localhost/system_test.php?suite=sla
+ 
+
+
  * ═══════════════════════════════════════════════════════════════════════════════
  */
 

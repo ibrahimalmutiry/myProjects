@@ -24,20 +24,29 @@ const STAGE_LABELS = [
 /**
  * جلب سياسة SLA المناسبة لنوع معاملة
  */
-function getSlaPolicy($transactionTypeId = null) {
+/**
+ * جلب سياسة SLA المناسبة
+ * الأولوية: فرعي → رئيسي → افتراضية
+ */
+function getSlaPolicy($transactionTypeId = null, $subTypeId = null) {
     $conn = db();
     $tid  = (int)($transactionTypeId ?? 0);
+    $sid  = (int)($subTypeId ?? 0);
 
-    // ابحث أولاً عن سياسة خاصة بهذا النوع
-    if ($tid > 0) {
-        $r = $conn->query("SELECT * FROM sla_policies
-                           WHERE transaction_type_id = $tid AND is_active = 1 LIMIT 1");
+    // 1. سياسة خاصة بالتصنيف الفرعي
+    if ($sid > 0) {
+        $r = $conn->query("SELECT * FROM sla_policies WHERE transaction_type_id = $sid AND is_active = 1 LIMIT 1");
         if ($r && $r->num_rows > 0) return $r->fetch_assoc();
     }
 
-    // ارجع للسياسة العامة
-    $r = $conn->query("SELECT * FROM sla_policies
-                       WHERE transaction_type_id IS NULL AND is_active = 1 LIMIT 1");
+    // 2. سياسة خاصة بالتصنيف الرئيسي
+    if ($tid > 0) {
+        $r = $conn->query("SELECT * FROM sla_policies WHERE transaction_type_id = $tid AND is_active = 1 LIMIT 1");
+        if ($r && $r->num_rows > 0) return $r->fetch_assoc();
+    }
+
+    // 3. السياسة الافتراضية
+    $r = $conn->query("SELECT * FROM sla_policies WHERE transaction_type_id IS NULL AND is_active = 1 ORDER BY id LIMIT 1");
     return ($r && $r->num_rows > 0) ? $r->fetch_assoc() : null;
 }
 
@@ -48,10 +57,14 @@ function getAllSlaPolicies() {
     $conn     = db();
     $policies = [];
 
-    $res = $conn->query("SELECT sp.*, tt.name AS type_name
+    $res = $conn->query("SELECT sp.*,
+                              tt.name AS type_name,
+                              tt.parent_id AS type_parent_id,
+                              tp.name AS parent_type_name
                          FROM sla_policies sp
                          LEFT JOIN transaction_types tt ON sp.transaction_type_id = tt.id
-                         ORDER BY sp.id");
+                         LEFT JOIN transaction_types tp ON tt.parent_id = tp.id
+                         ORDER BY sp.transaction_type_id IS NULL DESC, sp.id");
     if (!$res) return [];
 
     while ($p = $res->fetch_assoc()) {
@@ -99,6 +112,24 @@ function saveSlaPolicy($data) {
     return ['success' => true, 'id' => $conn->insert_id];
 }
 
+/**
+ * حذف سياسة SLA — لا يُسمح بحذف السياسة الافتراضية (transaction_type_id IS NULL)
+ */
+function deleteSlaPolicy($id) {
+    $conn = db();
+    $id   = (int)$id;
+    // منع حذف الافتراضية
+    $r    = $conn->query("SELECT transaction_type_id FROM sla_policies WHERE id=$id LIMIT 1");
+    if (!$r || !($row = $r->fetch_assoc())) return ['success'=>false,'error'=>'السياسة غير موجودة'];
+    if ($row['transaction_type_id'] === null) return ['success'=>false,'error'=>'لا يمكن حذف السياسة الافتراضية'];
+    // حذف قواعد OLA أولاً
+    $conn->query("DELETE FROM ola_rules WHERE sla_policy_id=$id");
+    $conn->query("DELETE FROM sla_policies WHERE id=$id");
+    return ['success' => true];
+}
+
+
+
 function saveOlaRule($data) {
     $conn    = db();
     $pid     = (int)($data['sla_policy_id'] ?? 0);
@@ -136,14 +167,13 @@ function checkTransactionSla($transactionId) {
     $txId = (int)$transactionId;
     $now  = new DateTime();
 
-    $txRes = $conn->query("SELECT t.*, tt.id AS type_id
+    $txRes = $conn->query("SELECT t.*, t.type_id, t.sub_type_id
                            FROM transactions t
-                           LEFT JOIN transaction_types tt ON t.type_id = tt.id
                            WHERE t.id = $txId LIMIT 1");
     if (!$txRes || $txRes->num_rows === 0) return [];
 
     $tx     = $txRes->fetch_assoc();
-    $policy = getSlaPolicy($tx['type_id']);
+    $policy = getSlaPolicy($tx['type_id'], $tx['sub_type_id'] ?? null);
     if (!$policy) return [];
 
     $olaRules     = getOlaRules($policy['id']);
@@ -459,14 +489,11 @@ function getTransactionSlaStatus($transactionId) {
     $conn = db();
     $txId = (int)$transactionId;
 
-    $tx = $conn->query("SELECT t.*, tt.id AS type_id
-                        FROM transactions t
-                        LEFT JOIN transaction_types tt ON t.type_id = tt.id
-                        WHERE t.id = $txId LIMIT 1");
+    $tx = $conn->query("SELECT t.*, t.type_id, t.sub_type_id FROM transactions t WHERE t.id = $txId LIMIT 1");
     if (!$tx || $tx->num_rows === 0) return null;
 
     $txRow   = $tx->fetch_assoc();
-    $policy  = getSlaPolicy($txRow['type_id']);
+    $policy  = getSlaPolicy($txRow['type_id'], $txRow['sub_type_id'] ?? null);
     if (!$policy) return null;
 
     $olaRules     = getOlaRules($policy['id']);
@@ -987,10 +1014,12 @@ function manualEscalateStage($transactionId, $stage, $requesterId) {
 
     $olaRule    = null;
     $policy     = null;
-    $txTypeRes  = $conn->query("SELECT type_id FROM transactions WHERE id=$txId LIMIT 1");
+    $txTypeRes  = $conn->query("SELECT type_id, sub_type_id FROM transactions WHERE id=$txId LIMIT 1");
     if ($txTypeRes) {
-        $typeId  = (int)($txTypeRes->fetch_assoc()['type_id'] ?? 0);
-        $policy  = getSlaPolicy($typeId);
+        $txRow2  = $txTypeRes->fetch_assoc();
+        $typeId  = (int)($txRow2['type_id'] ?? 0);
+        $subId2  = (int)($txRow2['sub_type_id'] ?? 0);
+        $policy  = getSlaPolicy($typeId, $subId2 ?: null);
         if ($policy) {
             $rules  = getOlaRules($policy['id']);
             $olaRule = $rules[$stage] ?? null;

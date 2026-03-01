@@ -12,15 +12,28 @@ require_once __DIR__ . '/config.php';
 function ensureViewExists() {
     $conn = db();
     
-    // التحقق من وجود أعمدة المرفقات
+    // التحقق من وجود أعمدة المرفقات (للتوافق مع النظام القديم)
     $result = $conn->query("SHOW COLUMNS FROM transactions LIKE 'attachment'");
     $hasAttachment = ($result && $result->num_rows > 0);
     
-    // إضافة أعمدة المرفقات إذا لم تكن موجودة
     if (!$hasAttachment) {
         $conn->query("ALTER TABLE transactions ADD COLUMN attachment VARCHAR(255) DEFAULT NULL");
         $conn->query("ALTER TABLE transactions ADD COLUMN attachment_name VARCHAR(255) DEFAULT NULL");
     }
+
+    // ── جدول المرفقات المتعددة ────────────────────────────────
+    $conn->query("CREATE TABLE IF NOT EXISTS transaction_attachments (
+        id            INT AUTO_INCREMENT PRIMARY KEY,
+        transaction_id INT NOT NULL,
+        file_path     VARCHAR(255) NOT NULL,
+        file_name     VARCHAR(255) NOT NULL,
+        display_name  VARCHAR(255) DEFAULT NULL  COMMENT 'الاسم الذي أدخله المستخدم',
+        file_size     INT DEFAULT NULL,
+        uploaded_by   INT DEFAULT NULL,
+        created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_tx (transaction_id),
+        FOREIGN KEY (transaction_id) REFERENCES transactions(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     
     // التحقق من وجود جدول الموازنة
     $result = $conn->query("SHOW TABLES LIKE 'budget_data'");
@@ -59,6 +72,7 @@ function ensureViewExists() {
         t.transaction_number,
         t.transaction_date,
         tt.name as transaction_type,
+        ts.name as transaction_sub_type,
         t.description,
         t.amount,
         IFNULL(t.attachment, '') as attachment,
@@ -105,7 +119,8 @@ function ensureViewExists() {
         t.created_at,
         t.updated_at
     FROM transactions t
-    LEFT JOIN transaction_types tt ON t.type_id   = tt.id
+    LEFT JOIN transaction_types tt ON t.type_id     = tt.id
+    LEFT JOIN transaction_types ts ON t.sub_type_id = ts.id
     LEFT JOIN employees ec         ON t.created_by = ec.id
     LEFT JOIN receiving_data r     ON t.id = r.transaction_id
     LEFT JOIN employees er         ON r.employee_id = er.id
@@ -165,6 +180,18 @@ function getAllTransactions($filters = []) {
         while ($row = $result->fetch_assoc()) {
             $transactions[] = $row;
         }
+    }
+
+    // إضافة المرفقات لكل معاملة دفعةً واحدة
+    if (!empty($transactions)) {
+        $ids = implode(',', array_column($transactions, 'id'));
+        $ar = $conn->query("SELECT * FROM transaction_attachments WHERE transaction_id IN ($ids) ORDER BY created_at ASC");
+        $attMap = [];
+        if ($ar) while ($aRow = $ar->fetch_assoc()) $attMap[$aRow['transaction_id']][] = $aRow;
+        foreach ($transactions as &$tx) {
+            $tx['attachments'] = $attMap[$tx['id']] ?? [];
+        }
+        unset($tx);
     }
     
     return $transactions;
@@ -355,17 +382,23 @@ function getEmployees($role = null) {
  */
 function getTransactionTypes() {
     $conn = db();
-    
-    $sql = "SELECT * FROM transaction_types WHERE is_active = 1 ORDER BY name";
+
+    // ضمان وجود أعمدة التصنيف الهرمي
+    $conn->query("ALTER TABLE transaction_types ADD COLUMN IF NOT EXISTS parent_id INT DEFAULT NULL");
+    $conn->query("ALTER TABLE transaction_types ADD COLUMN IF NOT EXISTS sort_order INT DEFAULT 0");
+
+    // نجلب الكل مرتبة: الرئيسية أولاً ثم الفرعية، وداخل كل مستوى حسب sort_order ثم الاسم
+    $sql = "SELECT * FROM transaction_types WHERE is_active = 1
+            ORDER BY COALESCE(parent_id, id), sort_order, name";
     $result = $conn->query($sql);
     $types = [];
-    
+
     if ($result && $result->num_rows > 0) {
         while ($row = $result->fetch_assoc()) {
             $types[] = $row;
         }
     }
-    
+
     return $types;
 }
 
@@ -388,64 +421,66 @@ function generateTransactionNumber() {
  */
 function addTransaction($data, $file = null) {
     $conn = db();
-    
-    // التأكد من وجود أعمدة المنشئ
     ensureCreatorColumns();
-    
+
+    // ضمان وجود عمود sub_type_id
+    $conn->query("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS sub_type_id INT DEFAULT NULL");
+
     $transactionNumber = generateTransactionNumber();
-    $typeId = (int)$data['type_id'];
-    $description = $conn->real_escape_string($data['description']);
-    $amount = (float)$data['amount'];
-    
-    // الحصول على معرف المستخدم الحالي من الجلسة
-    $createdBy = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : 'NULL';
-    
-    // معالجة الملف المرفق
-    $attachment = 'NULL';
-    $attachmentName = 'NULL';
-    
-    if ($file && isset($file['tmp_name']) && $file['tmp_name']) {
-        $uploadResult = uploadAttachment($file);
-        if ($uploadResult['success']) {
-            $attachment = "'" . $conn->real_escape_string($uploadResult['path']) . "'";
-            $attachmentName = "'" . $conn->real_escape_string($uploadResult['name']) . "'";
-        }
+
+    // type_id هو id التصنيف المُختار (فرعي أو رئيسي)
+    $typeId     = (int)$data['type_id'];
+
+    // نحدد: هل هو فرعي؟ نجلب parent_id
+    $subTypeId  = 'NULL';
+    $parentType = $conn->query("SELECT parent_id FROM transaction_types WHERE id=$typeId LIMIT 1");
+    if ($parentType && ($pRow = $parentType->fetch_assoc()) && $pRow['parent_id']) {
+        // الـ type_id هو فرعي → نحفظه في sub_type_id ونضع parent_id في type_id
+        $subTypeId = $typeId;
+        $typeId    = (int)$pRow['parent_id'];
     }
-    
-    // التاريخ تلقائي (الآن)
-    $sql = "INSERT INTO transactions (transaction_number, transaction_date, type_id, description, amount, attachment, attachment_name, created_by, created_at) 
-            VALUES ('$transactionNumber', NOW(), $typeId, '$description', $amount, $attachment, $attachmentName, $createdBy, NOW())";
+
+    $description = $conn->real_escape_string($data['description']);
+    $amount      = (float)$data['amount'];
+    $createdBy   = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : 'NULL';
+
+    $sql = "INSERT INTO transactions
+        (transaction_number, transaction_date, type_id, sub_type_id, description, amount, created_by, created_at)
+        VALUES ('$transactionNumber', NOW(), $typeId, $subTypeId, '$description', $amount, $createdBy, NOW())";
     
     if ($conn->query($sql)) {
         $transactionId = $conn->insert_id;
         
         // إنشاء سجلات فارغة للمراحل الأربع
         $conn->query("INSERT INTO receiving_data (transaction_id) VALUES ($transactionId)");
-        $conn->query("INSERT INTO budget_data (transaction_id) VALUES ($transactionId)");
-        $conn->query("INSERT INTO payment_data (transaction_id) VALUES ($transactionId)");
-        $conn->query("INSERT INTO invoice_data (transaction_id) VALUES ($transactionId)");
+        $conn->query("INSERT INTO budget_data    (transaction_id) VALUES ($transactionId)");
+        $conn->query("INSERT INTO payment_data   (transaction_id) VALUES ($transactionId)");
+        $conn->query("INSERT INTO invoice_data   (transaction_id) VALUES ($transactionId)");
         
-        // تسجيل وقت الإنشاء في جدول الأوقات
+        // تسجيل أوقات المراحل
         ensureStageTimesTable();
         $now = date('Y-m-d H:i:s');
+        $conn->query("INSERT INTO stage_times (transaction_id, stage, employee_id, started_at, completed_at, duration_minutes, status)
+            VALUES ($transactionId, 'creation', $createdBy, '$now', '$now', 0, 'تم الإنشاء')
+            ON DUPLICATE KEY UPDATE completed_at='$now', status='تم الإنشاء'");
+        $conn->query("INSERT INTO stage_times (transaction_id, stage, started_at, status)
+            VALUES ($transactionId, 'receiving', '$now', 'في الانتظار')
+            ON DUPLICATE KEY UPDATE started_at=COALESCE(started_at,'$now')");
         
-        // تسجيل مرحلة الإنشاء (مكتملة فوراً)
-        $conn->query("INSERT INTO stage_times (transaction_id, stage, employee_id, started_at, completed_at, duration_minutes, status) 
-                      VALUES ($transactionId, 'creation', $createdBy, '$now', '$now', 0, 'تم الإنشاء')
-                      ON DUPLICATE KEY UPDATE completed_at = '$now', status = 'تم الإنشاء'");
+        // رفع المرفقات المتعددة
+        if (!empty($_FILES['attachments']['name'][0])) {
+            $displayNames = $data['attachment_labels'] ?? [];
+            if (is_string($displayNames)) $displayNames = json_decode($displayNames, true) ?? [];
+            addTransactionAttachments($transactionId, $_FILES['attachments'], $displayNames);
+        } elseif ($file && isset($file['tmp_name']) && $file['tmp_name']) {
+            // توافق مع الاستدعاء القديم
+            addTransactionAttachments($transactionId, $file, []);
+        }
         
-        // تسجيل بدء مرحلة الاستلام (في انتظار موظف الاستلام)
-        $conn->query("INSERT INTO stage_times (transaction_id, stage, started_at, status) 
-                      VALUES ($transactionId, 'receiving', '$now', 'في الانتظار')
-                      ON DUPLICATE KEY UPDATE started_at = COALESCE(started_at, '$now')");
-        
-        // تسجيل النشاط
         $creatorName = $_SESSION['user_name'] ?? 'النظام';
         logActivity($transactionId, 'إنشاء', "تم إنشاء المعاملة بواسطة: $creatorName في $now");
-        
         return $transactionId;
     }
-    
     return false;
 }
 
@@ -467,108 +502,207 @@ function ensureCreatorColumns() {
     if (!$result || $result->num_rows == 0) {
         $conn->query("ALTER TABLE transactions ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
     }
+
+    // ضمان وجود sub_type_id للتصنيف الفرعي
+    $conn->query("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS sub_type_id INT DEFAULT NULL");
+
+    // ضمان وجود أعمدة التصنيف الهرمي في transaction_types
+    $conn->query("ALTER TABLE transaction_types ADD COLUMN IF NOT EXISTS parent_id INT DEFAULT NULL");
+    $conn->query("ALTER TABLE transaction_types ADD COLUMN IF NOT EXISTS sort_order INT DEFAULT 0");
 }
 
 /**
- * رفع ملف مرفق
+ * رفع ملف مرفق (مساعدة داخلية)
  */
 function uploadAttachment($file) {
     $uploadDir = __DIR__ . '/../uploads/';
-    
-    // إنشاء مجلد الرفع إذا لم يكن موجوداً
-    if (!is_dir($uploadDir)) {
-        mkdir($uploadDir, 0755, true);
-    }
-    
-    // التحقق من نوع الملف
-    $allowedTypes = ['application/pdf'];
+    if (!is_dir($uploadDir)) mkdir($uploadDir, 0755, true);
+
+    $allowed = ['application/pdf', 'image/jpeg', 'image/png', 'image/gif',
+                'application/msword',
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                'application/vnd.ms-excel',
+                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'];
     $fileType = mime_content_type($file['tmp_name']);
-    
-    if (!in_array($fileType, $allowedTypes)) {
-        return ['success' => false, 'message' => 'نوع الملف غير مسموح. يرجى رفع ملف PDF فقط.'];
-    }
-    
-    // التحقق من حجم الملف (10 ميجا كحد أقصى)
-    $maxSize = 10 * 1024 * 1024;
-    if ($file['size'] > $maxSize) {
-        return ['success' => false, 'message' => 'حجم الملف كبير جداً. الحد الأقصى 10 ميجابايت.'];
-    }
-    
-    // إنشاء اسم فريد للملف
-    $extension = pathinfo($file['name'], PATHINFO_EXTENSION);
-    $newFileName = uniqid('doc_') . '_' . time() . '.' . $extension;
-    $uploadPath = $uploadDir . $newFileName;
-    
-    if (move_uploaded_file($file['tmp_name'], $uploadPath)) {
-        return [
-            'success' => true,
-            'path' => 'uploads/' . $newFileName,
-            'name' => $file['name']
-        ];
-    }
-    
-    return ['success' => false, 'message' => 'فشل في رفع الملف.'];
+    if (!in_array($fileType, $allowed))
+        return ['success' => false, 'message' => 'نوع الملف غير مسموح به'];
+
+    if ($file['size'] > 10 * 1024 * 1024)
+        return ['success' => false, 'message' => 'حجم الملف يتجاوز 10 ميجابايت'];
+
+    $ext      = pathinfo($file['name'], PATHINFO_EXTENSION);
+    $newName  = uniqid('att_') . '_' . time() . '.' . $ext;
+    $fullPath = $uploadDir . $newName;
+
+    if (move_uploaded_file($file['tmp_name'], $fullPath))
+        return ['success' => true, 'path' => 'uploads/' . $newName,
+                'name' => $file['name'], 'size' => $file['size']];
+
+    return ['success' => false, 'message' => 'فشل في رفع الملف'];
 }
 
 /**
- * تحديث مرفق المعاملة
+ * إضافة مرفقات متعددة لمعاملة
+ * يكتب في transaction_attachments (جديد) وفي attachment/attachment_name (للتوافق مع السجلات القديمة)
+ */
+function addTransactionAttachments($transactionId, $files, $displayNames = []) {
+    $conn = db();
+    $transactionId = (int)$transactionId;
+    $uploadedBy = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : 'NULL';
+    $results = [];
+
+    // تطبيع مصفوفة $_FILES المتعددة
+    $fileList = [];
+    if (isset($files['name']) && is_array($files['name'])) {
+        for ($i = 0; $i < count($files['name']); $i++) {
+            if ($files['error'][$i] === UPLOAD_ERR_OK) {
+                $fileList[] = [
+                    'name'     => $files['name'][$i],
+                    'type'     => $files['type'][$i],
+                    'tmp_name' => $files['tmp_name'][$i],
+                    'error'    => $files['error'][$i],
+                    'size'     => $files['size'][$i],
+                ];
+            }
+        }
+    } elseif (isset($files['tmp_name']) && $files['error'] === UPLOAD_ERR_OK) {
+        $fileList[] = $files; // ملف واحد
+    }
+
+    foreach ($fileList as $idx => $file) {
+        $res = uploadAttachment($file);
+        if ($res['success']) {
+            $path    = $conn->real_escape_string($res['path']);
+            $name    = $conn->real_escape_string($res['name']);
+            $size    = (int)$res['size'];
+            $display = $conn->real_escape_string($displayNames[$idx] ?? $res['name']);
+
+            // ── جدول المرفقات الجديد ──────────────────────────────
+            $conn->query("INSERT INTO transaction_attachments
+                (transaction_id, file_path, file_name, display_name, file_size, uploaded_by)
+                VALUES ($transactionId, '$path', '$name', '$display', $size, $uploadedBy)");
+
+            // ── الأعمدة القديمة في transactions (للتوافق) ──────────
+            // يُحدَّث فقط إذا كانت فارغة (أو للمرفق الأول دائماً)
+            if ($idx === 0) {
+                $conn->query("UPDATE transactions
+                    SET attachment      = IF(attachment IS NULL OR attachment = '', '$path', attachment),
+                        attachment_name = IF(attachment_name IS NULL OR attachment_name = '', '$display', attachment_name)
+                    WHERE id = $transactionId");
+            }
+        }
+        $results[] = $res;
+    }
+    return $results;
+}
+
+/**
+ * جلب مرفقات معاملة
+ */
+function getTransactionAttachments($transactionId) {
+    $conn = db();
+    $transactionId = (int)$transactionId;
+    $r = $conn->query("SELECT ta.*, e.name AS uploader_name
+        FROM transaction_attachments ta
+        LEFT JOIN employees e ON ta.uploaded_by = e.id
+        WHERE ta.transaction_id = $transactionId
+        ORDER BY ta.created_at ASC");
+    $rows = [];
+    if ($r) while ($row = $r->fetch_assoc()) $rows[] = $row;
+    // دمج المرفق القديم (للتوافق)
+    $old = $conn->query("SELECT attachment, attachment_name FROM transactions WHERE id=$transactionId LIMIT 1");
+    if ($old && $ow = $old->fetch_assoc()) {
+        if ($ow['attachment'] && !count($rows)) {
+            $rows[] = [
+                'id' => 'legacy',
+                'file_path'    => $ow['attachment'],
+                'file_name'    => $ow['attachment_name'] ?: 'مستند.pdf',
+                'display_name' => $ow['attachment_name'] ?: 'مستند.pdf',
+                'file_size'    => null,
+                'created_at'   => null,
+            ];
+        }
+    }
+    return $rows;
+}
+
+/**
+ * حذف مرفق واحد من معاملة
+ */
+function deleteTransactionAttachment($attachmentId, $transactionId) {
+    $conn = db();
+    $attachmentId  = (int)$attachmentId;
+    $transactionId = (int)$transactionId;
+
+    $r = $conn->query("SELECT file_path FROM transaction_attachments
+        WHERE id=$attachmentId AND transaction_id=$transactionId LIMIT 1");
+    if (!$r || !($row = $r->fetch_assoc())) return false;
+
+    // حذف الملف الفعلي
+    $fp = __DIR__ . '/../' . $row['file_path'];
+    if (file_exists($fp)) unlink($fp);
+
+    $conn->query("DELETE FROM transaction_attachments WHERE id=$attachmentId");
+
+    // تحديث الأعمدة القديمة: اجعلها تشير للمرفق الأول المتبقي أو null
+    $remaining = $conn->query("SELECT file_path, display_name FROM transaction_attachments
+        WHERE transaction_id=$transactionId ORDER BY created_at ASC LIMIT 1");
+    if ($remaining && $next = $remaining->fetch_assoc()) {
+        $np = $conn->real_escape_string($next['file_path']);
+        $nn = $conn->real_escape_string($next['display_name']);
+        $conn->query("UPDATE transactions SET attachment='$np', attachment_name='$nn' WHERE id=$transactionId");
+    } else {
+        $conn->query("UPDATE transactions SET attachment=NULL, attachment_name=NULL WHERE id=$transactionId");
+    }
+
+    logActivity($transactionId, 'حذف مرفق', 'تم حذف الملف: ' . $row['file_path']);
+    return true;
+}
+
+/**
+ * تحديث مرفق المعاملة (قديم — للتوافق مع السجلات القديمة)
+ * @deprecated استخدم addTransactionAttachments بدلاً منها
  */
 function updateAttachment($transactionId, $file) {
     $conn = db();
     $transactionId = (int)$transactionId;
-    
-    // حذف الملف القديم إن وجد
     $result = $conn->query("SELECT attachment FROM transactions WHERE id = $transactionId");
     if ($row = $result->fetch_assoc()) {
         if ($row['attachment']) {
             $oldFile = __DIR__ . '/../' . $row['attachment'];
-            if (file_exists($oldFile)) {
-                unlink($oldFile);
-            }
+            if (file_exists($oldFile)) unlink($oldFile);
         }
     }
-    
-    // رفع الملف الجديد
     $uploadResult = uploadAttachment($file);
     if ($uploadResult['success']) {
         $path = $conn->real_escape_string($uploadResult['path']);
         $name = $conn->real_escape_string($uploadResult['name']);
-        
-        $sql = "UPDATE transactions SET attachment = '$path', attachment_name = '$name' WHERE id = $transactionId";
-        if ($conn->query($sql)) {
+        if ($conn->query("UPDATE transactions SET attachment='$path', attachment_name='$name' WHERE id=$transactionId")) {
             logActivity($transactionId, 'تحديث المرفق', 'تم تحديث الملف المرفق');
             return ['success' => true];
         }
     }
-    
     return $uploadResult;
 }
 
 /**
- * حذف مرفق المعاملة
+ * حذف مرفق المعاملة (قديم — للتوافق مع السجلات القديمة)
+ * @deprecated
  */
 function deleteAttachment($transactionId) {
     $conn = db();
     $transactionId = (int)$transactionId;
-    
-    // الحصول على مسار الملف
     $result = $conn->query("SELECT attachment FROM transactions WHERE id = $transactionId");
     if ($row = $result->fetch_assoc()) {
         if ($row['attachment']) {
-            $filePath = __DIR__ . '/../' . $row['attachment'];
-            if (file_exists($filePath)) {
-                unlink($filePath);
-            }
+            $fp = __DIR__ . '/../' . $row['attachment'];
+            if (file_exists($fp)) unlink($fp);
         }
     }
-    
-    // تحديث قاعدة البيانات
-    $sql = "UPDATE transactions SET attachment = NULL, attachment_name = NULL WHERE id = $transactionId";
-    if ($conn->query($sql)) {
+    if ($conn->query("UPDATE transactions SET attachment=NULL, attachment_name=NULL WHERE id=$transactionId")) {
         logActivity($transactionId, 'حذف المرفق', 'تم حذف الملف المرفق');
         return true;
     }
-    
     return false;
 }
 
@@ -640,8 +774,21 @@ function updateBudgetData($transactionId, $data) {
     $oldStatus = getLastStageStatus($transactionId, 'budget');
     
     $status = $conn->real_escape_string($data['status'] ?? 'معلق');
-    $budgetCode = $conn->real_escape_string($data['budget_code'] ?? '');
-    $notes = $conn->real_escape_string($data['notes'] ?? '');
+    $notes  = $conn->real_escape_string($data['notes'] ?? '');
+
+    // ── رمز الموازنة = رقم الحجز المرتبط بهذه المعاملة ────────
+    $budgetCode = '';
+    $rRes = $conn->query("SELECT reservation_number FROM budget_reservations
+                          WHERE transaction_id = $transactionId
+                          ORDER BY id DESC LIMIT 1");
+    if ($rRes && ($rRow = $rRes->fetch_assoc())) {
+        $budgetCode = $conn->real_escape_string($rRow['reservation_number']);
+    }
+    // fallback: ما أُرسل من الواجهة إذا لم يوجد حجز مرتبط
+    if (!$budgetCode) {
+        $sent = rtrim($data['budget_code'] ?? '', '/');
+        $budgetCode = $conn->real_escape_string($sent);
+    }
     
     $sql = "UPDATE budget_data SET 
             employee_id = $employeeId,

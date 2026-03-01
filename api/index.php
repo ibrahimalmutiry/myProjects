@@ -128,21 +128,35 @@ try {
             }
             break;
 
-        // ─── رفع/تحديث مرفق ────────────────────────────────────
+        // ─── رفع مرفقات متعددة ─────────────────────────────────
         case 'upload_attachment':
             if ($method !== 'POST') {
                 jsonResponse(['success' => false, 'message' => 'طريقة الطلب غير صحيحة'], 405);
             }
             $transactionId = (int)($_POST['transaction_id'] ?? 0);
-            $file          = $_FILES['attachment'] ?? null;
             if ($transactionId <= 0) {
                 jsonResponse(['success' => false, 'message' => 'معرف المعاملة غير صالح'], 400);
             }
-            if (!$file || !$file['tmp_name']) {
+            // دعم المرفقات المتعددة attachments[] أو الملف المفرد attachment
+            $hasMultiple = !empty($_FILES['attachments']['name'][0]);
+            $hasSingle   = !empty($_FILES['attachment']['tmp_name']);
+            if (!$hasMultiple && !$hasSingle) {
                 jsonResponse(['success' => false, 'message' => 'لم يتم اختيار ملف'], 400);
             }
-            $result = updateAttachment($transactionId, $file);
-            jsonResponse($result);
+            $displayNames = $_POST['attachment_labels'] ?? [];
+            if ($hasMultiple) {
+                $results = addTransactionAttachments($transactionId, $_FILES['attachments'], $displayNames);
+                $failed  = array_filter($results, fn($r) => !$r['success']);
+                jsonResponse([
+                    'success' => count($failed) === 0,
+                    'message' => count($failed) === 0 ? 'تم رفع المرفقات بنجاح' : 'فشل رفع ' . count($failed) . ' ملف/ملفات',
+                    'uploaded' => count($results) - count($failed),
+                ]);
+            } else {
+                $results = addTransactionAttachments($transactionId, $_FILES['attachment'], $displayNames);
+                $ok      = !empty($results[0]['success']);
+                jsonResponse(['success' => $ok, 'message' => $ok ? 'تم رفع الملف بنجاح' : ($results[0]['message'] ?? 'فشل الرفع')]);
+            }
             break;
 
         // ─── حذف مرفق ──────────────────────────────────────────
@@ -151,14 +165,24 @@ try {
                 jsonResponse(['success' => false, 'message' => 'طريقة الطلب غير صحيحة'], 405);
             }
             $input         = json_decode(file_get_contents('php://input'), true);
+            $attachmentId  = (int)($input['attachment_id']  ?? 0);
             $transactionId = (int)($input['transaction_id'] ?? 0);
-            if ($transactionId <= 0) {
-                jsonResponse(['success' => false, 'message' => 'معرف المعاملة غير صالح'], 400);
-            }
-            if (deleteAttachment($transactionId)) {
-                jsonResponse(['success' => true, 'message' => 'تم حذف المرفق']);
+            // حذف مرفق محدد بالـ ID (النظام الجديد)
+            if ($attachmentId > 0 && $transactionId > 0) {
+                if (deleteTransactionAttachment($attachmentId, $transactionId)) {
+                    jsonResponse(['success' => true, 'message' => 'تم حذف المرفق']);
+                } else {
+                    jsonResponse(['success' => false, 'message' => 'فشل في حذف المرفق'], 500);
+                }
+            // حذف المرفق القديم بالـ transaction_id (للتوافق مع السجلات القديمة)
+            } elseif ($transactionId > 0) {
+                if (deleteAttachment($transactionId)) {
+                    jsonResponse(['success' => true, 'message' => 'تم حذف المرفق']);
+                } else {
+                    jsonResponse(['success' => false, 'message' => 'فشل في حذف المرفق'], 500);
+                }
             } else {
-                jsonResponse(['success' => false, 'message' => 'فشل في حذف المرفق'], 500);
+                jsonResponse(['success' => false, 'message' => 'معرف غير صالح'], 400);
             }
             break;
 

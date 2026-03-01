@@ -99,7 +99,8 @@ function renderTransactions() {
                             <th class="th-orange">الدفع</th>
                             <th class="th-purple">الفوترة</th>
                             <th>التنبيه</th>
-                            <th></th>
+                            <th>المرفقات</th>
+                            <th>تعديل</th>
                         </tr>
                     </thead>
                     <tbody id="transactionsBody">
@@ -129,7 +130,9 @@ function renderTransactionRows(transactions) {
         html += '<tr class="transaction-row ' + (isExpanded ? 'expanded' : '') + '" data-id="' + tx.id + '" onclick="toggleRow(' + tx.id + ')">';
         html += '<td><span class="tx-number">' + tx.transaction_number + '</span></td>';
         html += '<td>' + tx.transaction_date + '</td>';
-        html += '<td><span class="tx-type">' + (tx.transaction_type || '—') + '</span></td>';
+        html += '<td><span class="tx-type">' + (tx.transaction_type || '—') + '</span>'
+            + (tx.transaction_sub_type ? '<br><span class="tx-sub-type-tag">' + tx.transaction_sub_type + '</span>' : '')
+            + '</td>';
         html += '<td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">' + tx.description + '</td>';
         html += '<td><span class="tx-amount">' + formatNumber(tx.amount) + '<small>ر.س</small></span></td>';
         html += '<td>' + getStatusBadge(tx.receive_status) + '</td>';
@@ -137,20 +140,29 @@ function renderTransactionRows(transactions) {
         html += '<td>' + getStatusBadge(tx.payment_status) + '</td>';
         html += '<td>' + getStatusBadge(tx.invoice_status) + '</td>';
         html += '<td>' + getAlertBadge(tx.alert_type) + '</td>';
-        html += '<td>';
-        html += '<div style="display: flex; align-items: center; gap: 0.5rem;">';
 
-        // زر استعراض PDF
-        if (tx.attachment) {
-            html += '<button class="btn-icon btn-pdf" onclick="event.stopPropagation(); openPDF(\'' + tx.attachment + '\')" title="استعراض PDF">';
-            html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><line x1="10" y1="9" x2="8" y2="9"></line></svg>';
+        // ── عمود المرفقات ──
+        var atts = tx.attachments || (tx.attachment ? [{ file_path: tx.attachment, display_name: tx.attachment_name || 'مستند' }] : []);
+        html += '<td style="text-align:center">';
+        if (atts.length > 0) {
+            html += '<button class="btn-icon btn-pdf" onclick="event.stopPropagation(); openPDF(\'' + atts[0].file_path + '\')" title="' + atts.length + ' مرفق" style="position:relative">';
+            html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>';
+            if (atts.length > 1) html += '<span style="position:absolute;top:-4px;left:-4px;background:var(--accent-blue);color:#fff;font-size:.55rem;font-weight:700;width:14px;height:14px;border-radius:50%;display:flex;align-items:center;justify-content:center">' + atts.length + '</span>';
             html += '</button>';
+        } else {
+            html += '<span class="btn-icon" style="cursor:default;opacity:.35;pointer-events:none">';
+            html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>';
+            html += '</span>';
         }
+        html += '</td>';
 
+        // ── عمود التعديل والتوسيع ──
+        html += '<td style="text-align:center">';
+        html += '<div style="display:flex;align-items:center;justify-content:center;gap:.4rem">';
         html += '<button class="btn-icon" onclick="event.stopPropagation(); editTransaction(' + tx.id + ')" title="تعديل">';
         html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>';
         html += '</button>';
-        html += '<svg class="expand-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--text-muted); transition: transform 0.3s; ' + (isExpanded ? 'transform: rotate(180deg);' : '') + '">';
+        html += '<svg class="expand-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--text-muted);transition:transform 0.3s;' + (isExpanded ? 'transform:rotate(180deg);' : '') + '">';
         html += '<polyline points="6 9 12 15 18 9"></polyline>';
         html += '</svg>';
         html += '</div>';
@@ -167,7 +179,7 @@ function renderTransactionRows(transactions) {
                 `<div class="xrow"><span class="xrow-lbl">${label}</span><span class="xrow-val" ${style ? `style="${style}"` : ''}>${value || '—'}</span></div>`;
 
             // ── معلومات الإنشاء ─────────────────────────────────────
-            html += `<tr class="expanded-row"><td colspan="11" style="padding:0">`;
+            html += `<tr class="expanded-row"><td colspan="12" style="padding:0">`;
             html += `<div class="xmeta-bar">
                 <span class="xmeta-item">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent-blue)" stroke-width="2">
@@ -304,50 +316,8 @@ function renderTransactionRows(transactions) {
             </div>`;
 
             // ── المرفقات ─────────────────────────────────────────────
-            html += `<div class="attachment-section">
-                <div class="attachment-header">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
-                    </svg>
-                    المرفقات
-                </div>`;
-            if (tx.attachment) {
-                html += `<div class="attachment-file">
-                    <div class="attachment-info">
-                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                            <polyline points="14 2 14 8 20 8"/>
-                        </svg>
-                        <span>${tx.attachment_name || 'مستند.pdf'}</span>
-                    </div>
-                    <div class="attachment-actions">
-                        <button class="btn btn-sm btn-primary" onclick="event.stopPropagation();openPDF('${tx.attachment}')">
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                                <circle cx="12" cy="12" r="3"/>
-                            </svg> استعراض
-                        </button>
-                        <button class="btn btn-sm btn-danger" onclick="event.stopPropagation();deleteAttachment(${tx.id})">
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <polyline points="3 6 5 6 21 6"/>
-                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-                            </svg> حذف
-                        </button>
-                    </div>
-                </div>`;
-            } else {
-                html += `<div class="no-attachment">
-                    <p>لا يوجد مرفق</p>
-                    <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation();uploadAttachment(${tx.id})">
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                            <polyline points="17 8 12 3 7 8"/>
-                            <line x1="12" y1="3" x2="12" y2="15"/>
-                        </svg> رفع ملف PDF
-                    </button>
-                </div>`;
-            }
-            html += `</div>`; // end attachment-section
+            var txAtts = tx.attachments || (tx.attachment ? [{ id: 'legacy', file_path: tx.attachment, display_name: tx.attachment_name || 'مستند', file_name: tx.attachment_name || 'مستند.pdf', file_size: null, created_at: null }] : []);
+            html += renderAttachmentsSection(tx.id, txAtts);
             html += `</td></tr>`;
         }
     }
@@ -395,21 +365,18 @@ function filterTransactions() {
 // فتح مودال إضافة معاملة
 async function openAddModal() {
     try {
-        const [typesRes, employeesRes] = await Promise.all([
-            fetch('api/?action=types'),
-            fetch('api/?action=employees')
+        const [typesRes] = await Promise.all([
+            fetch('api/settings.php?action=get_types'),
         ]);
 
-        const types = await typesRes.json();
+        const typesData = await typesRes.json();
+        const allTypes = typesData.success ? typesData.data : [];
 
-        let typeOptions = '';
-        if (types.success) {
-            types.data.forEach(t => {
-                typeOptions += '<option value="' + t.id + '">' + t.name + '</option>';
-            });
-        }
+        // فصل الرئيسية عن الفرعية
+        const parents = allTypes.filter(t => !t.parent_id || t.parent_id == 0);
+        // كل type_id يُرسل هو id الفرعي (أو الرئيسي لو لا يوجد فرعي)
+        window._txAllTypes = allTypes;
 
-        // التاريخ والوقت الحالي
         const now = new Date();
         const dateStr = now.toLocaleDateString('ar-SA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
         const timeStr = now.toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
@@ -417,25 +384,40 @@ async function openAddModal() {
         DOM.modalTitle.textContent = 'إضافة معاملة جديدة';
         DOM.modalBody.innerHTML = `
             <form id="addForm" onsubmit="submitAddForm(event)" enctype="multipart/form-data">
-                <div class="auto-date-info" style="background: var(--bg-surface); padding: 1rem; border-radius: 10px; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 1rem;">
-                    <div style="width: 45px; height: 45px; background: var(--btn-primary-bg); border-radius: 10px; display: flex; align-items: center; justify-content: center;">
+                <input type="hidden" name="type_id" id="tx_type_id_hidden" value="">
+
+                <div class="auto-date-info" style="background:var(--bg-surface);padding:1rem;border-radius:10px;margin-bottom:1.5rem;display:flex;align-items:center;gap:1rem;">
+                    <div style="width:45px;height:45px;background:var(--btn-primary-bg);border-radius:10px;display:flex;align-items:center;justify-content:center;">
                         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--btn-primary-text)" stroke-width="2">
-                            <circle cx="12" cy="12" r="10"></circle>
-                            <polyline points="12 6 12 12 16 14"></polyline>
+                            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
                         </svg>
                     </div>
                     <div>
-                        <div style="font-size: 0.8rem; color: var(--text-muted);">تاريخ ووقت الإنشاء</div>
-                        <div style="font-weight: 600; color: var(--text-primary);">${dateStr} - ${timeStr}</div>
+                        <div style="font-size:.8rem;color:var(--text-muted);">تاريخ ووقت الإنشاء</div>
+                        <div style="font-weight:600;color:var(--text-primary);">${dateStr} - ${timeStr}</div>
                     </div>
                 </div>
+
                 <div class="form-group">
                     <label class="form-label">نوع المعاملة</label>
-                    <select class="form-select" name="type_id" required>
-                        <option value="">اختر النوع</option>
-                        ${typeOptions}
+                    <select class="form-select" id="tx_parent_select" onchange="onTxParentChange(this.value)" required>
+                        <option value="">اختر التصنيف الرئيسي</option>
+                        ${parents.map(p => `<option value="${p.id}">${getTypeIcon(p.name)} ${p.name}</option>`).join('')}
                     </select>
                 </div>
+
+                <div id="tx_sub_wrap" style="display:none;" class="form-group">
+                    <div class="tx-sub-wrap">
+                        <div class="tx-sub-wrap-label">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                <polyline points="9 18 15 12 9 6"/>
+                            </svg>
+                            اختر التصنيف الفرعي
+                        </div>
+                        <div id="tx_sub_btns" class="tx-sub-btns"></div>
+                    </div>
+                </div>
+
                 <div class="form-group">
                     <label class="form-label">الوصف</label>
                     <textarea class="form-textarea" name="description" placeholder="وصف المعاملة..." required></textarea>
@@ -445,22 +427,10 @@ async function openAddModal() {
                     <input type="number" class="form-input" name="amount" step="0.01" min="0" placeholder="0.00" required>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">إرفاق ملف PDF (اختياري)</label>
-                    <div class="file-upload-wrapper">
-                        <input type="file" class="file-input" name="attachment" id="attachmentInput" accept=".pdf,application/pdf" onchange="handleFileSelect(this)">
-                        <label for="attachmentInput" class="file-upload-label">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                                <polyline points="14 2 14 8 20 8"></polyline>
-                                <line x1="12" y1="18" x2="12" y2="12"></line>
-                                <line x1="9" y1="15" x2="15" y2="15"></line>
-                            </svg>
-                            <span id="fileName">اختر ملف PDF أو اسحبه هنا</span>
-                        </label>
-                    </div>
-                    <p class="file-hint">الحد الأقصى: 10 ميجابايت</p>
+                    <label class="form-label">المرفقات (اختياري)</label>
+                    ${buildAttachmentUploader()}
                 </div>
-                <div class="modal-footer" style="padding: 0; border: none; margin-top: 1.5rem;">
+                <div class="modal-footer" style="padding:0;border:none;margin-top:1.5rem;">
                     <button type="button" class="btn btn-secondary" onclick="closeModal()">إلغاء</button>
                     <button type="submit" class="btn btn-primary">إضافة المعاملة</button>
                 </div>
@@ -473,61 +443,265 @@ async function openAddModal() {
     }
 }
 
-// معالجة اختيار الملف
-function handleFileSelect(input) {
-    const fileName = document.getElementById('fileName');
-    if (input.files && input.files[0]) {
-        const file = input.files[0];
-        if (file.type !== 'application/pdf') {
-            showToast('يرجى اختيار ملف PDF فقط', 'error');
-            input.value = '';
-            fileName.textContent = 'اختر ملف PDF أو اسحبه هنا';
-            return;
-        }
-        if (file.size > 10 * 1024 * 1024) {
-            showToast('حجم الملف كبير جداً. الحد الأقصى 10 ميجابايت', 'error');
-            input.value = '';
-            fileName.textContent = 'اختر ملف PDF أو اسحبه هنا';
-            return;
-        }
-        fileName.textContent = file.name;
-    } else {
-        fileName.textContent = 'اختر ملف PDF أو اسحبه هنا';
+function onTxParentChange(parentId) {
+    const allTypes = window._txAllTypes || [];
+    const subs = allTypes.filter(t => t.parent_id == parentId);
+    const wrap = document.getElementById('tx_sub_wrap');
+    const btnsDiv = document.getElementById('tx_sub_btns');
+    const hidden = document.getElementById('tx_type_id_hidden');
+
+    if (subs.length === 0) {
+        // لا يوجد فرعي — الرئيسي هو النوع النهائي
+        wrap.style.display = 'none';
+        hidden.value = parentId;
+        return;
     }
+
+    // يوجد فرعي — أظهر الأزرار وأفرغ الاختيار
+    hidden.value = '';
+    wrap.style.display = 'block';
+    btnsDiv.innerHTML = subs.map(s => `
+        <button type="button" class="tx-sub-btn" data-id="${s.id}"
+            onclick="selectTxSubType(${s.id}, this)">
+            ${s.name}
+        </button>`).join('');
 }
+
+function selectTxSubType(subId, btn) {
+    document.getElementById('tx_type_id_hidden').value = subId;
+    document.querySelectorAll('.tx-sub-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+}
+
+
+
+
+
+
+// ══════════════════════════════════════════════════════════════
+//  نظام المرفقات المتعددة
+// ══════════════════════════════════════════════════════════════
+
+// حالة المرفقات في نموذج الإضافة/التعديل
+var _pendingAttachments = [];  // [{file, displayName}]
+
+/** بناء واجهة رفع المرفقات المتعددة */
+function buildAttachmentUploader() {
+    return `
+    <div class="att-uploader" id="attUploader">
+        <div class="att-drop-zone" id="attDropZone" onclick="document.getElementById('attFileInput').click()"
+             ondragover="event.preventDefault();this.classList.add('dragging')"
+             ondragleave="this.classList.remove('dragging')"
+             ondrop="event.preventDefault();this.classList.remove('dragging');handleAttachmentDrop(event)">
+            <div class="att-drop-icon">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+                </svg>
+            </div>
+            <p class="att-drop-text">اسحب الملفات هنا أو <span class="att-drop-link">اضغط للاختيار</span></p>
+            <p class="att-drop-hint">PDF · صورة · Word · Excel — بحد أقصى 10 ميجابايت للملف</p>
+        </div>
+        <input type="file" id="attFileInput" multiple accept=".pdf,.jpg,.jpeg,.png,.gif,.doc,.docx,.xls,.xlsx"
+               style="display:none" onchange="handleAttachmentFiles(this.files)">
+        <div class="att-list" id="attList"></div>
+    </div>`;
+}
+
+function getFileIcon(name) {
+    var ext = (name || '').split('.').pop().toLowerCase();
+    var icons = {
+        pdf: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>',
+        doc: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>',
+        xls: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>',
+        img: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>',
+    };
+    if (['jpg', 'jpeg', 'png', 'gif'].includes(ext)) return icons.img;
+    if (['doc', 'docx'].includes(ext)) return icons.doc;
+    if (['xls', 'xlsx'].includes(ext)) return icons.xls;
+    return icons.pdf;
+}
+
+function fmtFileSize(bytes) {
+    if (!bytes) return '';
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(0) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+function handleAttachmentDrop(e) {
+    handleAttachmentFiles(e.dataTransfer.files);
+}
+
+function handleAttachmentFiles(fileList) {
+    Array.from(fileList).forEach(function (file) {
+        if (file.size > 10 * 1024 * 1024) {
+            showToast('الملف "' + file.name + '" يتجاوز 10 ميجابايت', 'error');
+            return;
+        }
+        _pendingAttachments.push({ file: file, displayName: '' });
+    });
+    renderPendingAttachments();
+}
+
+function renderPendingAttachments() {
+    var list = document.getElementById('attList');
+    if (!list) return;
+    if (!_pendingAttachments.length) { list.innerHTML = ''; return; }
+
+    list.innerHTML = _pendingAttachments.map(function (att, i) {
+        return `<div class="att-item" id="attItem${i}">
+            <div class="att-item-icon">${getFileIcon(att.file.name)}</div>
+            <div class="att-item-body">
+                <div class="att-item-filename">${att.file.name}</div>
+                <div class="att-item-size">${fmtFileSize(att.file.size)}</div>
+                <input class="att-item-label" type="text" placeholder="اسم المرفق (اختياري)"
+                       value="${att.displayName}"
+                       oninput="_pendingAttachments[${i}].displayName = this.value">
+            </div>
+            <button class="att-item-remove" onclick="_pendingAttachments.splice(${i},1);renderPendingAttachments()" title="إزالة">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+            </button>
+        </div>`;
+    }).join('');
+}
+
+/** تجميع FormData مع المرفقات */
+function appendAttachmentsToFormData(fd) {
+    _pendingAttachments.forEach(function (att, i) {
+        fd.append('attachments[]', att.file);
+        fd.append('attachment_labels[]', att.displayName || att.file.name);
+    });
+}
+
+/** عرض المرفقات في التفاصيل الموسعة */
+function renderAttachmentsSection(txId, atts) {
+    var canEdit = canDo('transaction.add') || canDo('transaction.edit');
+    var items = atts.map(function (a) {
+        var ext = (a.file_name || a.display_name || '').split('.').pop().toLowerCase();
+        var isImg = ['jpg', 'jpeg', 'png', 'gif'].includes(ext);
+        return `<div class="att-card">
+            <div class="att-card-icon">${getFileIcon(a.file_name || a.display_name)}</div>
+            <div class="att-card-body">
+                <div class="att-card-name">${a.display_name || a.file_name || 'مستند'}</div>
+                ${a.file_size ? '<div class="att-card-meta">' + fmtFileSize(a.file_size) + '</div>' : ''}
+                ${a.created_at ? '<div class="att-card-meta">' + (a.created_at || '').split(' ')[0] + '</div>' : ''}
+            </div>
+            <div class="att-card-actions">
+                <button class="att-card-btn view" onclick="event.stopPropagation();openPDF('${a.file_path}')" title="استعراض">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+                    </svg> استعراض
+                </button>
+                ${canEdit && a.id && a.id !== 'legacy' ? `<button class="att-card-btn del" onclick="event.stopPropagation();deleteOneAttachment(${a.id},${txId})" title="حذف">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                    </svg> حذف
+                </button>` : ''}
+            </div>
+        </div>`;
+    }).join('');
+
+    return `<div class="attachment-section">
+        <div class="attachment-header">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+            </svg>
+            المرفقات ${atts.length ? '<span class="att-count-badge">' + atts.length + '</span>' : ''}
+            ${canEdit ? `<button class="att-add-inline" onclick="event.stopPropagation();openUploadModal(${txId})" title="إضافة مرفق">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                </svg> إضافة
+            </button>` : ''}
+        </div>
+        ${atts.length ? '<div class="att-cards-grid">' + items + '</div>'
+            : '<div class="no-attachment"><p>لا توجد مرفقات</p></div>'}
+    </div>`;
+}
+
+/** مودال رفع مرفق لمعاملة موجودة */
+function openUploadModal(txId) {
+    _pendingAttachments = [];
+    DOM.modalTitle.textContent = 'إضافة مرفقات';
+    DOM.modalBody.innerHTML = `
+        <div style="margin-bottom:1.2rem">
+            <p style="font-size:.85rem;color:var(--text-muted);margin-bottom:1rem">أضف مرفقات للمعاملة. يمكنك إضافة عدة ملفات دفعة واحدة وتسمية كل منها.</p>
+            ${buildAttachmentUploader()}
+        </div>
+        <div class="modal-footer" style="padding:0;border:none;margin-top:1rem">
+            <button type="button" class="btn btn-secondary" onclick="closeModal()">إلغاء</button>
+            <button type="button" class="btn btn-primary" onclick="saveUploadedAttachments(${txId})">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+                </svg> رفع الملفات
+            </button>
+        </div>`;
+    openModal();
+}
+
+async function saveUploadedAttachments(txId) {
+    if (!_pendingAttachments.length) { showToast('اختر ملفاً على الأقل', 'error'); return; }
+    var fd = new FormData();
+    fd.append('transaction_id', txId);
+    appendAttachmentsToFormData(fd);
+    try {
+        var res = await fetch('api/?action=upload_attachment', { method: 'POST', body: fd });
+        var data = await res.json();
+        if (data.success) {
+            showToast('تم رفع المرفقات بنجاح', 'success');
+            closeModal();
+            loadTransactions();
+        } else { showToast(data.message || 'خطأ في الرفع', 'error'); }
+    } catch { showToast('خطأ في الاتصال', 'error'); }
+}
+
+async function deleteOneAttachment(attId, txId) {
+    if (!confirm('هل أنت متأكد من حذف هذا المرفق؟')) return;
+    try {
+        var res = await fetch('api/?action=delete_attachment', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ attachment_id: attId, transaction_id: txId })
+        });
+        var data = await res.json();
+        if (data.success) { showToast('تم حذف المرفق', 'success'); loadTransactions(); }
+        else showToast(data.message || 'خطأ', 'error');
+    } catch { showToast('خطأ في الاتصال', 'error'); }
+}
+
+// --- توافق مع الكود القديم ---
+function uploadAttachment(txId) { openUploadModal(txId); }
+function deleteAttachment(txId) { deleteOneAttachment('legacy', txId); }
 
 // إرسال نموذج الإضافة
 async function submitAddForm(e) {
     e.preventDefault();
-
     const form = e.target;
+    const typeId = document.getElementById('tx_type_id_hidden')?.value;
+    if (!typeId) {
+        showToast('⚠️ اختر نوع المعاملة', 'warning');
+        return;
+    }
     const formData = new FormData(form);
-
+    formData.delete('attachment');
+    appendAttachmentsToFormData(formData);
     try {
-        const res = await fetch('api/?action=add', {
-            method: 'POST',
-            body: formData
-        });
-
+        const res = await fetch('api/?action=add', { method: 'POST', body: formData });
         const result = await res.json();
-
         if (result.success) {
+            _pendingAttachments = [];
             showToast('تم إضافة المعاملة بنجاح', 'success');
             closeModal();
             loadTransactions();
-        } else {
-            showToast(result.message || 'خطأ في الإضافة', 'error');
-        }
-    } catch (error) {
-        showToast('خطأ في الاتصال', 'error');
-    }
+        } else { showToast(result.message || 'خطأ في الإضافة', 'error'); }
+    } catch { showToast('خطأ في الاتصال', 'error'); }
 }
 
-// فتح ملف PDF
+// فتح ملف
 function openPDF(path) {
-    if (path) {
-        window.open(path, '_blank');
-    }
+    if (path) window.open(path, '_blank');
 }
 
 // تحميل وعرض أحداث المعاملة
@@ -656,76 +830,7 @@ function formatEventTime(datetime) {
     return date.toLocaleDateString('ar-SA', options);
 }
 
-// رفع مرفق لمعاملة موجودة
-async function uploadAttachment(transactionId) {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.pdf,application/pdf';
-
-    input.onchange = async function () {
-        if (input.files && input.files[0]) {
-            const file = input.files[0];
-
-            if (file.type !== 'application/pdf') {
-                showToast('يرجى اختيار ملف PDF فقط', 'error');
-                return;
-            }
-
-            if (file.size > 10 * 1024 * 1024) {
-                showToast('حجم الملف كبير جداً', 'error');
-                return;
-            }
-
-            const formData = new FormData();
-            formData.append('transaction_id', transactionId);
-            formData.append('attachment', file);
-
-            try {
-                const res = await fetch('api/?action=upload_attachment', {
-                    method: 'POST',
-                    body: formData
-                });
-
-                const result = await res.json();
-
-                if (result.success) {
-                    showToast('تم رفع الملف بنجاح', 'success');
-                    loadTransactions();
-                } else {
-                    showToast(result.message || 'خطأ في رفع الملف', 'error');
-                }
-            } catch (error) {
-                showToast('خطأ في الاتصال', 'error');
-            }
-        }
-    };
-
-    input.click();
-}
-
-// حذف مرفق
-async function deleteAttachment(transactionId) {
-    if (!confirm('هل أنت متأكد من حذف المرفق؟')) return;
-
-    try {
-        const res = await fetch('api/?action=delete_attachment', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ transaction_id: transactionId })
-        });
-
-        const result = await res.json();
-
-        if (result.success) {
-            showToast('تم حذف المرفق', 'success');
-            loadTransactions();
-        } else {
-            showToast(result.message || 'خطأ في الحذف', 'error');
-        }
-    } catch (error) {
-        showToast('خطأ في الاتصال', 'error');
-    }
-}
+// openUploadModal مُعرَّفة في قسم نظام المرفقات المتعددة أعلاه
 
 // تعديل معاملة — تصميم محترف
 async function editTransaction(id) {
@@ -838,7 +943,17 @@ async function editTransaction(id) {
                 <div class="edit-field-row">
                   <div class="edit-field-group">
                     <label class="edit-field-label">رمز الموازنة</label>
-                    <input class="edit-field-input" name="budget_code" value="${esc(tx.budget_code)}" placeholder="BUD-XXXX">
+                    ${tx.budget_code
+                    ? `<div style="min-height:38px;padding:.45rem .75rem;background:rgba(30,64,175,.06);
+                              border:1.5px solid rgba(30,64,175,.25);border-radius:8px;
+                              font-family:monospace;font-weight:700;color:#1e40af;font-size:.88rem;
+                              display:flex;align-items:center;letter-spacing:.5px">
+                              ${esc(tx.budget_code)}
+                           </div>
+                           <input type="hidden" name="budget_code" value="${esc(tx.budget_code)}">`
+                    : `<input class="edit-field-input" name="budget_code" value="" placeholder="يُعبَّأ تلقائياً عند ربط الحجز"
+                              style="color:var(--text-muted)" readonly>`
+                }
                   </div>
                   <div class="edit-field-group">
                     <label class="edit-field-label">الحالة</label>
@@ -1267,6 +1382,18 @@ async function loadSettingsPage() {
                     </svg>
                     جميع المعاملات
                 </button>
+                <button class="settings-tab-btn" data-section="cost-centers" onclick="showSettingsSection('cost-centers', this)">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
+                    </svg>
+                    مراكز التكلفة
+                </button>
+                <button class="settings-tab-btn" data-section="budget-categories" onclick="showSettingsSection('budget-categories', this)">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+                    </svg>
+                    بنود الموازنة
+                </button>
                 <button class="settings-tab-btn" data-section="system" onclick="showSettingsSection('system', this)">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <circle cx="12" cy="12" r="3"></circle>
@@ -1298,6 +1425,10 @@ function showSettingsSection(section, btn) {
         renderTypesSection();
     } else if (section === 'all-transactions') {
         renderAllTransactionsSection();
+    } else if (section === 'cost-centers') {
+        renderCostCentersSection();
+    } else if (section === 'budget-categories') {
+        renderBudgetCategoriesSection();
     } else if (section === 'system') {
         renderSystemSection();
     }
@@ -1648,7 +1779,7 @@ async function deleteEmployee(id, name) {
 // ========== قسم أنواع المعاملات ==========
 async function loadSettingsTypes() {
     try {
-        var res = await fetch('api/?action=types');
+        var res = await fetch('api/settings.php?action=get_types');
         var data = await res.json();
         if (data.success) {
             SettingsData.types = data.data;
@@ -1661,144 +1792,196 @@ async function loadSettingsTypes() {
 async function renderTypesSection() {
     await loadSettingsTypes();
 
-    var content = document.getElementById('settingsContent');
+    const content = document.getElementById('settingsContent');
+    if (!content) return;
 
-    var html = '<div class="settings-section-header">';
-    html += '<h2>أنواع المعاملات</h2>';
-    html += '<button class="btn btn-primary" onclick="openAddTypeModal()">';
-    html += '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>';
-    html += ' إضافة نوع';
-    html += '</button>';
-    html += '</div>';
+    const all = SettingsData.types || [];
+    const parents = all.filter(t => !t.parent_id || t.parent_id == 0);
+    const childOf = id => all.filter(t => t.parent_id == id);
 
-    html += '<div class="types-grid">';
+    let html = `
+    <div class="settings-section-header">
+        <h2>أنواع المعاملات</h2>
+        <button class="btn btn-primary" onclick="openTypeModal(null, null)">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            إضافة تصنيف رئيسي
+        </button>
+    </div>
+    <div class="types-tree">`;
 
-    if (SettingsData.types.length === 0) {
-        html += '<div class="empty-state">لا يوجد أنواع</div>';
-    } else {
-        for (var i = 0; i < SettingsData.types.length; i++) {
-            var type = SettingsData.types[i];
-            html += '<div class="type-card">';
-            html += '<div class="type-icon">📄</div>';
-            html += '<div class="type-info">';
-            html += '<h4>' + type.name + '</h4>';
-            html += '<p>' + (type.description || 'بدون وصف') + '</p>';
-            html += '</div>';
-            html += '<div class="type-actions">';
-            html += '<button class="btn-icon-sm" onclick="editType(' + type.id + ')" title="تعديل"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg></button>';
-            html += '<button class="btn-icon-sm btn-danger-icon" onclick="deleteType(' + type.id + ', \'' + type.name + '\')" title="حذف"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>';
-            html += '</div>';
-            html += '</div>';
-        }
+    if (parents.length === 0) {
+        html += '<div class="empty-state">لا يوجد أنواع — أضف تصنيفاً رئيسياً</div>';
     }
+
+    parents.forEach(parent => {
+        const subs = childOf(parent.id);
+        html += `
+        <div class="tt-parent-block">
+            <div class="tt-parent-row">
+                <div class="tt-parent-icon">${getTypeIcon(parent.name)}</div>
+                <div class="tt-parent-info">
+                    <div class="tt-parent-name">${parent.name}</div>
+                    ${parent.description ? `<div class="tt-parent-desc">${parent.description}</div>` : ''}
+                </div>
+                <div class="tt-parent-meta">
+                    <span class="tt-sub-count">${subs.length} تصنيف فرعي</span>
+                </div>
+                <div class="tt-actions">
+                    <button class="tt-btn tt-btn-add" onclick="openTypeModal(null, ${parent.id})" title="إضافة فرعي">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                        </svg> إضافة فرعي
+                    </button>
+                    <button class="tt-btn tt-btn-edit" onclick="openTypeModal(${parent.id}, null)" title="تعديل">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                        </svg>
+                    </button>
+                    <button class="tt-btn tt-btn-del" onclick="deleteType(${parent.id}, '${parent.name.replace(/'/g, "\\'")}', ${subs.length})" title="حذف">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="3 6 5 6 21 6"/>
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            ${subs.length > 0 ? `
+            <div class="tt-subs-list">
+                ${subs.map(sub => `
+                <div class="tt-sub-row">
+                    <div class="tt-sub-bullet"></div>
+                    <div class="tt-sub-info">
+                        <span class="tt-sub-name">${sub.name}</span>
+                        ${sub.description ? `<span class="tt-sub-desc">${sub.description}</span>` : ''}
+                    </div>
+                    <div class="tt-actions">
+                        <button class="tt-btn tt-btn-edit" onclick="openTypeModal(${sub.id}, ${parent.id})" title="تعديل">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                            </svg>
+                        </button>
+                        <button class="tt-btn tt-btn-del" onclick="deleteType(${sub.id}, '${sub.name.replace(/'/g, "\\'")}', 0)" title="حذف">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="3 6 5 6 21 6"/>
+                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>`).join('')}
+            </div>` : ''}
+        </div>`;
+    });
 
     html += '</div>';
     content.innerHTML = html;
 }
 
-function openAddTypeModal() {
-    DOM.modalTitle.textContent = 'إضافة نوع معاملة';
-    DOM.modalBody.innerHTML = `
-        <form id="typeForm" onsubmit="saveType(event)">
-            <input type="hidden" name="id" id="typeId" value="">
-            <div class="form-group">
-                <label class="form-label">اسم النوع</label>
-                <input type="text" class="form-input" name="name" id="typeName" required>
-            </div>
-            <div class="form-group">
-                <label class="form-label">الوصف</label>
-                <textarea class="form-textarea" name="description" id="typeDesc"></textarea>
-            </div>
-            <div class="modal-footer" style="padding: 0; border: none; margin-top: 1.5rem;">
-                <button type="button" class="btn btn-secondary" onclick="closeModal()">إلغاء</button>
-                <button type="submit" class="btn btn-primary">حفظ</button>
-            </div>
-        </form>
-    `;
-    openModal();
-}
-
-function editType(id) {
-    var type = SettingsData.types.find(function (t) { return t.id == id; });
-    if (!type) return;
-
-    DOM.modalTitle.textContent = 'تعديل نوع المعاملة';
-    DOM.modalBody.innerHTML = `
-        <form id="typeForm" onsubmit="saveType(event)">
-            <input type="hidden" name="id" id="typeId" value="${type.id}">
-            <div class="form-group">
-                <label class="form-label">اسم النوع</label>
-                <input type="text" class="form-input" name="name" id="typeName" value="${type.name}" required>
-            </div>
-            <div class="form-group">
-                <label class="form-label">الوصف</label>
-                <textarea class="form-textarea" name="description" id="typeDesc">${type.description || ''}</textarea>
-            </div>
-            <div class="modal-footer" style="padding: 0; border: none; margin-top: 1.5rem;">
-                <button type="button" class="btn btn-secondary" onclick="closeModal()">إلغاء</button>
-                <button type="submit" class="btn btn-primary">حفظ</button>
-            </div>
-        </form>
-    `;
-    openModal();
-}
-
-async function saveType(e) {
-    e.preventDefault();
-
-    var id = document.getElementById('typeId').value;
-    var data = {
-        name: document.getElementById('typeName').value,
-        description: document.getElementById('typeDesc').value
+function getTypeIcon(name) {
+    const icons = {
+        'راتب': '💵', 'رواتب': '💵', 'صرف راتب': '💵',
+        'مكافأة': '🏆', 'مكافآت': '🏆',
+        'سلفة': '🏦', 'سلف': '🏦',
+        'فاتورة': '🧾', 'فواتير': '🧾',
+        'مستخلص': '📋', 'مستخلصات': '📋',
+        'تسوية': '⚖️', 'تسويات': '⚖️',
+        'شراء': '🛒', 'مشتريات': '🛒', 'أمر شراء': '🛒',
+        'مطالبة': '📄', 'مطالبات': '📄',
+        'بدل': '💳', 'بدلات': '💳',
+        'إضافي': '⏰', 'عمل إضافي': '⏰',
+        'أخرى': '📂', 'عام': '📂',
     };
-
-    if (id) data.id = id;
-
-    var action = id ? 'update_type' : 'add_type';
-
-    try {
-        var res = await fetch('api/settings.php?action=' + action, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
-        });
-
-        var result = await res.json();
-
-        if (result.success) {
-            showToast(id ? 'تم تحديث النوع' : 'تم إضافة النوع', 'success');
-            closeModal();
-            renderTypesSection();
-        } else {
-            showToast(result.message || 'خطأ', 'error');
-        }
-    } catch (err) {
-        showToast('خطأ في الاتصال', 'error');
+    for (const [key, icon] of Object.entries(icons)) {
+        if (name.includes(key)) return icon;
     }
+    return '📁';
 }
 
-async function deleteType(id, name) {
-    if (!confirm('هل أنت متأكد من حذف النوع "' + name + '"؟')) return;
+function openTypeModal(editId, parentId) {
+    const all = SettingsData.types || [];
+    const parents = all.filter(t => !t.parent_id || t.parent_id == 0);
+    const existing = editId ? all.find(t => t.id == editId) : null;
+    const isEdit = !!existing;
+    const currentParentId = isEdit ? (existing.parent_id || '') : (parentId || '');
+    const currentIsParent = isEdit && !existing.parent_id;
 
-    try {
-        var res = await fetch('api/settings.php?action=delete_type', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: id })
-        });
+    DOM.modalTitle.textContent = isEdit
+        ? (currentIsParent ? `تعديل الرئيسي: ${existing.name}` : `تعديل الفرعي: ${existing.name}`)
+        : (parentId ? `إضافة فرعي تحت: ${parents.find(p => p.id == parentId)?.name || ''}` : 'إضافة تصنيف رئيسي');
 
-        var result = await res.json();
-
-        if (result.success) {
-            showToast('تم حذف النوع', 'success');
-            renderTypesSection();
-        } else {
-            showToast(result.message || 'خطأ في الحذف', 'error');
-        }
-    } catch (err) {
-        showToast('خطأ في الاتصال', 'error');
-    }
+    DOM.modalBody.innerHTML = `
+        <div style="display:flex;flex-direction:column;gap:1rem;">
+            <div class="form-group">
+                <label class="form-label">التصنيف الرئيسي</label>
+                <select class="form-select" id="typeParentId">
+                    <option value="">— تصنيف رئيسي مستقل —</option>
+                    ${parents.filter(p => p.id != editId).map(p =>
+        `<option value="${p.id}" ${currentParentId == p.id ? 'selected' : ''}>${p.name}</option>`
+    ).join('')}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">الاسم <span class="req">*</span></label>
+                <input type="text" class="form-input" id="typeName"
+                    value="${isEdit ? existing.name : ''}"
+                    placeholder="${parentId ? 'مثال: الرواتب الشهرية' : 'مثال: الرواتب'}" autofocus>
+            </div>
+            <div class="form-group">
+                <label class="form-label">الوصف</label>
+                <textarea class="form-input" id="typeDesc" rows="2"
+                    placeholder="وصف مختصر (اختياري)">${isEdit ? (existing.description || '') : ''}</textarea>
+            </div>
+            <div style="display:flex;gap:.75rem;padding-top:.5rem;">
+                <button class="btn btn-primary" onclick="saveType(${isEdit ? editId : 'null'})">
+                    ${isEdit ? 'حفظ التعديلات' : 'إضافة'}
+                </button>
+                <button class="btn btn-secondary" onclick="closeModal()">إلغاء</button>
+            </div>
+        </div>`;
+    openModal();
 }
+
+async function saveType(editId) {
+    const name = document.getElementById('typeName')?.value.trim();
+    const desc = document.getElementById('typeDesc')?.value.trim() || '';
+    const parentEl = document.getElementById('typeParentId');
+    const parentId = parentEl ? (parentEl.value || null) : null;
+    if (!name) { showToast('⚠️ اسم التصنيف مطلوب', 'warning'); return; }
+    const payload = { name, description: desc, parent_id: parentId };
+    if (editId) payload.id = editId;
+    const action = editId ? 'update_type' : 'add_type';
+    try {
+        const res = await fetch('api/settings.php?action=' + action, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast(editId ? '✅ تم تحديث التصنيف' : '✅ تم إضافة التصنيف', 'success');
+            closeModal(); renderTypesSection();
+        } else { showToast(data.message || 'خطأ', 'error'); }
+    } catch (e) { showToast('خطأ في الاتصال', 'error'); }
+}
+
+async function deleteType(id, name, subCount) {
+    const msg = subCount > 0
+        ? `حذف "${name}" سيحذف أيضاً ${subCount} تصنيف فرعي. هل أنت متأكد؟`
+        : `هل تريد حذف "${name}"؟`;
+    if (!confirm(msg)) return;
+    try {
+        const res = await fetch('api/settings.php?action=delete_type', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id })
+        });
+        const data = await res.json();
+        if (data.success) { showToast('✅ تم الحذف', 'success'); renderTypesSection(); }
+        else { showToast(data.message || 'خطأ في الحذف', 'error'); }
+    } catch (e) { showToast('خطأ في الاتصال', 'error'); }
+}
+
 
 // ========== قسم جميع المعاملات ==========
 function renderAllTransactionsSection() {
@@ -2646,6 +2829,202 @@ async function loadEventsLog() {
 /**
  * عرض إعدادات النظام والإحصائيات ومنطقة الخطر
  */
+// ========== مراكز التكلفة ==========
+async function renderCostCentersSection() {
+    var content = document.getElementById('settingsContent');
+    content.innerHTML = '<div style="text-align:center;padding:2rem"><div class="spinner"></div></div>';
+    try {
+        var res = await fetch('api/budget.php?action=cost_centers_list');
+        var data = await res.json();
+        var rows = data.data || [];
+        var html = `
+        <div class="settings-section-header">
+            <h2>مراكز التكلفة</h2>
+            <button class="btn btn-primary" onclick="openCostCenterModal()">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                إضافة مركز
+            </button>
+        </div>
+        <div class="table-container">
+            <table class="data-table">
+                <thead><tr>
+                    <th>رقم المركز</th><th>الاسم</th><th>الحالة</th><th>إجراءات</th>
+                </tr></thead>
+                <tbody>
+                ${rows.length ? rows.map(function (r) {
+            return `
+                    <tr>
+                        <td><span class="tx-number">${r.code}</span></td>
+                        <td style="font-weight:600">${r.name}</td>
+                        <td><span class="status-badge ${r.is_active == 1 ? 'status-completed' : 'status-cancelled'}">${r.is_active == 1 ? 'نشط' : 'موقوف'}</span></td>
+                        <td>
+                            <div style="display:flex;gap:.4rem">
+                                <button class="btn btn-sm btn-secondary" onclick="openCostCenterModal(${JSON.stringify(r).replace(/"/g, '&quot;')})">تعديل</button>
+                                <button class="btn btn-sm btn-danger"    onclick="deleteCostCenter(${r.id},'${r.name}')">حذف</button>
+                            </div>
+                        </td>
+                    </tr>`;
+        }).join('') : '<tr><td colspan="4" style="text-align:center;color:var(--text-muted);padding:2rem">لا توجد مراكز تكلفة</td></tr>'}
+                </tbody>
+            </table>
+        </div>`;
+        content.innerHTML = html;
+    } catch (e) {
+        content.innerHTML = '<p style="color:red;padding:1rem">خطأ في تحميل البيانات</p>';
+    }
+}
+
+function openCostCenterModal(row) {
+    var isEdit = !!row;
+    DOM.modalTitle.textContent = isEdit ? 'تعديل مركز التكلفة' : 'إضافة مركز تكلفة';
+    DOM.modalBody.innerHTML = `
+        <div class="form-group">
+            <label class="form-label">رقم المركز <span style="color:var(--accent-red)">*</span></label>
+            <input class="form-input" id="cc_code" placeholder="مثال: 102200001" value="${isEdit ? row.code : ''}">
+        </div>
+        <div class="form-group">
+            <label class="form-label">اسم المركز <span style="color:var(--accent-red)">*</span></label>
+            <input class="form-input" id="cc_name" placeholder="مثال: المالية والحسابات" value="${isEdit ? row.name : ''}">
+        </div>
+        <div class="form-group">
+            <label class="form-label">الحالة</label>
+            <select class="form-select" id="cc_active">
+                <option value="1" ${(!isEdit || row.is_active == 1) ? 'selected' : ''}>نشط</option>
+                <option value="0" ${(isEdit && row.is_active == 0) ? 'selected' : ''}>موقوف</option>
+            </select>
+        </div>
+        <div class="modal-footer" style="padding:0;border:none;margin-top:1.5rem">
+            <button class="btn btn-secondary" onclick="closeModal()">إلغاء</button>
+            <button class="btn btn-primary" onclick="saveCostCenter(${isEdit ? row.id : 'null'})">
+                ${isEdit ? 'حفظ التعديلات' : 'إضافة'}
+            </button>
+        </div>`;
+    openModal();
+}
+
+async function saveCostCenter(id) {
+    var code = document.getElementById('cc_code').value.trim();
+    var name = document.getElementById('cc_name').value.trim();
+    var active = document.getElementById('cc_active').value;
+    if (!code || !name) { showToast('رقم المركز والاسم مطلوبان', 'error'); return; }
+    var body = { code, name, is_active: parseInt(active) };
+    if (id) body.id = id;
+    try {
+        var res = await fetch('api/budget.php?action=cost_center_save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        var data = await res.json();
+        if (data.success) { showToast(id ? 'تم التعديل' : 'تمت الإضافة', 'success'); closeModal(); renderCostCentersSection(); }
+        else showToast(data.error || 'خطأ', 'error');
+    } catch (e) { showToast('خطأ في الاتصال', 'error'); }
+}
+
+async function deleteCostCenter(id, name) {
+    if (!confirm('هل تريد حذف مركز التكلفة "' + name + '"؟')) return;
+    try {
+        var res = await fetch('api/budget.php?action=cost_center_delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
+        var data = await res.json();
+        if (data.success) { showToast('تم الحذف', 'success'); renderCostCentersSection(); }
+        else showToast(data.error || 'خطأ في الحذف', 'error');
+    } catch (e) { showToast('خطأ في الاتصال', 'error'); }
+}
+
+// ========== بنود الموازنة ==========
+async function renderBudgetCategoriesSection() {
+    var content = document.getElementById('settingsContent');
+    content.innerHTML = '<div style="text-align:center;padding:2rem"><div class="spinner"></div></div>';
+    try {
+        var res = await fetch('api/budget.php?action=budget_categories_list');
+        var data = await res.json();
+        var rows = data.data || [];
+        var html = `
+        <div class="settings-section-header">
+            <h2>بنود الموازنة</h2>
+            <button class="btn btn-primary" onclick="openBudgetCategoryModal()">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                إضافة بند
+            </button>
+        </div>
+        <div class="table-container">
+            <table class="data-table">
+                <thead><tr>
+                    <th>كود البند</th><th>اسم البند</th><th>الحالة</th><th>إجراءات</th>
+                </tr></thead>
+                <tbody>
+                ${rows.length ? rows.map(function (r) {
+            return `
+                    <tr>
+                        <td><span class="tx-number">${r.code || '—'}</span></td>
+                        <td style="font-weight:600">${r.name}</td>
+                        <td><span class="status-badge ${r.is_active == 1 ? 'status-completed' : 'status-cancelled'}">${r.is_active == 1 ? 'نشط' : 'موقوف'}</span></td>
+                        <td>
+                            <div style="display:flex;gap:.4rem">
+                                <button class="btn btn-sm btn-secondary" onclick="openBudgetCategoryModal(${JSON.stringify(r).replace(/"/g, '&quot;')})">تعديل</button>
+                                <button class="btn btn-sm btn-danger"    onclick="deleteBudgetCategory(${r.id},'${r.name}')">حذف</button>
+                            </div>
+                        </td>
+                    </tr>`;
+        }).join('') : '<tr><td colspan="4" style="text-align:center;color:var(--text-muted);padding:2rem">لا توجد بنود</td></tr>'}
+                </tbody>
+            </table>
+        </div>`;
+        content.innerHTML = html;
+    } catch (e) {
+        content.innerHTML = '<p style="color:red;padding:1rem">خطأ في تحميل البيانات</p>';
+    }
+}
+
+function openBudgetCategoryModal(row) {
+    var isEdit = !!row;
+    DOM.modalTitle.textContent = isEdit ? 'تعديل بند الموازنة' : 'إضافة بند موازنة';
+    DOM.modalBody.innerHTML = `
+        <div class="form-group">
+            <label class="form-label">اسم البند <span style="color:var(--accent-red)">*</span></label>
+            <input class="form-input" id="bc_name" placeholder="مثال: تقنية معلومات" value="${isEdit ? row.name : ''}">
+        </div>
+        <div class="form-group">
+            <label class="form-label">كود البند (اختياري)</label>
+            <input class="form-input" id="bc_code" placeholder="مثال: IT-001" value="${isEdit && row.code ? row.code : ''}">
+        </div>
+        <div class="form-group">
+            <label class="form-label">الحالة</label>
+            <select class="form-select" id="bc_active">
+                <option value="1" ${(!isEdit || row.is_active == 1) ? 'selected' : ''}>نشط</option>
+                <option value="0" ${(isEdit && row.is_active == 0) ? 'selected' : ''}>موقوف</option>
+            </select>
+        </div>
+        <div class="modal-footer" style="padding:0;border:none;margin-top:1.5rem">
+            <button class="btn btn-secondary" onclick="closeModal()">إلغاء</button>
+            <button class="btn btn-primary" onclick="saveBudgetCategory(${isEdit ? row.id : 'null'})">
+                ${isEdit ? 'حفظ التعديلات' : 'إضافة'}
+            </button>
+        </div>`;
+    openModal();
+}
+
+async function saveBudgetCategory(id) {
+    var name = document.getElementById('bc_name').value.trim();
+    var code = document.getElementById('bc_code').value.trim();
+    var active = document.getElementById('bc_active').value;
+    if (!name) { showToast('اسم البند مطلوب', 'error'); return; }
+    var body = { name, code, is_active: parseInt(active) };
+    if (id) body.id = id;
+    try {
+        var res = await fetch('api/budget.php?action=budget_category_save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        var data = await res.json();
+        if (data.success) { showToast(id ? 'تم التعديل' : 'تمت الإضافة', 'success'); closeModal(); renderBudgetCategoriesSection(); }
+        else showToast(data.error || 'خطأ', 'error');
+    } catch (e) { showToast('خطأ في الاتصال', 'error'); }
+}
+
+async function deleteBudgetCategory(id, name) {
+    if (!confirm('هل تريد حذف البند "' + name + '"؟')) return;
+    try {
+        var res = await fetch('api/budget.php?action=budget_category_delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
+        var data = await res.json();
+        if (data.success) { showToast('تم الحذف', 'success'); renderBudgetCategoriesSection(); }
+        else showToast(data.error || 'خطأ في الحذف', 'error');
+    } catch (e) { showToast('خطأ في الاتصال', 'error'); }
+}
+
 // ========== قسم النظام ==========
 async function renderSystemSection() {
     var content = document.getElementById('settingsContent');
