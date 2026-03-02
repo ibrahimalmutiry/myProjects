@@ -452,15 +452,22 @@ try {
             break;
 
         case 'cost_center_save':
-            $b    = json_decode(file_get_contents('php://input'), true) ?? [];
-            $code = $conn->real_escape_string(trim($b['code'] ?? ''));
-            $name = $conn->real_escape_string(trim($b['name'] ?? ''));
+            $b      = json_decode(file_get_contents('php://input'), true) ?? [];
+            $code   = $conn->real_escape_string(trim($b['code'] ?? ''));
+            $name   = $conn->real_escape_string(trim($b['name'] ?? ''));
             $active = isset($b['is_active']) ? (int)$b['is_active'] : 1;
-            if (!$code || !$name) jsonResponse(['success'=>false,'error'=>'الرقم والاسم مطلوبان'], 400);
+
             if (!empty($b['id'])) {
+                // تحديث — إذا أُرسل code وname نحدث الكل، وإلا نحدث is_active فقط
                 $id = (int)$b['id'];
-                $conn->query("UPDATE cost_centers SET code='$code', name='$name', is_active=$active WHERE id=$id");
+                if ($code && $name) {
+                    $conn->query("UPDATE cost_centers SET code='$code', name='$name', is_active=$active WHERE id=$id");
+                } else {
+                    $conn->query("UPDATE cost_centers SET is_active=$active WHERE id=$id");
+                }
             } else {
+                // إضافة جديدة — code وname مطلوبان
+                if (!$code || !$name) jsonResponse(['success'=>false,'error'=>'الرقم والاسم مطلوبان'], 400);
                 $conn->query("INSERT INTO cost_centers (code, name, is_active) VALUES ('$code','$name',$active)");
             }
             jsonResponse(['success' => true]);
@@ -483,16 +490,25 @@ try {
             break;
 
         case 'budget_category_save':
-            $b    = json_decode(file_get_contents('php://input'), true) ?? [];
-            $name = $conn->real_escape_string(trim($b['name'] ?? ''));
-            $code = $conn->real_escape_string(trim($b['code'] ?? ''));
+            $b      = json_decode(file_get_contents('php://input'), true) ?? [];
+            $name   = $conn->real_escape_string(trim($b['name'] ?? ''));
+            $code   = $conn->real_escape_string(trim($b['code'] ?? ''));
             $active = isset($b['is_active']) ? (int)$b['is_active'] : 1;
-            if (!$name) jsonResponse(['success'=>false,'error'=>'الاسم مطلوب'], 400);
+
             if (!empty($b['id'])) {
+                // تحديث — إذا أُرسل name نحدث الكل، وإلا نحدث is_active فقط
                 $id = (int)$b['id'];
-                $conn->query("UPDATE budget_categories SET name='$name', code='$code', is_active=$active WHERE id=$id");
+                if ($name) {
+                    $codeVal = $code ? "'$code'" : 'NULL';
+                    $conn->query("UPDATE budget_categories SET name='$name', code=$codeVal, is_active=$active WHERE id=$id");
+                } else {
+                    $conn->query("UPDATE budget_categories SET is_active=$active WHERE id=$id");
+                }
             } else {
-                $conn->query("INSERT INTO budget_categories (name, code, is_active) VALUES ('$name','$code',$active)");
+                // إضافة جديدة — name مطلوب
+                if (!$name) jsonResponse(['success'=>false,'error'=>'الاسم مطلوب'], 400);
+                $codeVal = $code ? "'$code'" : 'NULL';
+                $conn->query("INSERT INTO budget_categories (name, code, is_active) VALUES ('$name',$codeVal,$active)");
             }
             jsonResponse(['success' => true]);
             break;
@@ -564,29 +580,6 @@ function ensureReservationsTables($conn) {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
-    // ── بيانات أولية لمراكز التكلفة (تُضاف مرة واحدة) ─────────
-    $conn->query("INSERT IGNORE INTO cost_centers (code, name) VALUES
-        ('102200001', 'الإدارة العامة'),
-        ('102200002', 'التخطيط والميزانية'),
-        ('102200003', 'الموارد البشرية'),
-        ('102200004', 'تقنية المعلومات'),
-        ('102200005', 'المشتريات'),
-        ('102200006', 'المالية والحسابات'),
-        ('102200007', 'الشؤون الإدارية'),
-        ('102200008', 'التدريب والتطوير')");
-
-    // ── بيانات أولية لبنود الموازنة ─────────────────────────────
-    $conn->query("INSERT IGNORE INTO budget_categories (name) VALUES
-        ('رأس المال'),
-        ('تشغيلي'),
-        ('صيانة وإصلاح'),
-        ('تقنية معلومات'),
-        ('تدريب وتطوير'),
-        ('خدمات استشارية'),
-        ('مستلزمات مكتبية'),
-        ('أثاث ومعدات'),
-        ('سيارات ومركبات'),
-        ('إنشاءات وبنية تحتية')");
 
     // ✅ ينشئ الجداول تلقائياً بدل رمي exception
     $conn->query("CREATE TABLE IF NOT EXISTS suppliers (
@@ -601,11 +594,6 @@ function ensureReservationsTables($conn) {
         created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
-    $conn->query("INSERT IGNORE INTO suppliers (id, name, cr_number, category) VALUES
-        (1, 'شركة التوريدات العامة',  '1010100001', 'مستلزمات مكتبية'),
-        (2, 'مؤسسة التقنية الحديثة', '1010100002', 'تقنية المعلومات'),
-        (3, 'شركة الخدمات اللوجستية','1010100003', 'شحن وتوصيل'),
-        (4, 'مصنع المعدات الصناعية', '1010100004', 'معدات ومكائن')");
 
     $conn->query("CREATE TABLE IF NOT EXISTS budget_reservations (
         id                   INT AUTO_INCREMENT PRIMARY KEY,

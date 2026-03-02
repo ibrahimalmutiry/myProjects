@@ -128,62 +128,119 @@ function switchBankTab(tabName) {
 }
 
 // ════════════════════════════════════════════════════════
-//  التبويب 1: نظرة عامة
+//  التبويب 1: نظرة عامة — صفوف
 // ════════════════════════════════════════════════════════
 function renderOverviewTab() {
     const panel = document.getElementById('bank-tab-overview');
 
-    // إحصاءات عامة
     const totalBalance = bankAccounts.reduce((s, a) => s + parseFloat(a.current_balance || 0), 0);
     const thisMonth = getCurrentMonthDeposits();
     const pendingDeps = bankDeposits.filter(d => d.status === 'معلق');
     const confirmedDeps = bankDeposits.filter(d => d.status === 'تم التأكيد');
 
-    // تحديث الإحصاءات السريعة
     updateQuickStats(totalBalance, thisMonth, pendingDeps.length, confirmedDeps.length);
 
+    // ── ملخص الودائع الأخيرة ──
+    const recentDeps = [...bankDeposits].slice(0, 5);
+
     panel.innerHTML = `
-        <!-- بطاقات الحسابات -->
-        <div class="section-block">
-            <div class="section-block-header">
-                <h3>🏦 الحسابات البنكية</h3>
-                <button class="btn-add" onclick="switchBankTab('accounts')">إدارة الحسابات ←</button>
+    <div class="bank-rows-page">
+
+        <!-- ═══ الحسابات البنكية ═══ -->
+        <div class="bank-section">
+            <div class="bank-section-header">
+                <div class="bsh-title"><span>🏦</span><h3>الحسابات البنكية</h3><span class="bsh-badge">${bankAccounts.length}</span></div>
+                <div style="display:flex;gap:.5rem">
+                    <button class="bsh-btn green" onclick="openRecordAllBalancesModal()">📊 تسجيل الأرصدة</button>
+                    <button class="bsh-btn" onclick="switchBankTab('accounts')">إدارة الحسابات ←</button>
+                </div>
             </div>
-            <div class="accounts-overview-grid" id="accounts-overview-grid">
-                ${renderAccountCards()}
+
+            <!-- صف ملخص الأرصدة -->
+            <div class="bank-summary-bar">
+                <div class="bsb-item"><span class="bsb-val">${fmtMoney(totalBalance)}</span><span class="bsb-lbl">إجمالي الأرصدة</span></div>
+                <div class="bsb-sep"></div>
+                <div class="bsb-item"><span class="bsb-val green">${fmtMoney(thisMonth)}</span><span class="bsb-lbl">ودائع الشهر</span></div>
+                <div class="bsb-sep"></div>
+                <div class="bsb-item"><span class="bsb-val orange">${pendingDeps.length}</span><span class="bsb-lbl">معلقة</span></div>
+                <div class="bsb-sep"></div>
+                <div class="bsb-item"><span class="bsb-val">${confirmedDeps.length}</span><span class="bsb-lbl">مؤكدة</span></div>
+            </div>
+
+            <!-- صفوف الحسابات -->
+            <div class="bank-rows-list">
+                ${bankAccounts.length ? bankAccounts.map(acc => {
+        const trend = parseFloat(acc.current_balance) >= parseFloat(acc.initial_balance || 0) ? 'up' : 'down';
+        return `
+                    <div class="bank-row" onclick="switchBankTab('accounts')">
+                        <div class="br-indicator" style="background:${trend === 'up' ? 'var(--accent-green)' : 'var(--accent-red)'}"></div>
+                        <div class="br-icon">🏦</div>
+                        <div class="br-main">
+                            <span class="br-title">${acc.account_name}</span>
+                            <span class="br-sub">${acc.bank_name} · ${acc.account_number || ''} · ${acc.account_type || 'جاري'}</span>
+                        </div>
+                        <div class="br-meta">
+                            <span class="br-amount ${trend === 'up' ? 'green' : 'red'}">${fmtMoney(acc.current_balance)}</span>
+                            <span class="br-tag">${acc.currency || 'SAR'}</span>
+                        </div>
+                        <div class="br-trend ${trend === 'up' ? 'up' : 'dn'}">${trend === 'up' ? '▲' : '▼'}</div>
+                        <div class="br-actions">
+                            <button class="br-btn" onclick="event.stopPropagation();openRecordBalanceModal(${acc.id})" title="تسجيل رصيد">📊</button>
+                            <button class="br-btn" onclick="event.stopPropagation();openBalanceHistoryModal(${acc.id})" title="السجل">📜</button>
+                        </div>
+                    </div>`;
+    }).join('') : `<div class="bank-empty">لا توجد حسابات بنكية مضافة بعد</div>`}
             </div>
         </div>
 
+        <!-- ═══ آخر الودائع ═══ -->
+        <div class="bank-section">
+            <div class="bank-section-header">
+                <div class="bsh-title"><span>📥</span><h3>آخر الودائع</h3></div>
+                <button class="bsh-btn green" onclick="openAddDepositModal()" style="${showIf('bank.add_deposit')}">+ إيداع جديد</button>
+            </div>
+            <div class="bank-rows-list">
+                ${recentDeps.length ? recentDeps.map(dep => {
+        const confirmed = dep.status === 'تم التأكيد';
+        return `
+                    <div class="bank-row">
+                        <div class="br-indicator" style="background:${confirmed ? 'var(--accent-green)' : 'var(--accent-orange)'}"></div>
+                        <div class="br-icon">${confirmed ? '✅' : '⏳'}</div>
+                        <div class="br-main">
+                            <span class="br-title">${dep.deposit_number}</span>
+                            <span class="br-sub">${dep.account_name} · ${fmtDate(dep.deposit_date)} · ${dep.deposit_type}</span>
+                        </div>
+                        <div class="br-meta">
+                            <span class="br-amount green">+${fmtMoney(dep.amount)}</span>
+                            <span class="br-badge ${confirmed ? 'confirmed' : 'pending'}">${dep.status}</span>
+                        </div>
+                        <div class="br-actions">
+                            ${!confirmed && canDo('bank.confirm_deposit') ? `<button class="br-btn success" onclick="handleConfirmDeposit(${dep.id})" title="تأكيد">✓</button>` : ''}
+                            <button class="br-btn" onclick="viewDepositDetails(${dep.id})" title="تفاصيل">👁</button>
+                        </div>
+                    </div>`;
+    }).join('') : `<div class="bank-empty">لا توجد ودائع مسجلة</div>`}
+            </div>
+        </div>
 
-        <!-- ودائع الشهر القادمة -->
-        <div class=""">
-
-        </div>`;
+    </div>`;
 }
 
-// ─── بطاقات الحسابات ────────────────────────────────────
+// ─── renderAccountCards — تبقى للتوافق ──────────────────
 function renderAccountCards() {
-    if (!bankAccounts.length) {
-        return `<div class="empty-card">لا توجد حسابات بنكية مضافة بعد</div>`;
-    }
-
-    return bankAccounts.map(account => {
-        const balanceTrend = account.current_balance >= account.initial_balance ? 'up' : 'down';
-
+    return bankAccounts.map(acc => {
+        const trend = parseFloat(acc.current_balance) >= parseFloat(acc.initial_balance || 0) ? 'up' : 'down';
         return `
-        <div class="account-overview-card account-trend-${balanceTrend}">
-            <div class="account-card-bank">${account.bank_name}</div>
-            <div class="account-card-name">${account.account_name}</div>
-            <div class="account-card-number">${account.account_number}</div>
-            <div class="account-card-balance">
-                <span class="balance-label">الرصيد الحالي</span>
-                <span class="balance-value">${formatMoney(account.current_balance)}</span>
-                <span class="balance-currency">${account.currency || 'SAR'}</span>
+        <div class="bank-row">
+            <div class="br-indicator" style="background:${trend === 'up' ? 'var(--accent-green)' : 'var(--accent-red)'}"></div>
+            <div class="br-icon">🏦</div>
+            <div class="br-main">
+                <span class="br-title">${acc.account_name}</span>
+                <span class="br-sub">${acc.bank_name} · ${acc.account_number || ''}</span>
             </div>
-            <div class="account-card-trend ${balanceTrend === 'up' ? 'trend-positive' : 'trend-negative'}">
-                ${balanceTrend === 'up' ? '▲ ارتفع' : '▼ انخفض'}
+            <div class="br-meta">
+                <span class="br-amount">${fmtMoney(acc.current_balance)}</span>
             </div>
-            <div class="account-card-type">${account.account_type || 'جاري'}</div>
         </div>`;
     }).join('');
 }
@@ -439,15 +496,14 @@ function filterDepositsList() {
 
 
 // ════════════════════════════════════════════════════════
-//  التبويب 4: الحسابات — مع تعديل الرصيد والسجل اليومي
+//  التبويب 4: الحسابات — صفوف
 // ════════════════════════════════════════════════════════
 
-let dailyBalances = [];   // سجل الأرصدة اليومية
+let dailyBalances = [];
 
 async function renderAccountsTab() {
     const panel = document.getElementById('bank-tab-accounts');
 
-    // تحميل سجل الأرصدة اليومية
     try {
         const res = await fetch('api/?action=daily_balances&limit=60');
         const data = await res.json();
@@ -457,143 +513,97 @@ async function renderAccountsTab() {
     const today = new Date().toISOString().split('T')[0];
 
     panel.innerHTML = `
+    <div class="bank-rows-page">
 
-        <!-- ═══ بطاقات الحسابات مع أزرار التعديل ═══ -->
-        <div class="section-block">
-            <div class="section-block-header">
-                <h3>🏦 الحسابات البنكية</h3>
+        <!-- ═══ الحسابات ═══ -->
+        <div class="bank-section">
+            <div class="bank-section-header">
+                <div class="bsh-title"><span>🏦</span><h3>الحسابات البنكية</h3><span class="bsh-badge">${bankAccounts.length}</span></div>
                 <div style="display:flex;gap:.5rem">
-                    <button class="btn-add" style="background:var(--accent-green);color:#fff"
-                        onclick="openRecordAllBalancesModal()">
-                        📊 تسجيل أرصدة اليوم
-                    </button>
-                    <button class="btn-add" onclick="openAddAccountModal()" style="${showIf('bank.add_account')}">+ إضافة حساب</button>
+                    <button class="bsh-btn green" onclick="openRecordAllBalancesModal()">📊 تسجيل أرصدة اليوم</button>
+                    <button class="bsh-btn" onclick="openAddAccountModal()" style="${showIf('bank.add_account')}">+ إضافة حساب</button>
                 </div>
             </div>
-
-            <!-- بطاقات الحسابات -->
-            <div style="display:flex;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:1rem;margin-bottom:1.5rem">
+            <div class="bank-rows-list">
                 ${bankAccounts.map(acc => {
-        const todayBalance = dailyBalances.find(b => b.account_id == acc.id && b.balance_date === today);
-        const lastBalance = dailyBalances.find(b => b.account_id == acc.id);
-        const diff = lastBalance
-            ? parseFloat(acc.current_balance) - parseFloat(lastBalance.closing_balance)
-            : 0;
-        const diffSign = diff > 0 ? '+' : '';
+        const todayBal = dailyBalances.find(b => b.account_id == acc.id && b.balance_date === today);
+        const lastBal = dailyBalances.find(b => b.account_id == acc.id);
+        const diff = lastBal ? parseFloat(acc.current_balance) - parseFloat(lastBal.closing_balance) : 0;
+        const diffSign = diff >= 0 ? '+' : '';
         const diffColor = diff > 0 ? 'var(--accent-green)' : diff < 0 ? 'var(--accent-red)' : 'var(--text-muted)';
+        const trend = diff >= 0 ? 'up' : 'dn';
 
         return `
-                    <div class="account-detail-card">
-                        <div class="adc-header">
-                            <div>
-                                <div class="adc-bank">${acc.bank_name}</div>
-                                <div class="adc-name">${acc.account_name}</div>
-                                <div class="adc-number" style="font-size:.78rem;color:var(--text-muted);font-family:monospace">${acc.account_number}</div>
-                            </div>
-                            <div style="display:flex;flex-direction:column;gap:.4rem;align-items:flex-end">
-                                <span class="status-badge ${acc.is_active ? 'status-active' : 'status-inactive'}">
-                                    ${acc.is_active ? 'نشط' : 'غير نشط'}
-                                </span>
-                                <span style="font-size:.75rem;color:var(--text-muted)">${acc.account_type}</span>
-                            </div>
+                    <div class="bank-row account-row">
+                        <div class="br-indicator" style="background:${trend === 'up' ? 'var(--accent-green)' : 'var(--accent-red)'}"></div>
+                        <div class="br-icon">🏦</div>
+                        <div class="br-main">
+                            <span class="br-title">${acc.account_name}
+                                <span class="br-inline-badge ${acc.is_active ? 'active' : 'inactive'}">${acc.is_active ? 'نشط' : 'غير نشط'}</span>
+                            </span>
+                            <span class="br-sub">${acc.bank_name} · <code style="font-size:.72rem">${acc.account_number || ''}</code> · ${acc.account_type || 'جاري'}</span>
                         </div>
-
-                        <div class="adc-balance-row">
-                            <div>
-                                <div style="font-size:.78rem;color:var(--text-muted)">الرصيد الحالي</div>
-                                <div class="adc-balance">${fmtMoney(acc.current_balance)}</div>
-                                ${lastBalance && lastBalance.balance_date !== today ? `
-                                <div style="font-size:.75rem;color:${diffColor}">
-                                    ${diffSign}${fmtMoney(Math.abs(diff))} منذ ${fmtDate(lastBalance.balance_date)}
-                                </div>` : ''}
-                            </div>
-                            ${todayBalance ? `
-                            <div style="text-align:left">
-                                <div style="font-size:.75rem;color:var(--text-muted)">مسجّل اليوم</div>
-                                <div style="font-size:.9rem;font-weight:600;color:var(--accent-green)">
-                                    ✅ ${fmtMoney(todayBalance.closing_balance)}
-                                </div>
-                            </div>` : `
-                            <div style="text-align:left">
-                                <div style="font-size:.75rem;color:var(--accent-orange)">لم يُسجَّل اليوم</div>
-                            </div>`}
+                        <div class="br-meta">
+                            <span class="br-amount blue">${fmtMoney(acc.current_balance)}</span>
+                            <span class="br-sub-meta">
+                                ${lastBal && lastBal.balance_date !== today
+                ? `<span style="color:${diffColor}">${diffSign}${fmtMoney(Math.abs(diff))}</span>`
+                : ''}
+                                ${todayBal
+                ? `<span style="color:var(--accent-green);font-size:.72rem">✅ مسجّل اليوم</span>`
+                : `<span style="color:var(--accent-orange);font-size:.72rem">⏳ لم يُسجَّل</span>`}
+                            </span>
                         </div>
-
-                        <div class="adc-actions">
-                            <button class="btn btn-sm" style="background:var(--accent-green);color:#fff;flex:1;${showIf('bank.record_balance')}"
-                                onclick="openRecordBalanceModal(${acc.id})">
-                                📊 تسجيل رصيد اليوم
-                            </button>
-                            <button class="btn btn-sm btn-secondary" style="${showIf('bank.edit_balance')}"
-                                onclick="openEditBalanceModal(${acc.id})">
-                                ✏️ تعديل الرصيد
-                            </button>
-                            <button class="btn btn-sm btn-secondary" style="${showIf('bank.view_history')}"
-                                onclick="openBalanceHistoryModal(${acc.id})">
-                                📜 السجل
-                            </button>
-                            <button class="btn btn-sm btn-secondary" style="${showIf('bank.edit_account')}"
-                                onclick="editAccount(${acc.id})">
-                                ⚙️
-                            </button>
+                        <div class="br-trend ${trend}">${trend === 'up' ? '▲' : '▼'}</div>
+                        <div class="br-actions">
+                            <button class="br-btn green" onclick="openRecordBalanceModal(${acc.id})" title="تسجيل رصيد" style="${showIf('bank.record_balance')}">📊</button>
+                            <button class="br-btn" onclick="openEditBalanceModal(${acc.id})" title="تعديل رصيد" style="${showIf('bank.edit_balance')}">✏️</button>
+                            <button class="br-btn" onclick="openBalanceHistoryModal(${acc.id})" title="السجل">📜</button>
+                            <button class="br-btn" onclick="editAccount(${acc.id})" title="إعدادات" style="${showIf('bank.edit_account')}">⚙️</button>
                         </div>
                     </div>`;
-    }).join('') || `<div class="empty-state-sm">لا توجد حسابات — أضف حساباً جديداً</div>`}
+    }).join('') || `<div class="bank-empty">لا توجد حسابات — أضف حساباً جديداً</div>`}
             </div>
         </div>
 
         <!-- ═══ سجل الأرصدة اليومية ═══ -->
-        <div class="section-block">
-            <div class="section-block-header">
-                <h3>📈 سجل الأرصدة اليومية</h3>
-                <button class="btn-add" onclick="openRecordAllBalancesModal()">+ تسجيل جديد</button>
+        <div class="bank-section">
+            <div class="bank-section-header">
+                <div class="bsh-title"><span>📈</span><h3>سجل الأرصدة اليومية</h3></div>
+                <button class="bsh-btn green" onclick="openRecordAllBalancesModal()">+ تسجيل جديد</button>
             </div>
-
-            ${dailyBalances.length > 0 ? `
-            <div class="table-wrapper" style="max-height:350px;overflow-y:auto">
-                <table class="deposits-table">
-                    <thead>
-                        <tr>
-                            <th>التاريخ</th>
-                            <th>الحساب</th>
-                            <th>رصيد الافتتاح</th>
-                            <th>إجمالي الودائع</th>
-                            <th>رصيد الإغلاق</th>
-                            <th>ملاحظات</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${dailyBalances.map(b => {
+            <div class="bank-rows-list">
+                ${dailyBalances.length ? dailyBalances.slice(0, 20).map(b => {
         const diff = parseFloat(b.closing_balance) - parseFloat(b.opening_balance);
-        const diffColor = diff >= 0 ? 'var(--accent-green)' : 'var(--accent-red)';
+        const color = diff >= 0 ? 'var(--accent-green)' : 'var(--accent-red)';
         return `
-                            <tr>
-                                <td style="font-weight:600">${fmtDate(b.balance_date)}</td>
-                                <td>
-                                    <div style="font-weight:600">${b.account_name}</div>
-                                    <div style="font-size:.78rem;color:var(--text-muted)">${b.bank_name || ''}</div>
-                                </td>
-                                <td class="dep-amount">${fmtMoney(b.opening_balance)}</td>
-                                <td style="color:var(--accent-green)">+${fmtMoney(b.total_deposits)}</td>
-                                <td>
-                                    <span style="font-weight:700">${fmtMoney(b.closing_balance)}</span>
-                                    <span style="font-size:.75rem;color:${diffColor};margin-right:.4rem">
-                                        (${diff >= 0 ? '+' : ''}${fmtMoney(diff)})
-                                    </span>
-                                </td>
-                                <td style="color:var(--text-muted);font-size:.85rem">${b.notes || '—'}</td>
-                            </tr>`;
-    }).join('')}
-                    </tbody>
-                </table>
-            </div>` : `
-            <div class="empty-state-sm" style="padding:2rem;text-align:center;color:var(--text-muted)">
-                لم يتم تسجيل أي أرصدة يومية بعد
-                <br><br>
-                <button class="btn btn-primary" onclick="openRecordAllBalancesModal()">📊 سجّل الرصيد الآن</button>
-            </div>`}
-        </div>`;
+                    <div class="bank-row">
+                        <div class="br-indicator" style="background:${color}"></div>
+                        <div class="br-icon">📅</div>
+                        <div class="br-main">
+                            <span class="br-title">${b.account_name}</span>
+                            <span class="br-sub">${b.bank_name || ''} · ${fmtDate(b.balance_date)} ${b.notes ? '· ' + b.notes : ''}</span>
+                        </div>
+                        <div class="br-meta">
+                            <span class="br-amount">${fmtMoney(b.closing_balance)}</span>
+                            <span class="br-sub-meta" style="color:${color}">${diff >= 0 ? '+' : ''}${fmtMoney(diff)}</span>
+                        </div>
+                        <div class="br-stat-group">
+                            <div class="br-stat"><span>${fmtMoney(b.opening_balance)}</span><small>افتتاح</small></div>
+                            <div class="br-stat green"><span>+${fmtMoney(b.total_deposits)}</span><small>ودائع</small></div>
+                        </div>
+                    </div>`;
+    }).join('') : `
+                <div class="bank-empty" style="padding:2rem;text-align:center">
+                    لم يتم تسجيل أي أرصدة يومية بعد<br><br>
+                    <button class="bsh-btn green" onclick="openRecordAllBalancesModal()">📊 سجّل الرصيد الآن</button>
+                </div>`}
+            </div>
+        </div>
+
+    </div>`;
 }
+
 
 
 // ────────────────────────────────────────────────────────
@@ -1012,7 +1022,7 @@ function renderMonthlyTab() {
             <div class="section-block-header">
                 <h3>📋 قائمة الودائع المجدولة</h3>
             </div>
-            <div class="monthly-deposits-grid">
+            <div class="bank-rows-list">
                 ${renderMonthlyDepositCards()}
             </div>
         </div>`;
@@ -1075,10 +1085,10 @@ function renderDepositCalendar() {
     return calHtml;
 }
 
-// ─── بطاقات الودائع المجدولة ─────────────────────────────
+// ─── صفوف الودائع المجدولة ──────────────────────────────
 function renderMonthlyDepositCards() {
     if (!monthlyDeposits.length) {
-        return `<div class="empty-state-sm">لا توجد ودائع مجدولة لهذا الشهر — أضف وديعة جديدة</div>`;
+        return `<div class="bank-empty">لا توجد ودائع مجدولة لهذا الشهر — أضف وديعة جديدة</div>`;
     }
 
     const today = new Date();
@@ -1095,33 +1105,31 @@ function renderMonthlyDepositCards() {
             const isToday = !isDone && diffDays === 0;
             const isSoon = !isDone && diffDays > 0 && diffDays <= 3;
 
-            let statusLabel = isDone ? 'تم الإيداع ✅'
-                : isLate ? `متأخر ${Math.abs(diffDays)} يوم ⚠️`
-                    : isToday ? 'اليوم 🔔'
-                        : isSoon ? `خلال ${diffDays} أيام`
-                            : `${formatDate(dep.expected_date)}`;
-
-            let cardCls = 'monthly-dep-card';
-            if (isDone) cardCls += ' mdc-done';
-            else if (isLate) cardCls += ' mdc-late';
-            else if (isToday) cardCls += ' mdc-today';
-            else if (isSoon) cardCls += ' mdc-soon';
+            let indColor = 'var(--text-muted)';
+            let statusLabel = formatDate(dep.expected_date);
+            let statusIcon = '📅';
+            if (isDone) { indColor = 'var(--accent-green)'; statusLabel = 'تم الإيداع ✅'; statusIcon = '✅'; }
+            else if (isLate) { indColor = 'var(--accent-red)'; statusLabel = `متأخر ${Math.abs(diffDays)} يوم`; statusIcon = '⚠️'; }
+            else if (isToday) { indColor = 'var(--accent-orange)'; statusLabel = 'اليوم 🔔'; statusIcon = '🔔'; }
+            else if (isSoon) { indColor = 'var(--accent-cyan)'; statusLabel = `خلال ${diffDays} أيام`; statusIcon = '⏰'; }
 
             return `
-            <div class="${cardCls}">
-                <div class="mdc-header">
-                    <div class="mdc-status-dot"></div>
-                    <div class="mdc-status-label">${statusLabel}</div>
+            <div class="bank-row">
+                <div class="br-indicator" style="background:${indColor}"></div>
+                <div class="br-icon">${statusIcon}</div>
+                <div class="br-main">
+                    <span class="br-title">${dep.deposit_name}</span>
+                    <span class="br-sub">🏦 ${dep.account_name || '—'} ${dep.notes ? '· ' + dep.notes : ''}</span>
                 </div>
-                <div class="mdc-name">${dep.deposit_name}</div>
-                <div class="mdc-amount">${formatMoney(dep.expected_amount)}</div>
-                <div class="mdc-account">🏦 ${dep.account_name || '—'}</div>
-                ${dep.notes ? `<div class="mdc-notes">${dep.notes}</div>` : ''}
-                <div class="mdc-actions">
+                <div class="br-meta">
+                    <span class="br-amount green">${formatMoney(dep.expected_amount)}</span>
+                    <span class="br-tag" style="color:${indColor}">${statusLabel}</span>
+                </div>
+                <div class="br-actions">
                     ${!isDone
-                    ? `<button class="btn-confirm-dep" onclick="markMonthlyDepositDone(${dep.id})">✓ تأكيد الإيداع</button>`
-                    : `<span class="mdc-done-label">تم الاستلام</span>`}
-                    <button class="btn-del-dep" onclick="deleteMonthlyDeposit(${dep.id})">🗑</button>
+                    ? `<button class="br-btn green" onclick="markMonthlyDepositDone(${dep.id})">✓ تأكيد</button>`
+                    : `<span class="br-done-label">✅</span>`}
+                    <button class="br-btn danger" onclick="deleteMonthlyDeposit(${dep.id})">🗑</button>
                 </div>
             </div>`;
         }).join('');

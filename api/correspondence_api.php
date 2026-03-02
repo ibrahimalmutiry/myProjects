@@ -117,6 +117,49 @@ try {
             }
             break;
         
+        // ===== مرحلة واحدة =====
+        case 'stage':
+            $id = (int)($_GET['id'] ?? 0);
+            if ($id <= 0) {
+                jsonResponse(['success' => false, 'message' => 'معرف المرحلة غير صالح'], 400);
+            }
+            
+            $conn = db();
+            $result = $conn->query("SELECT cs.*, e.name AS employee_name 
+                                    FROM correspondence_stages cs
+                                    LEFT JOIN employees e ON cs.employee_id = e.id
+                                    WHERE cs.id = $id");
+            if ($result && $result->num_rows > 0) {
+                jsonResponse(['success' => true, 'data' => $result->fetch_assoc()]);
+            } else {
+                jsonResponse(['success' => false, 'message' => 'المرحلة غير موجودة'], 404);
+            }
+            break;
+        
+        // ===== قائمة الموظفين =====
+        case 'employees':
+            if (!function_exists('getEmployees')) {
+                // تحميل دالة getEmployees من functions.php
+                $mainFunctions = __DIR__ . '/functions.php';
+                $mainFunctions2 = __DIR__ . '/../functions.php';
+                if (file_exists($mainFunctions)) require_once $mainFunctions;
+                elseif (file_exists($mainFunctions2)) require_once $mainFunctions2;
+            }
+            if (function_exists('getEmployees')) {
+                $employees = getEmployees();
+                jsonResponse(['success' => true, 'data' => $employees]);
+            } else {
+                // fallback: query مباشر
+                $conn = db();
+                $result = $conn->query("SELECT id, name, role FROM employees WHERE is_active = 1 ORDER BY name ASC");
+                $employees = [];
+                if ($result) {
+                    while ($row = $result->fetch_assoc()) $employees[] = $row;
+                }
+                jsonResponse(['success' => true, 'data' => $employees]);
+            }
+            break;
+        
         // ===== الخطابات العاجلة =====
         case 'urgent':
             $urgent = getUrgentCorrespondence();
@@ -204,9 +247,23 @@ try {
             }
             
             $stageId = (int)$input['stage_id'];
-            unset($input['stage_id']);
+            $conn = db();
             
-            $result = updateCorrespondenceStage($stageId, $input);
+            // بناء البيانات للتحديث
+            $updateData = [];
+            if (isset($input['status']))      $updateData['status']      = $input['status'];
+            if (isset($input['employee_id'])) $updateData['employee_id'] = $input['employee_id'];
+            if (isset($input['notes']))       $updateData['notes']       = $input['notes'];
+            if (isset($input['action_taken']))$updateData['action_taken']= $input['action_taken'];
+            if (isset($input['action_type'])) $updateData['action_taken']= $input['action_type']; // دعم كلا الحقلين
+            
+            // تحديث stage_name مباشرة إن وُجد
+            if (!empty($input['stage_name'])) {
+                $stageName = $conn->real_escape_string($input['stage_name']);
+                $conn->query("UPDATE correspondence_stages SET stage_name = '$stageName' WHERE id = $stageId");
+            }
+            
+            $result = updateCorrespondenceStage($stageId, $updateData);
             
             if ($result['success']) {
                 jsonResponse(['success' => true, 'message' => 'تم تحديث المرحلة بنجاح']);

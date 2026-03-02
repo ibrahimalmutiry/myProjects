@@ -1,0 +1,158 @@
+/* ══════════════════════════════════════════════
+   bank-rows.css — تصميم صفوف الودائع البنكية
+   ══════════════════════════════════════════════ */
+
+/* ── الغلاف العام ───────────────────────────── */
+.bank-rows-page { display:flex; flex-direction:column; gap:1.1rem; padding:.25rem; }
+
+/* ── القسم ──────────────────────────────────── */
+.bank-section {
+    background:var(--bg-card);
+    border:1px solid var(--border-color);
+    border-radius:14px;
+    overflow:hidden;
+}
+
+.bank-section-header {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:.85rem 1.15rem; border-bottom:1px solid var(--border-color);
+    gap:.75rem; flex-wrap:wrap;
+}
+.bsh-title {
+    display:flex; align-items:center; gap:.55rem;
+}
+.bsh-title h3 { margin:0; font-size:.9rem; font-weight:700; color:var(--text-primary); }
+.bsh-badge {
+    display:inline-flex; align-items:center; justify-content:center;
+    min-width:20px; height:20px; padding:0 5px; border-radius:10px;
+    font-size:.7rem; font-weight:700;
+    background:rgba(77,171,247,.15); color:#4dabf7;
+}
+.bsh-btn {
+    display:inline-flex; align-items:center; gap:.35rem;
+    padding:.35rem .85rem; border-radius:8px;
+    border:1px solid var(--border-color);
+    background:var(--bg-surface, var(--bg-secondary));
+    color:var(--text-secondary); font-family:inherit;
+    font-size:.8rem; font-weight:600; cursor:pointer; transition:all .18s;
+    white-space:nowrap;
+}
+.bsh-btn:hover        { border-color:var(--accent-blue); color:var(--accent-blue); }
+.bsh-btn.green        { background:var(--accent-green); color:#fff; border-color:var(--accent-green); }
+.bsh-btn.green:hover  { opacity:.88; }
+
+/* ── شريط الملخص ─────────────────────────────── */
+.bank-summary-bar {
+    display:flex; align-items:center; flex-wrap:wrap;
+    padding:.7rem 1.15rem; border-bottom:1px solid var(--border-color);
+    gap:.5rem;
+    background:rgba(0,0,0,.015);
+}
+.bsb-item { display:flex; flex-direction:column; gap:.1rem; padding:0 .5rem; }
+.bsb-val  { font-size:1rem; font-weight:800; color:var(--text-primary); line-height:1; }
+.bsb-val.green  { color:var(--accent-green); }
+.bsb-val.orange { color:var(--accent-orange); }
+.bsb-lbl  { font-size:.7rem; color:var(--text-muted); }
+.bsb-sep  { width:1px; height:30px; background:var(--border-color); margin:0 .25rem; }
+
+/* ── قائمة الصفوف ────────────────────────────── */
+.bank-rows-list { display:flex; flex-direction:column; }
+
+/* ── الصف الأساسي ─────────────────────────────── */
+.bank-row {
+    display:flex; align-items:center; gap:.7rem;
+    padding:.75rem 1.1rem; border-bottom:1px solid var(--border-color);
+    transition:background .16s; position:relative;
+}
+.bank-row:last-child { border-bottom:none; }
+.bank-row:hover { background:rgba(255,255,255,.025); }
+
+/* مؤشر اللون الجانبي */
+.br-indicator {
+    width:3px; height:calc(100% - 16px);
+    border-radius:2px; flex-shrink:0; align-self:center;
+}
+
+/* الأيقونة */
+.br-icon { font-size:1.15rem; flex-shrink:0; min-width:26px; text-align:center; line-height:1; }
+
+/* المحتوى الرئيسي */
+.br-main { flex:1; min-width:0; display:flex; flex-direction:column; gap:.18rem; }
+.br-title {
+    font-size:.87rem; font-weight:700; color:var(--text-primary);
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    display:flex; align-items:center; gap:.4rem;
+}
+.br-sub {
+    font-size:.75rem; color:var(--text-muted);
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+
+/* الميتا (اليمين) */
+.br-meta { display:flex; flex-direction:column; align-items:flex-end; gap:.2rem; flex-shrink:0; min-width:90px; }
+.br-amount { font-size:.88rem; font-weight:700; color:var(--text-primary); white-space:nowrap; }
+.br-amount.green { color:var(--accent-green); }
+.br-amount.red   { color:var(--accent-red); }
+.br-amount.blue  { color:var(--accent-blue); }
+.br-sub-meta { display:flex; flex-direction:column; align-items:flex-end; gap:.15rem; }
+.br-tag {
+    font-size:.72rem; color:var(--text-muted);
+    padding:.1rem .4rem; background:var(--bg-surface,var(--bg-secondary));
+    border-radius:5px; white-space:nowrap;
+}
+.br-badge {
+    font-size:.72rem; padding:.15rem .5rem; border-radius:6px; font-weight:600;
+}
+.br-badge.confirmed { background:rgba(105,219,124,.15); color:var(--accent-green); }
+.br-badge.pending   { background:rgba(255,169,77,.15);  color:var(--accent-orange); }
+
+/* مجموعة إحصائيات */
+.br-stat-group { display:flex; gap:.75rem; flex-shrink:0; }
+.br-stat { display:flex; flex-direction:column; align-items:center; gap:.1rem; }
+.br-stat span { font-size:.8rem; font-weight:700; color:var(--text-primary); }
+.br-stat.green span { color:var(--accent-green); }
+.br-stat small { font-size:.65rem; color:var(--text-muted); }
+
+/* اتجاه */
+.br-trend { font-size:.8rem; font-weight:800; flex-shrink:0; }
+.br-trend.up { color:var(--accent-green); }
+.br-trend.dn { color:var(--accent-red); }
+
+/* أزرار الصف */
+.br-actions { display:flex; gap:.3rem; flex-shrink:0; }
+.br-btn {
+    display:inline-flex; align-items:center; justify-content:center;
+    min-width:28px; height:28px; padding:0 .4rem;
+    border-radius:7px; border:1px solid var(--border-color);
+    background:var(--bg-card); cursor:pointer; font-size:.82rem;
+    white-space:nowrap; font-family:inherit; font-size:.78rem;
+    transition:all .18s; color:var(--text-secondary);
+}
+.br-btn:hover        { background:rgba(77,171,247,.1); border-color:var(--accent-blue); color:var(--accent-blue); }
+.br-btn.success      { background:rgba(105,219,124,.12); border-color:var(--accent-green); color:var(--accent-green); }
+.br-btn.success:hover{ background:var(--accent-green); color:#fff; }
+.br-btn.green        { background:var(--accent-green); color:#fff; border-color:var(--accent-green); }
+.br-btn.green:hover  { opacity:.85; }
+.br-btn.danger:hover { background:rgba(255,107,107,.12); border-color:var(--accent-red); color:var(--accent-red); }
+
+/* badge داخل العنوان */
+.br-inline-badge {
+    font-size:.68rem; padding:.1rem .4rem; border-radius:5px; font-weight:600;
+}
+.br-inline-badge.active   { background:rgba(105,219,124,.15); color:var(--accent-green); }
+.br-inline-badge.inactive { background:rgba(156,163,175,.15); color:#9ca3af; }
+
+.br-done-label { font-size:1rem; }
+
+/* empty */
+.bank-empty { padding:1.75rem; text-align:center; color:var(--text-muted); font-size:.85rem; }
+
+/* Responsive */
+@media (max-width:768px) {
+    .br-stat-group { display:none; }
+    .bank-summary-bar { gap:.25rem; }
+}
+@media (max-width:600px) {
+    .br-actions .br-btn:not(.success):not(.green) { display:none; }
+    .br-actions .br-btn:first-child { display:flex; }
+}

@@ -1,29 +1,14 @@
 /**
  * ╔══════════════════════════════════════════════════════════════╗
- * ║         app-dashboard.js — لوحة التحكم الرئيسية             ║
- * ║  يتطلب: app-common.js                                        ║
+ * ║         app-dashboard.js — لوحة التحكم الرئيسية v3          ║
  * ╚══════════════════════════════════════════════════════════════╝
- *
- * يحتوي هذا الملف على:
- *  • تحميل وعرض لوحة التحكم الرئيسية (loadDashboard)
- *  • بطاقات الإحصائيات والرسوم البيانية
- *  • تبويب الأداء: أداء الموظفين، سجل الأحداث، التحليلات
- *  • المعاملات العاجلة ومرشحاتها
- *  • الرسوم البيانية: خطي ودائري (renderLineChart, renderPieChart)
- *  • عرض إحصائيات المراسلات في لوحة التحكم
  */
 
 // ═══════════════════════════════════════════════════════════
 //  تحميل لوحة التحكم
 // ═══════════════════════════════════════════════════════════
-
-/**
- * تحميل لوحة التحكم الرئيسية
- * تجلب: الإحصائيات، بيانات الرسوم البيانية، المعاملات العاجلة
- */
 async function loadDashboard() {
     showLoading();
-
     try {
         const [statsRes, chartRes, urgentRes] = await Promise.all([
             fetch('api/?action=stats'),
@@ -46,494 +31,663 @@ async function loadDashboard() {
     }
 }
 
-// عرض لوحة التحكم
+// ═══════════════════════════════════════════════════════════
+//  عرض لوحة التحكم
+// ═══════════════════════════════════════════════════════════
 function renderDashboard(urgentTransactions) {
+    const s = App.stats || {};
+
     const html = `
-        <div class="dashboard-split">
-            <!-- القسم الأيمن: نظرة عامة + المعاملات العاجلة -->
-            <div class="dashboard-right">
-                <div class="urgent-section">
-                    <div class="urgent-header">
-                        <div class="urgent-title">
-                            <span class="urgent-icon">⚠️</span>
-                            <h3>المعاملات العاجلة</h3>
-                            <span class="urgent-count">${urgentTransactions.length}</span>
-                        </div>
-                        <div class="urgent-filters">
-                            <button class="urgent-filter-btn active" onclick="filterUrgent('all', this)">الكل</button>
-                            <button class="urgent-filter-btn" onclick="filterUrgent('عاجل', this)">🔴 عاجل</button>
-                            <button class="urgent-filter-btn" onclick="filterUrgent('متابعة', this)">⚠️ متابعة</button>
-                        </div>
-                    </div>
-                    <div class="urgent-table-container">
-                        ${urgentTransactions.length > 0 ? `
-                        <table class="urgent-table">
-                            <thead>
-                                <tr>
-                                    <th>الحالة</th>
-                                    <th>رقم المعاملة</th>
-                                    <th>الوصف</th>
-                                    <th>المبلغ</th>
-                                    <th></th>
-                                </tr>
-                            </thead>
-                            <tbody id="urgentTableBody">
-                                ${urgentTransactions.slice(0, 8).map(tx => `
-                                <tr class="urgent-row" data-type="${tx.alert_type || 'عاجل'}">
-                                    <td>
-                                        <span class="alert-badge alert-${tx.alert_type === 'عاجل' ? 'danger' : tx.alert_type === 'متابعة' ? 'warning' : 'info'}">
-                                            ${tx.alert_type === 'عاجل' ? '🔴' : tx.alert_type === 'متابعة' ? '⚠️' : '⏳'}
-                                        </span>
-                                    </td>
-                                    <td><span class="tx-number">${tx.transaction_number}</span></td>
-                                    <td><span class="tx-desc-text">${tx.description?.substring(0, 30) || ''}${tx.description?.length > 30 ? '...' : ''}</span></td>
-                                    <td><span class="tx-amount">${fmtMoney(tx.amount)}</span></td>
-                                    <td>
-                                        <button class="btn-action btn-view" onclick="viewTransaction(${tx.id})" title="عرض">
-                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                                                <circle cx="12" cy="12" r="3"></circle>
-                                            </svg>
-                                        </button>
-                                    </td>
-                                </tr>
-                                `).join('')}
-                            </tbody>
-                        </table>
-                        ${urgentTransactions.length > 8 ? `<div class="urgent-more">و ${urgentTransactions.length - 8} معاملات أخرى...</div>` : ''}
-                        ` : `
-                        <div class="urgent-empty">
-                            <div class="empty-icon">✅</div>
-                            <h4>لا توجد معاملات عاجلة</h4>
-                            <p>جميع المعاملات تسير بشكل طبيعي</p>
-                        </div>
-                        `}
-                    </div>
+    <div class="dash-wrapper">
+
+        <!-- ══ شريط الترحيب ══ -->
+        <div class="dash-topbar">
+            <div class="dash-greeting">
+                <span class="dash-greeting-icon">${getGreetingIcon()}</span>
+                <div>
+                    <h2 class="dash-greeting-text">${getGreeting()}، ${(currentUser?.name || 'المستخدم').split(' ')[0]}</h2>
+                    <p class="dash-greeting-sub">${new Date().toLocaleDateString('ar-SA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
                 </div>
-                <div class="stats-overview-card">
-                    <div class="stats-header">
-                        <h3>📊 نظرة عامة على النظام</h3>
-                        <span class="stats-date">${new Date().toLocaleDateString('ar-SA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
-                    </div>
-                    <div class="stats-content">
-                        <div class="stat-item">
-                            <div class="stat-icon-sm blue">
-                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                                    <polyline points="14 2 14 8 20 8"></polyline>
-                                    <line x1="16" y1="13" x2="8" y2="13"></line>
-                                    <line x1="16" y1="17" x2="8" y2="17"></line>
-                                </svg>
-                            </div>
-                            <div class="stat-details">
-                                <span class="stat-number">${App.stats.total || 0}</span>
-                                <span class="stat-text">إجمالي المعاملات</span>
-                            </div>
-                        </div>
-                        <div class="stat-divider"></div>
-                        <div class="stat-item">
-                            <div class="stat-icon-sm green">
-                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-                                    <polyline points="22 4 12 14.01 9 11.01"></polyline>
-                                </svg>
-                            </div>
-                            <div class="stat-details">
-                                <span class="stat-number">${App.stats.paid || 0}</span>
-                                <span class="stat-text">المكتملة</span>
-                            </div>
-                        </div>
-                        <div class="stat-divider"></div>
-                        <div class="stat-item">
-                            <div class="stat-icon-sm orange">
-                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <circle cx="12" cy="12" r="10"></circle>
-                                    <line x1="12" y1="8" x2="12" y2="12"></line>
-                                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
-                                </svg>
-                            </div>
-                            <div class="stat-details">
-                                <span class="stat-number urgent">${App.stats.urgent || 0}</span>
-                                <span class="stat-text">تحتاج متابعة</span>
-                            </div>
-                        </div>
-                        <div class="stat-divider"></div>
-                        <div class="stat-item">
-                            <div class="stat-icon-sm purple">
-                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <line x1="12" y1="1" x2="12" y2="23"></line>
-                                    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
-                                </svg>
-                            </div>
-                            <div class="stat-details">
-                                <span class="stat-number">${fmtMoney(App.stats.total_amount || 0)}</span>
-                                <span class="stat-text">إجمالي المبالغ</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                
             </div>
-            
-            <!-- القسم الأيسر: متابعة الأداء -->
-            <div class="dashboard-left">
-                <div class="performance-dashboard-section">
-                    <div class="perf-dash-header">
-                        <div class="perf-dash-title">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <circle cx="12" cy="12" r="10"></circle>
-                                <polyline points="12 6 12 12 16 14"></polyline>
-                            </svg>
-                            <h3>متابعة الأداء</h3>
-                        </div>
-                        <div class="perf-dash-tabs">
-                            <button class="perf-dash-tab active" onclick="switchDashPerfTab('employees', this)">الموظفين</button>
-                            <button class="perf-dash-tab" onclick="switchDashPerfTab('events', this)">الأحداث</button>
-                        </div>
-                    </div>
-                    
-                    <!-- قسم الموظفين -->
-                    <div id="dashPerfEmployees" class="perf-dash-content active">
-                        <div id="dashEmployeeCards" class="dash-employee-cards">
-                            <div class="loading-placeholder">جاري التحميل...</div>
-                        </div>
-                    </div>
-                    
-                    <!-- قسم الأحداث -->
-                    <div id="dashPerfEvents" class="perf-dash-content">
-                        <div id="dashEventsTimeline" class="dash-events-timeline">
-                            <div class="loading-placeholder">جاري التحميل...</div>
-                        </div>
-                    </div>
+            <div class="dash-quick-actions">
+          
+                <button class="dash-qa-btn secondary" onclick="loadDashboard()">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                    تحديث
+                </button>
+            </div>
+        </div>
+
+        <!-- ══ KPI Cards ══ -->
+        <div class="dash-kpi-grid">
+            <div class="dash-kpi-card blue" onclick="switchTab('transactions')">
+                <div class="dash-kpi-icon">📄</div>
+                <div class="dash-kpi-body">
+                    <span class="dash-kpi-value">${s.total || 0}</span>
+                    <span class="dash-kpi-label">إجمالي المعاملات</span>
+                </div>
+            </div>
+            <div class="dash-kpi-card green" onclick="switchTab('transactions')">
+                <div class="dash-kpi-icon">✅</div>
+                <div class="dash-kpi-body">
+                    <span class="dash-kpi-value">${s.paid || 0}</span>
+                    <span class="dash-kpi-label">معاملات مكتملة</span>
+                </div>
+            </div>
+            <div class="dash-kpi-card orange" onclick="switchTab('transactions')">
+                <div class="dash-kpi-icon">⚠️</div>
+                <div class="dash-kpi-body">
+                    <span class="dash-kpi-value" style="color:var(--accent-red)">${s.urgent || 0}</span>
+                    <span class="dash-kpi-label">تحتاج متابعة</span>
+                </div>
+                ${(s.urgent || 0) > 0 ? '<div class="dash-kpi-pulse"></div>' : ''}
+            </div>
+            <div class="dash-kpi-card purple">
+                <div class="dash-kpi-icon">💰</div>
+                <div class="dash-kpi-body">
+                    <span class="dash-kpi-value" style="font-size:1.05rem">${fmtMoney(s.total_amount || 0)}</span>
+                    <span class="dash-kpi-label">إجمالي المبالغ</span>
                 </div>
             </div>
         </div>
-    `;
+
+        <!-- ══ الصف الرئيسي: عاجلة + نظرة عامة ══ -->
+        <div class="dash-main-grid">
+
+            <!-- المعاملات العاجلة - صفوف -->
+            <div class="dash-panel">
+                <div class="dash-panel-header">
+                    <div class="dash-panel-title">
+                        <span>⚠️</span>
+                        <h3>المعاملات العاجلة</h3>
+                        <span class="panel-badge red">${urgentTransactions.length}</span>
+                    </div>
+                    <div class="urgent-filters">
+                        <button class="uf-btn active" onclick="filterUrgent('all',this)">الكل</button>
+                        <button class="uf-btn" onclick="filterUrgent('عاجل',this)">🔴 عاجل</button>
+                        <button class="uf-btn" onclick="filterUrgent('مهم',this)">🟠 مهم</button>
+                        <button class="uf-btn" onclick="filterUrgent('متابعة',this)">⚠️ متابعة</button>
+                    </div>
+                </div>
+                <div class="dash-rows-container">
+                    ${urgentTransactions.length > 0 ? renderUrgentRows(urgentTransactions) : `
+                    <div class="dash-empty"><div class="dash-empty-icon">✅</div><h4>لا توجد معاملات عاجلة</h4><p>جميع المعاملات تسير بشكل طبيعي</p></div>`}
+                </div>
+            </div>
+
+            <!-- نظرة عامة - صفوف -->
+            <div class="dash-panel">
+                <div class="dash-panel-header">
+                    <div class="dash-panel-title">
+                        <span>📊</span>
+                        <h3>نظرة عامة على النظام</h3>
+                    </div>
+                </div>
+                <div class="dash-rows-container" id="overviewRowsContainer">
+                    ${renderSystemRows(s)}
+                </div>
+            </div>
+        </div>
+
+        <!-- ══ الصف الثاني: معدل الإنجاز + رصيد البنوك ══ -->
+        <div class="dash-mid-grid">
+
+            <!-- معدل ساعات الإنجاز -->
+            <div class="dash-panel">
+                <div class="dash-panel-header">
+                    <div class="dash-panel-title">
+                        <span>⏱️</span>
+                        <h3>معدل ساعات إنجاز المعاملات</h3>
+                    </div>
+                </div>
+                <div id="avgTimeContainer" class="dash-rows-container">
+                    <div class="dash-loading-row">جاري التحميل...</div>
+                </div>
+            </div>
+
+            <!-- الرصيد البنكي اليوم -->
+            <div class="dash-panel">
+                <div class="dash-panel-header">
+                    <div class="dash-panel-title">
+                        <span>🏦</span>
+                        <h3>الرصيد البنكي — اليوم</h3>
+                    </div>
+                    <button class="dash-panel-link" onclick="switchTab('bank-deposits')">
+                        عرض الكل <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+                    </button>
+                </div>
+                <div id="bankBalanceContainer" class="dash-rows-container">
+                    <div class="dash-loading-row">جاري التحميل...</div>
+                </div>
+            </div>
+            <!-- ══ ملخص الودائع الاستثمارية ══ -->
+            <div class="dash-panel">
+                <div class="dash-panel-header">
+                    <div class="dash-panel-title">
+                        <span>💎</span>
+                        <h3>الودائع الاستثمارية — هذا الشهر</h3>
+                        <span class="panel-badge" id="invDashBadge" style="display:none;background:var(--accent-red)">!</span>
+                    </div>
+                    <button class="dash-panel-link" onclick="switchTab('bank-deposits')">
+                        عرض الكل <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+                    </button>
+                </div>
+                <div id="investmentsSummaryContainer" class="dash-rows-container">
+                    <div class="dash-loading-row">جاري التحميل...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ══ الصف الثالث: الحجوزات + الأحداث ══ -->
+        <div class="dash-bottom-grid">
+
+            <!-- آخر الحجوزات -->
+            <div class="dash-panel">
+                <div class="dash-panel-header">
+                    <div class="dash-panel-title">
+                        <span>📋</span>
+                        <h3>آخر الحجوزات</h3>
+                    </div>
+                    <button class="dash-panel-link" onclick="switchTab('reservations')">
+                        عرض الكل <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+                    </button>
+                </div>
+                <div id="reservationsContainer" class="dash-rows-container">
+                    <div class="dash-loading-row">جاري التحميل...</div>
+                </div>
+            </div>
+
+            <!-- آخر الأحداث -->
+            <div class="dash-panel">
+                <div class="dash-panel-header">
+                    <div class="dash-panel-title">
+                        <span>🕐</span>
+                        <h3>آخر الأحداث</h3>
+                        <span class="panel-badge blue" id="eventsCountBadge">...</span>
+                    </div>
+                    <button class="dash-panel-link" onclick="switchTab('performance')">
+                        عرض الكل <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+                    </button>
+                </div>
+                <div id="dashEventsTimeline" class="dash-rows-container">
+                    <div class="dash-loading-row">جاري التحميل...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ══ الرسم البياني ══ -->
+        <div class="dash-panel">
+            <div class="dash-panel-header">
+                <div class="dash-panel-title">
+                    <span>📈</span>
+                    <h3>معاملات آخر 6 أشهر</h3>
+                </div>
+            </div>
+            <div style="padding:1rem 1.25rem 1.25rem;height:220px">
+                <canvas id="dashLineChart"></canvas>
+            </div>
+        </div>
+
+    </div>`;
 
     DOM.mainContent.innerHTML = html;
 
-    // تحميل بيانات الأداء
-    loadDashboardPerformance();
-
     if (DOM.notificationBadge) {
-        DOM.notificationBadge.textContent = App.stats.urgent || 0;
-        DOM.notificationBadge.style.display = App.stats.urgent > 0 ? 'flex' : 'none';
+        DOM.notificationBadge.textContent = s.urgent || 0;
+        DOM.notificationBadge.style.display = (s.urgent || 0) > 0 ? 'flex' : 'none';
+    }
+
+    loadDashboardEvents();
+    loadBankBalances();
+    loadAvgCompletionTime();
+    loadRecentReservations();
+    renderDashboardChart();
+    loadInvestmentsSummary();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  المعاملات العاجلة — صفوف
+// ═══════════════════════════════════════════════════════════
+function renderUrgentRows(transactions) {
+    return transactions.slice(0, 8).map(tx => {
+        const priority = tx.effective_priority || tx.alert_type || 'متابعة';
+        let dot = '#ffa94d', icon = '⚠️';
+        if (priority === 'عاجل') { dot = '#ff6b6b'; icon = '🔴'; }
+        else if (priority === 'مهم') { dot = '#f59e0b'; icon = '🟠'; }
+
+        return `
+        <div class="dash-row urgent-row" data-priority="${priority}">
+            <div class="dash-row-indicator" style="background:${dot}"></div>
+            <div class="dash-row-icon">${icon}</div>
+            <div class="dash-row-main">
+                <span class="dash-row-title">${tx.transaction_number}</span>
+                <span class="dash-row-sub">${(tx.description || '').substring(0, 40)}${(tx.description || '').length > 40 ? '...' : ''}</span>
+            </div>
+            <div class="dash-row-meta">
+                <span class="dash-row-amount">${fmtMoney(tx.amount)}</span>
+                ${tx.priority_set_by_name ? `<span class="dash-row-tag">📌 ${tx.priority_set_by_name}</span>` : ''}
+            </div>
+            <div class="dash-row-actions">
+                <button class="dr-btn" onclick="viewTransaction(${tx.id})" title="عرض">👁</button>
+                <button class="dr-btn" onclick="showSetPriorityModal(${tx.id},'${tx.transaction_number}')" title="تحديد أولوية">⭐</button>
+            </div>
+        </div>`;
+    }).join('') + (transactions.length > 8 ? `
+        <div class="dash-row-more" onclick="switchTab('transactions')">+ ${transactions.length - 8} معاملات أخرى — عرض الكل</div>` : '');
+}
+
+// ═══════════════════════════════════════════════════════════
+//  نظرة عامة — صفوف
+// ═══════════════════════════════════════════════════════════
+function renderSystemRows(s) {
+    const rows = [
+        { icon: '💼', name: 'المعاملات المالية', tab: 'transactions', cols: [{ v: s.total || 0, l: 'الكل' }, { v: s.paid || 0, l: 'مكتملة', c: 'green' }, { v: s.pending || 0, l: 'معلقة', c: 'orange' }, { v: s.urgent || 0, l: 'عاجلة', c: 'red' }] },
+        { icon: '📥', name: 'قسم الاستلام', tab: 'transactions', cols: [{ v: s.received || 0, l: 'مستلمة', c: 'green' }, { v: Math.max(0, (s.total || 0) - (s.received || 0)), l: 'انتظار', c: 'orange' }] },
+        { icon: '💰', name: 'قسم الموازنة', tab: 'transactions', cols: [{ v: s.total || 0, l: 'إجمالي' }, { v: fmtMoney(s.total_amount || 0), l: 'المبالغ' }] },
+        { icon: '💳', name: 'قسم الدفع', tab: 'transactions', cols: [{ v: s.paid || 0, l: 'مدفوع', c: 'green' }, { v: s.pending || 0, l: 'معلق', c: 'orange' }, { v: fmtMoney(s.paid_amount || 0), l: 'المدفوعات' }] },
+        { icon: '🧾', name: 'قسم الفوترة', tab: 'transactions', cols: [{ v: s.invoiced || 0, l: 'مفوترة', c: 'green' }, { v: Math.max(0, (s.total || 0) - (s.invoiced || 0)), l: 'قيد الإجراء', c: 'orange' }] },
+        { icon: '📨', name: 'الخطابات والمراسلات', tab: 'correspondence', cols: [], id: 'corrRowCols' },
+        { icon: '🏦', name: 'الودائع البنكية', tab: 'bank-deposits', cols: [], id: 'bankRowCols' },
+        { icon: '📑', name: 'الحجوزات', tab: 'reservations', cols: [], id: 'resRowCols' },
+        { icon: '⏱️', name: 'نظام SLA', tab: 'sla', cols: [] },
+    ];
+
+    return rows.map(r => `
+    <div class="dash-row system-row" onclick="switchTab('${r.tab}')">
+        <div class="dash-row-icon">${r.icon}</div>
+        <div class="dash-row-main">
+            <span class="dash-row-title">${r.name}</span>
+        </div>
+        <div class="dash-row-cols" ${r.id ? `id="${r.id}"` : ''}">
+            ${r.cols.map(c => `<div class="dash-col-stat"><span class="dcs-val ${c.c || ''}">${c.v}</span><span class="dcs-lbl">${c.l}</span></div>`).join('')}
+            ${!r.cols.length && !r.id ? '<span class="dash-row-tag">اضغط للعرض</span>' : ''}
+        </div>
+        <svg class="dash-row-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+    </div>`).join('');
+}
+
+// ═══════════════════════════════════════════════════════════
+//  الرصيد البنكي
+// ═══════════════════════════════════════════════════════════
+async function loadBankBalances() {
+    const container = document.getElementById('bankBalanceContainer');
+    if (!container) return;
+    try {
+        const res = await fetch('api/?action=bank_accounts');
+        const result = await res.json();
+        if (!result.success || !result.data?.length) {
+            container.innerHTML = '<div class="dash-empty-sm">لا توجد حسابات بنكية</div>';
+            return;
+        }
+        let totalBalance = 0;
+        let html = result.data.map(acc => {
+            const bal = parseFloat(acc.current_balance || 0);
+            totalBalance += bal;
+            const trend = bal >= parseFloat(acc.initial_balance || 0) ? 'up' : 'down';
+            return `
+            <div class="dash-row bank-row" onclick="switchTab('bank-deposits')">
+                <div class="dash-row-icon">🏦</div>
+                <div class="dash-row-main">
+                    <span class="dash-row-title">${acc.account_name}</span>
+                    <span class="dash-row-sub">${acc.bank_name} • ${acc.account_number || ''}</span>
+                </div>
+                <div class="dash-row-meta">
+                    <span class="dash-row-amount ">${fmtMoney(bal)}</span>
+                    <span class="dash-row-tag">${acc.currency || 'SAR'}</span>
+                </div>
+            </div>`;
+        }).join('');
+
+        html += `
+        <div class="dash-row total-row">
+            <div class="dash-row-icon">💰</div>
+            <div class="dash-row-main"><span class="dash-row-title" style="font-weight:800">إجمالي الأرصدة</span></div>
+            <div class="dash-row-meta"><span class="dash-row-amount" style="font-size:1.05rem;font-weight:800">${fmtMoney(totalBalance)}</span></div>
+        </div>`;
+
+        container.innerHTML = html;
+
+        const bankCols = document.getElementById('bankRowCols');
+        if (bankCols) bankCols.innerHTML = `
+            <div class="dash-col-stat"><span class="dcs-val">${result.data.length}</span><span class="dcs-lbl">حساب</span></div>
+            <div class="dash-col-stat"><span class="dcs-val green">${fmtMoney(totalBalance)}</span><span class="dcs-lbl">الإجمالي</span></div>`;
+
+    } catch (e) {
+        if (container) container.innerHTML = '<div class="dash-empty-sm">خطأ في تحميل الأرصدة</div>';
     }
 }
 
-// تبديل تبويبات الأداء في لوحة التحكم
-function switchDashPerfTab(tab, btn) {
-    document.querySelectorAll('.perf-dash-tab').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.perf-dash-content').forEach(c => c.classList.remove('active'));
-
-    btn.classList.add('active');
-
-    if (tab === 'employees') {
-        document.getElementById('dashPerfEmployees').classList.add('active');
-    } else {
-        document.getElementById('dashPerfEvents').classList.add('active');
-        loadDashboardEvents();
-    }
-}
-
-// تحميل بيانات الأداء في لوحة التحكم
-async function loadDashboardPerformance() {
+// ═══════════════════════════════════════════════════════════
+//  معدل ساعات الإنجاز
+// ═══════════════════════════════════════════════════════════
+async function loadAvgCompletionTime() {
+    const container = document.getElementById('avgTimeContainer');
+    if (!container) return;
     try {
         const res = await fetch('api/?action=performance_summary');
         const result = await res.json();
-
-        if (result.success) {
-            renderDashboardEmployees(result.data);
+        if (!result.success || !result.data?.length) {
+            container.innerHTML = '<div class="dash-empty-sm">لا توجد بيانات أداء بعد</div>';
+            return;
         }
-    } catch (e) {
-        console.error('Error loading performance:', e);
-    }
 
-
-    // إضافة إحصائيات الخطابات
-    fetch('api/correspondence_api.php?action=stats')
-        .then(res => res.json())
-        .then(data => {
-            if (data.success) {
-                displayCorrespondenceStatsInDashboard(data.data);
-            }
+        const stageMap = {};
+        result.data.forEach(row => {
+            const stage = row.stage || 'unknown';
+            if (!stageMap[stage]) stageMap[stage] = { count: 0, sum: 0 };
+            const cnt = parseInt(row.total_transactions) || 0;
+            const avg = parseFloat(row.avg_duration) || 0;
+            stageMap[stage].count += cnt;
+            stageMap[stage].sum += avg * cnt;
         });
-}
 
-function displayCorrespondenceStatsInDashboard(stats) {
-    // إضافة قسم جديد في لوحة التحكم
-    const corrSection = `
-        <div class="dashboard-section">
-            <h3>📨 الخطابات والمراسلات</h3>
-            <div class="mini-stats">
-                <div class="mini-stat">
-                    <span class="mini-stat-value">${stats.total}</span>
-                    <span class="mini-stat-label">إجمالي الخطابات</span>
-                </div>
-                <div class="mini-stat">
-                    <span class="mini-stat-value">${stats.pending}</span>
-                    <span class="mini-stat-label">قيد المعالجة</span>
-                </div>
-                <div class="mini-stat">
-                    <span class="mini-stat-value">${stats.urgent}</span>
-                    <span class="mini-stat-label">عاجلة</span>
-                </div>
+        const stageNames = {
+            creation: { n: 'الإنشاء', i: '➕', c: '#4dabf7' },
+            receiving: { n: 'الاستلام', i: '📥', c: '#69db7c' },
+            budget: { n: 'الموازنة', i: '💰', c: '#3bc9db' },
+            payment: { n: 'الدفع', i: '💳', c: '#ffa94d' },
+            invoice: { n: 'الفوترة', i: '🧾', c: '#b197fc' },
+        };
+
+        let totalMin = 0, totalCount = 0;
+        Object.values(stageMap).forEach(v => { totalMin += v.sum; totalCount += v.count; });
+        const overallAvg = totalCount > 0 ? totalMin / totalCount : 0;
+
+        let html = `
+        <div class="dash-row avg-summary-row">
+            <div class="dash-row-icon">📊</div>
+            <div class="dash-row-main">
+                <span class="dash-row-title">متوسط إنجاز المعاملة</span>
+                <span class="dash-row-sub">${totalCount} معاملة محللة</span>
             </div>
-        </div>
-    `;
-
-    // إدراجه في المكان المناسب
-}
-// عرض بطاقات الموظفين في لوحة التحكم
-function renderDashboardEmployees(data) {
-    const container = document.getElementById('dashEmployeeCards');
-    if (!container) return;
-
-    // تجميع البيانات حسب الموظف
-    const employeeStats = {};
-    data.forEach(item => {
-        if (!employeeStats[item.employee_id]) {
-            employeeStats[item.employee_id] = {
-                name: item.employee_name,
-                role: item.employee_role,
-                total: 0,
-                totalDuration: 0
-            };
-        }
-        employeeStats[item.employee_id].total += parseInt(item.total_transactions) || 0;
-        employeeStats[item.employee_id].totalDuration += parseInt(item.total_duration) || 0;
-    });
-
-    const roleColors = {
-        'admin': '#667eea',
-        'receiver': '#69db7c',
-        'budget': '#3bc9db',
-        'payment': '#ffa94d',
-        'invoice': '#b197fc'
-    };
-
-    const roleNames = {
-        'admin': 'مدير',
-        'receiver': 'استلام',
-        'budget': 'موازنة',
-        'payment': 'دفع',
-        'invoice': 'فوترة'
-    };
-
-    let html = '';
-
-    Object.values(employeeStats).forEach(emp => {
-        const avgTime = emp.total > 0 ? Math.round(emp.totalDuration / emp.total) : 0;
-        const color = roleColors[emp.role] || '#667eea';
-        const roleName = roleNames[emp.role] || emp.role;
-
-        html += `
-        <div class="dash-emp-card">
-            <div class="dash-emp-avatar" style="background: ${color}20; color: ${color};">
-                ${emp.name ? emp.name.charAt(0) : '؟'}
-            </div>
-            <div class="dash-emp-info">
-                <span class="dash-emp-name">${emp.name}</span>
-                <span class="dash-emp-role" style="color: ${color};">${roleName}</span>
-            </div>
-            <div class="dash-emp-stats">
-                <span class="dash-emp-count">${emp.total}</span>
-                <span class="dash-emp-time">${avgTime > 0 ? avgTime + ' د' : '-'}</span>
+            <div class="dash-row-meta">
+                <span class="dash-row-amount">${formatMinutes(overallAvg)}</span>
             </div>
         </div>`;
-    });
 
-    if (Object.keys(employeeStats).length === 0) {
-        html = '<div class="empty-placeholder">لا توجد بيانات</div>';
+        Object.entries(stageNames).forEach(([key, info]) => {
+            const data = stageMap[key];
+            if (!data || data.count === 0) return;
+            const avg = data.sum / data.count;
+            const pct = overallAvg > 0 ? Math.min(100, (avg / overallAvg) * 100) : 50;
+
+            html += `
+            <div class="dash-row perf-row">
+                <div class="dash-row-icon" style="color:${info.c}">${info.i}</div>
+                <div class="dash-row-main">
+                    <span class="dash-row-title">${info.n}</span>
+                    <div class="perf-bar-wrap"><div class="perf-bar" style="width:${pct}%;background:${info.c}"></div></div>
+                </div>
+                <div class="dash-row-meta">
+                    <span class="dash-row-amount">${formatMinutes(avg)}</span>
+                    <span class="dash-row-tag">${data.count} معاملة</span>
+                </div>
+            </div>`;
+        });
+
+        container.innerHTML = html;
+    } catch (e) {
+        if (container) container.innerHTML = '<div class="dash-empty-sm">خطأ في تحميل بيانات الأداء</div>';
     }
-
-    container.innerHTML = html;
 }
 
-// تحميل أحداث لوحة التحكم
+// ═══════════════════════════════════════════════════════════
+//  آخر الحجوزات
+// ═══════════════════════════════════════════════════════════
+async function loadRecentReservations() {
+    const container = document.getElementById('reservationsContainer');
+    if (!container) return;
+    try {
+        const res = await fetch('api/budget.php?action=list');
+        const result = await res.json();
+        if (!result.success || !result.data?.length) {
+            container.innerHTML = '<div class="dash-empty-sm">لا توجد حجوزات حديثة</div>';
+            return;
+        }
+
+        const allData = result.data;
+        const approved = allData.filter(r => r.status === 'معتمد').length;
+        const pending = allData.filter(r => r.status === 'قيد المراجعة').length;
+        const totalAmt = allData.reduce((s, r) => s + parseFloat(r.grand_total || 0), 0);
+
+        const statusColors = {
+            'مسودة': '#9ca3af', 'قيد المراجعة': '#ffa94d',
+            'معتمد': '#69db7c', 'مرفوض': '#ff6b6b', 'مكتمل': '#4dabf7',
+        };
+
+        let html = `
+        <div class="dash-row res-summary-row">
+            <div class="dash-row-icon">📊</div>
+            <div class="dash-row-main"><span class="dash-row-title">إجمالي الحجوزات</span></div>
+            <div class="dash-row-cols">
+                <div class="dash-col-stat"><span class="dcs-val">${allData.length}</span><span class="dcs-lbl">الكل</span></div>
+                <div class="dash-col-stat"><span class="dcs-val green">${approved}</span><span class="dcs-lbl">معتمد</span></div>
+                <div class="dash-col-stat"><span class="dcs-val orange">${pending}</span><span class="dcs-lbl">انتظار</span></div>
+                <div class="dash-col-stat"><span class="dcs-val">${fmtMoney(totalAmt)}</span><span class="dcs-lbl">إجمالي</span></div>
+            </div>
+        </div>`;
+
+        html += allData.slice(0, 3).map(r => {
+            const color = statusColors[r.status] || '#9ca3af';
+            return `
+            <div class="dash-row res-row" onclick="switchTab('reservations')">
+                <div class="dash-row-indicator" style="background:${color}"></div>
+                <div class="dash-row-icon">📋</div>
+                <div class="dash-row-main">
+                    <span class="dash-row-title">${r.reservation_number || r.purpose || 'حجز'}</span>
+                    <span class="dash-row-sub">${r.department_name || ''}${r.requested_by_name ? ' • ' + r.requested_by_name : ''}</span>
+                </div>
+                <div class="dash-row-meta">
+                    <span class="dash-row-amount">${fmtMoney(parseFloat(r.grand_total || 0))}</span>
+                    <span class="dash-row-tag" style="color:${color}">${r.status}</span>
+                </div>
+            </div>`;
+        }).join('');
+
+        container.innerHTML = html;
+
+        const resCols = document.getElementById('resRowCols');
+        if (resCols) resCols.innerHTML = `
+            <div class="dash-col-stat"><span class="dcs-val">${allData.length}</span><span class="dcs-lbl">الكل</span></div>
+            <div class="dash-col-stat"><span class="dcs-val green">${approved}</span><span class="dcs-lbl">معتمد</span></div>
+            <div class="dash-col-stat"><span class="dcs-val orange">${pending}</span><span class="dcs-lbl">انتظار</span></div>`;
+
+    } catch (e) {
+        if (container) container.innerHTML = '<div class="dash-empty-sm">خطأ في تحميل الحجوزات</div>';
+    }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  آخر الأحداث
+// ═══════════════════════════════════════════════════════════
 async function loadDashboardEvents() {
     const container = document.getElementById('dashEventsTimeline');
     if (!container) return;
-
-    container.innerHTML = '<div class="loading-placeholder">جاري التحميل...</div>';
-
     try {
-        const res = await fetch('api/?action=all_events&limit=15');
+        const res = await fetch('api/?action=all_events&limit=8');
         const result = await res.json();
-
-        if (result.success && result.data && result.data.length > 0) {
-            const stageInfo = {
-                'creation': { name: 'إنشاء', color: '#4dabf7', icon: '➕' },
-                'receiving': { name: 'استلام', color: '#69db7c', icon: '📥' },
-                'budget': { name: 'موازنة', color: '#3bc9db', icon: '💰' },
-                'payment': { name: 'دفع', color: '#ffa94d', icon: '💳' },
-                'invoice': { name: 'فوترة', color: '#b197fc', icon: '🧾' }
-            };
-
-            let html = '<div class="dash-timeline">';
-
-            result.data.forEach(event => {
-                const info = stageInfo[event.stage] || { name: event.stage, color: '#888', icon: '📋' };
-                const duration = event.duration_from_previous;
-
-                html += `
-                <div class="dash-event-item">
-                    <div class="dash-event-icon" style="background: ${info.color}20; color: ${info.color};">${info.icon}</div>
-                    <div class="dash-event-content">
-                        <div class="dash-event-header">
-                            <span class="dash-event-tx">${event.transaction_number || '-'}</span>
-                            <span class="dash-event-tx">${event.transaction_date || '-'}</span>
-                            <span class="dash-event-stage" style="color: ${info.color};">${info.name}</span>
-                        </div>
-                        <div class="dash-event-status">
-                            ${event.old_status ? `<span class="old">${event.old_status}</span> ← ` : ''}
-                            <span class="new">${event.new_status || '-'}</span>
-                            ${duration > 0 ? `<span class="duration">${formatDuration(duration)} </span>` : ''}
-                        </div>
-                        <div class="dash-event-footer">
-                            <span>${event.employee_name || 'النظام'}</span>
-                            <span>${formatTimeAgo(event.event_time)}</span>
-                        </div>
-                    </div>
-                </div>`;
-            });
-
-            html += '</div>';
-            container.innerHTML = html;
-        } else {
-            container.innerHTML = '<div class="empty-placeholder">لا توجد أحداث</div>';
+        if (!result.success || !result.data?.length) {
+            container.innerHTML = '<div class="dash-empty-sm">لا توجد أحداث</div>';
+            return;
         }
+        const badge = document.getElementById('eventsCountBadge');
+        if (badge) badge.textContent = result.data.length;
+
+        const si = {
+            creation: { n: 'إنشاء', c: '#4dabf7', i: '➕' },
+            receiving: { n: 'استلام', c: '#69db7c', i: '📥' },
+            budget: { n: 'موازنة', c: '#3bc9db', i: '💰' },
+            payment: { n: 'دفع', c: '#ffa94d', i: '💳' },
+            invoice: { n: 'فوترة', c: '#b197fc', i: '🧾' },
+        };
+
+        container.innerHTML = result.data.map(e => {
+            const info = si[e.stage] || { n: e.stage, c: '#888', i: '📋' };
+            return `
+            <div class="dash-row event-row">
+                <div class="dash-row-icon" style="color:${info.c}">${info.i}</div>
+                <div class="dash-row-main">
+                    <span class="dash-row-title">${e.transaction_number || '-'}</span>
+                    <span class="dash-row-sub">${e.old_status ? `<s style="color:var(--text-muted)">${e.old_status}</s> → ` : ''}<strong>${e.new_status || e.action || ''}</strong></span>
+                </div>
+                <div class="dash-row-meta">
+                    <span class="dash-row-tag" style="background:${info.c}18;color:${info.c}">${info.n}</span>
+                    <span class="dash-row-time">${formatTimeAgo(e.event_time)}</span>
+                </div>
+            </div>`;
+        }).join('');
+
+        loadCorrStats();
     } catch (e) {
-        container.innerHTML = '<div class="empty-placeholder">خطأ في التحميل</div>';
+        if (container) container.innerHTML = '<div class="dash-empty-sm">خطأ في التحميل</div>';
     }
 }
 
-function formatDuration(minutes) {
-    if (!minutes || minutes <= 0) return 'الآن';
-
-    const days = Math.floor(minutes / 1440);
-    const hours = Math.floor((minutes % 1440) / 60);
-    const mins = minutes % 60;
-
-    let parts = [];
-
-    if (days > 0) parts.push(`${days} يوم`);
-    if (hours > 0) parts.push(`${hours} ساعة`);
-    if (mins > 0 && days === 0) parts.push(`${mins} دقيقة`);
-
-    return 'منذ ' + parts.join(' و ');
+async function loadCorrStats() {
+    try {
+        const res = await fetch('api/correspondence_api.php?action=stats');
+        const r = await res.json();
+        if (!r.success) return;
+        const el = document.getElementById('corrRowCols');
+        if (el) el.innerHTML = `
+            <div class="dash-col-stat"><span class="dcs-val">${r.data.total || 0}</span><span class="dcs-lbl">الكل</span></div>
+            <div class="dash-col-stat"><span class="dcs-val orange">${r.data.pending || 0}</span><span class="dcs-lbl">معالجة</span></div>
+            <div class="dash-col-stat"><span class="dcs-val red">${r.data.urgent || 0}</span><span class="dcs-lbl">عاجلة</span></div>`;
+    } catch (e) { }
 }
 
+// ═══════════════════════════════════════════════════════════
+//  الرسم البياني
+// ═══════════════════════════════════════════════════════════
+function renderDashboardChart() {
+    const data = App.chartData || [];
+    const canvas = document.getElementById('dashLineChart');
+    if (!canvas || !data.length) return;
+    const ctx = canvas.getContext('2d');
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    const tc = isDark ? '#9ca3af' : '#6b7280';
+    const gc = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)';
+    if (window._dashChart) window._dashChart.destroy();
+    window._dashChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: data.map(d => d.month),
+            datasets: [{ label: 'المعاملات', data: data.map(d => d.count), borderColor: '#667eea', backgroundColor: 'rgba(102,126,234,0.1)', borderWidth: 2.5, pointBackgroundColor: '#667eea', pointRadius: 5, pointHoverRadius: 7, fill: true, tension: 0.4 }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: false }, tooltip: { backgroundColor: isDark ? '#1f2937' : '#fff', titleColor: isDark ? '#f9fafb' : '#111', bodyColor: isDark ? '#d1d5db' : '#374151', borderColor: isDark ? '#374151' : '#e5e7eb', borderWidth: 1, padding: 10, cornerRadius: 8 } },
+            scales: { x: { grid: { color: gc }, ticks: { color: tc, font: { size: 11 } } }, y: { beginAtZero: true, grid: { color: gc }, ticks: { color: tc, stepSize: 1, font: { size: 11 } } } }
+        }
+    });
+}
 
-// تنسيق الوقت النسبي
+// ═══════════════════════════════════════════════════════════
+//  فلترة العاجلة
+// ═══════════════════════════════════════════════════════════
+function filterUrgent(type, btn) {
+    document.querySelectorAll('.uf-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.urgent-row').forEach(row => {
+        row.style.display = (type === 'all' || row.dataset.priority === type) ? '' : 'none';
+    });
+}
+
+// ═══════════════════════════════════════════════════════════
+//  نافذة تحديد الأولوية
+// ═══════════════════════════════════════════════════════════
+function showSetPriorityModal(txId, txNumber) {
+    DOM.modalTitle.textContent = `📌 تحديد أولوية — ${txNumber}`;
+    DOM.modalBody.innerHTML = `
+    <div class="priority-modal">
+        <p style="font-size:.875rem;color:var(--text-secondary);margin:0 0 1.25rem">اختر مستوى الأولوية لهذه المعاملة</p>
+        <div class="priority-options">
+            <label class="priority-option urgent-opt"><input type="radio" name="priority" value="urgent">
+                <div class="priority-opt-content"><span style="font-size:1.4rem">🔴</span><div><strong>عاجل جداً</strong><p>يتطلب اهتماماً فورياً</p></div></div></label>
+            <label class="priority-option high-opt"><input type="radio" name="priority" value="high">
+                <div class="priority-opt-content"><span style="font-size:1.4rem">🟠</span><div><strong>مهم</strong><p>أولوية عالية تحتاج متابعة</p></div></div></label>
+            <label class="priority-option normal-opt"><input type="radio" name="priority" value="normal" checked>
+                <div class="priority-opt-content"><span style="font-size:1.4rem">🟢</span><div><strong>عادي</strong><p>إزالة من قائمة العاجلة</p></div></div></label>
+        </div>
+        <div class="form-group" style="margin-top:1rem">
+            <label>ملاحظة (اختياري)</label>
+            <input type="text" id="priorityNote" class="form-control" placeholder="سبب تحديد الأولوية...">
+        </div>
+        <div style="display:flex;gap:.75rem;margin-top:1.5rem;justify-content:flex-end">
+            <button class="btn btn-primary" onclick="submitSetPriority(${txId})">حفظ</button>
+            <button class="btn btn-ghost" onclick="closeModal()">إلغاء</button>
+        </div>
+    </div>`;
+    openModal();
+}
+
+async function submitSetPriority(txId) {
+    const priority = document.querySelector('input[name="priority"]:checked')?.value || 'normal';
+    const note = document.getElementById('priorityNote')?.value || '';
+    try {
+        const res = await fetch('api/?action=set_priority', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: txId, priority, note }) });
+        const r = await res.json();
+        if (r.success) { showToast('تم تحديث الأولوية', 'success'); closeModal(); loadDashboard(); }
+        else showToast(r.message || 'فشل التحديث', 'error');
+    } catch (e) { showToast('خطأ في الاتصال', 'error'); }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  دوال مساعدة
+// ═══════════════════════════════════════════════════════════
+function getGreeting() {
+    const h = new Date().getHours();
+    return h < 12 ? 'صباح الخير' : h < 17 ? 'مساء الخير' : 'مساء النور';
+}
+function getGreetingIcon() {
+    const h = new Date().getHours();
+    return h < 12 ? '🌅' : h < 17 ? '☀️' : '🌙';
+}
+function formatMinutes(min) {
+    if (!min || min <= 0) return '—';
+    min = Math.round(min);
+    if (min < 60) return `${min} دقيقة`;
+    if (min < 1440) return `${Math.round(min / 60)} ساعة`;
+    return `${Math.round(min / 1440)} يوم`;
+}
+function formatDuration(minutes) {
+    if (!minutes || minutes <= 0) return 'الآن';
+    const d = Math.floor(minutes / 1440), h = Math.floor((minutes % 1440) / 60), m = minutes % 60;
+    const p = [];
+    if (d > 0) p.push(`${d}ي`); if (h > 0) p.push(`${h}س`); if (m > 0 && d === 0) p.push(`${m}د`);
+    return p.join(' ');
+}
 function formatTimeAgo(datetime) {
     if (!datetime) return '';
-    const date = new Date(datetime);
-    const now = new Date();
-    const diff = Math.floor((now - date) / 1000);
-
+    const diff = Math.floor((new Date() - new Date(datetime)) / 1000);
     if (diff < 60) return 'الآن';
     if (diff < 3600) return Math.floor(diff / 60) + ' د';
     if (diff < 86400) return Math.floor(diff / 3600) + ' س';
     return Math.floor(diff / 86400) + ' ي';
 }
 
-// فلترة المعاملات العاجلة
-function filterUrgent(type, btn) {
-    document.querySelectorAll('.urgent-filter-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-
-    document.querySelectorAll('.urgent-row').forEach(row => {
-        if (type === 'all' || row.dataset.type === type) {
-            row.style.display = '';
-        } else {
-            row.style.display = 'none';
-        }
-    });
-}
-
-
-// تحميل المعاملات
-
 // ═══════════════════════════════════════════════════════════
-//  صفحة متابعة الأداء (مستقلة)
-// ══════════════════════════════════
-
+//  صفحة متابعة الأداء المستقلة
+// ═══════════════════════════════════════════════════════════
 async function loadPerformancePage() {
     showLoading();
-
-    // تحميل الموظفين إذا لم تكن محملة
-    if (!SettingsData.employees || !SettingsData.employees.length) {
-        try {
-            const empRes = await fetch('api/?action=employees');
-            const empData = await empRes.json();
-            if (empData.success) SettingsData.employees = empData.data;
-        } catch (e) { }
-    }
-
     DOM.mainContent.innerHTML = `
     <div class="performance-page">
         <div class="perf-header">
             <div class="perf-header-content">
                 <div class="perf-title">
-                    <div class="perf-icon">
-                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
-                        </svg>
-                    </div>
-                    <div>
-                        <h1>متابعة الأداء</h1>
-                        <p>تحليل أوقات إنجاز المعاملات وأداء الموظفين</p>
-                    </div>
+                    <div class="perf-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+                    <div><h1>متابعة الأداء</h1><p>سجل أحداث وتغييرات المعاملات في النظام</p></div>
                 </div>
-                <div class="perf-header-stats" id="perfHeaderStats">
-                    <div class="header-stat">
-                        <span class="stat-number" id="totalEventsToday">-</span>
-                        <span class="stat-label">أحداث اليوم</span>
-                    </div>
-                    <div class="header-stat">
-                        <span class="stat-number" id="avgTimeToday">-</span>
-                        <span class="stat-label">متوسط الوقت</span>
-                    </div>
+                <div class="perf-header-stats">
+                    <div class="header-stat"><span class="stat-number" id="totalEventsToday">-</span><span class="stat-label">أحداث اليوم</span></div>
+                    <div class="header-stat"><span class="stat-number" id="avgTimeToday">-</span><span class="stat-label">متوسط الوقت</span></div>
                 </div>
             </div>
         </div>
-
-        <div class="perf-tabs">
-            <button class="perf-tab active" onclick="switchPerfTab('overview')">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <rect x="3" y="3" width="7" height="7"></rect>
-                    <rect x="14" y="3" width="7" height="7"></rect>
-                    <rect x="14" y="14" width="7" height="7"></rect>
-                    <rect x="3" y="14" width="7" height="7"></rect>
-                </svg>
-                نظرة عامة
-            </button>
-            <button class="perf-tab" onclick="switchPerfTab('timeline')">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <line x1="12" y1="20" x2="12" y2="10"></line>
-                    <line x1="18" y1="20" x2="18" y2="4"></line>
-                    <line x1="6" y1="20" x2="6" y2="16"></line>
-                </svg>
-                سجل الأحداث
-            </button>
-     
-        </div>
-
         <div class="perf-filters">
-            <div class="filter-group">
-                <label>الموظف</label>
-                <select id="perfEmployeeFilter" onchange="loadPerformanceData()">
-                    <option value="">جميع الموظفين</option>
-                    ${(SettingsData.employees || []).map(emp =>
-        '<option value="' + emp.id + '">' + emp.name + '</option>'
-    ).join('')}
-                </select>
-            </div>
-            <div class="filter-group">
-                <label>المرحلة</label>
-                <select id="perfStageFilter" onchange="loadPerformanceData()">
+            <div class="filter-group"><label>المرحلة</label>
+                <select id="perfStageFilter" onchange="loadEventsTimeline()">
                     <option value="">جميع المراحل</option>
                     <option value="creation">الإنشاء</option>
                     <option value="receiving">الاستلام</option>
@@ -542,59 +696,150 @@ async function loadPerformancePage() {
                     <option value="invoice">الفوترة</option>
                 </select>
             </div>
-            <div class="filter-group">
-                <label>من تاريخ</label>
-                <input type="date" id="perfDateFrom" onchange="loadPerformanceData()">
+            <div class="filter-group"><label>من تاريخ</label>
+                <input type="date" id="perfDateFrom" onchange="loadEventsTimeline()">
             </div>
-            <div class="filter-group">
-                <label>إلى تاريخ</label>
-                <input type="date" id="perfDateTo" onchange="loadPerformanceData()">
+            <div class="filter-group"><label>إلى تاريخ</label>
+                <input type="date" id="perfDateTo" onchange="loadEventsTimeline()">
             </div>
             <button class="filter-reset" onclick="resetPerfFilters()">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
-                    <path d="M3 3v5h5"></path>
-                </svg>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
                 إعادة تعيين
             </button>
         </div>
-
         <div class="perf-content">
-            <div id="perfTabOverview" class="perf-tab-content active">
-                <div id="performanceSummary" class="employee-cards-grid"></div>
-                <div class="perf-section">
-                    <div class="section-header">
-                        <h3>تفاصيل الأوقات</h3>
-                    </div>
-                    <div id="performanceTable" class="perf-table-container"></div>
-                </div>
-            </div>
-
-            <div id="perfTabTimeline" class="perf-tab-content">
-                <div class="perf-section">
-                    <div class="section-header">
-                        <h3>سجل جميع الأحداث والتغييرات</h3>
-                        <span class="events-count" id="eventsCount">-</span>
-                    </div>
-                    <div id="eventsTimeline" class="events-timeline-container"></div>
-                </div>
-            </div>
-
-            <div id="perfTabAnalytics" class="perf-tab-content">
-                <div class="analytics-grid">
-                    <div class="analytics-card">
-                        <h4>توزيع الأحداث حسب المرحلة</h4>
-                        <div id="stageDistribution" class="chart-container"></div>
-                    </div>
-                    <div class="analytics-card">
-                        <h4>أداء الموظفين</h4>
-                        <div id="employeeRanking" class="ranking-list"></div>
-                    </div>
-                </div>
+            <div class="perf-section">
+                <div class="section-header"><h3>سجل جميع الأحداث والتغييرات</h3><span class="events-count" id="eventsCount">-</span></div>
+                <div id="eventsTimeline" class="events-timeline-container"></div>
             </div>
         </div>
     </div>`;
+    loadEventsTimeline();
+}
 
-    if (typeof loadPerformanceData === 'function') loadPerformanceData();
-    if (typeof loadEventsTimeline === 'function') loadEventsTimeline();
+function resetPerfFilters() {
+    ['perfStageFilter', 'perfDateFrom', 'perfDateTo'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+    });
+    loadEventsTimeline();
+}
+
+
+
+// ═══════════════════════════════════════════════════════════
+//  ملخص الودائع الاستثمارية — لوحة التحكم
+// ═══════════════════════════════════════════════════════════
+async function loadInvestmentsSummary() {
+    const container = document.getElementById('investmentsSummaryContainer');
+    if (!container) return;
+
+    try {
+        const res = await fetch('api/?action=investments');
+        const result = await res.json();
+
+        // تعريف جميع المتغيرات أولاً بغض النظر عن النتيجة
+        const investments = result.success ? (result.data || []) : [];
+        const now = new Date();
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+
+        const active = investments.filter(i => i.status === 'نشط');
+
+        const thisMonthMaturities = investments.filter(i => {
+            if (!i.maturity_date) return false;
+            const mat = new Date(i.maturity_date);
+            return mat >= startOfMonth && mat <= endOfMonth;
+        });
+
+        const thisMonthTotal = thisMonthMaturities.reduce((s, i) => s + parseFloat(i.amount || 0), 0);
+        const thisMonthProfit = thisMonthMaturities.reduce((s, i) => s + parseFloat(i.expected_profit || 0), 0);
+        const thisMonthDone = thisMonthMaturities.filter(i => i.status === 'منتهي').length;
+        const thisMonthPending = thisMonthMaturities.filter(i => i.status === 'نشط').length;
+        const overdueCount = investments.filter(i => i.maturity_status === 'مستحق').length;
+
+        // تحديث badge التنبيه
+        const badge = document.getElementById('invDashBadge');
+        if (badge) {
+            badge.textContent = overdueCount;
+            badge.style.display = overdueCount > 0 ? 'inline-flex' : 'none';
+        }
+
+        // لا توجد ودائع تستحق هذا الشهر
+        if (thisMonthMaturities.length === 0) {
+            container.innerHTML = `
+            <div style="padding:0.75rem 1rem;border-bottom:1px solid var(--border-color)">
+                <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:0.75rem">
+                    <div style="text-align:center">
+                        <div style="font-size:1.25rem;font-weight:700;color:var(--accent-blue)">${active.length}</div>
+                        <div style="font-size:0.75rem;color:var(--text-muted)">وديعة نشطة</div>
+                    </div>
+                    <div style="text-align:center">
+                        <div style="font-size:1rem;font-weight:700;color:${overdueCount > 0 ? 'var(--accent-red)' : 'var(--text-muted)'}">${overdueCount}</div>
+                        <div style="font-size:0.75rem;color:var(--text-muted)">مستحقة الإغلاق</div>
+                    </div>
+                </div>
+            </div>
+            <div class="dash-empty-sm">لا توجد ودائع تستحق هذا الشهر</div>`;
+            return;
+        }
+
+        // بطاقات الإحصاءات
+        let html = `
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0.75rem;padding:0.75rem 1rem;border-bottom:1px solid var(--border-color)">
+            <div style="text-align:center">
+                <div style="font-size:1.25rem;font-weight:700;color:var(--accent-blue)">${thisMonthMaturities.length}</div>
+                <div style="font-size:0.75rem;color:var(--text-muted)">تستحق هذا الشهر</div>
+            </div>
+            <div style="text-align:center">
+                <div style="font-size:1rem;font-weight:700;color:var(--accent-green)">${fmtMoney(thisMonthTotal)}</div>
+                <div style="font-size:0.75rem;color:var(--text-muted)">إجمالي المبالغ</div>
+            </div>
+            <div style="text-align:center">
+                <div style="font-size:1rem;font-weight:700;color:var(--accent-cyan)">${fmtMoney(thisMonthProfit)}</div>
+                <div style="font-size:0.75rem;color:var(--text-muted)">ربح متوقع</div>
+            </div>
+            <div style="text-align:center">
+                <div style="font-size:1.25rem;font-weight:700;color:${thisMonthPending > 0 ? 'var(--accent-orange)' : 'var(--accent-green)'}">
+                    ${thisMonthDone}/${thisMonthMaturities.length}
+                </div>
+                <div style="font-size:0.75rem;color:var(--text-muted)">تم إغلاقها</div>
+            </div>
+        </div>`;
+
+        // قائمة الودائع مرتبة بالتاريخ
+        html += thisMonthMaturities
+            .sort((a, b) => new Date(a.maturity_date) - new Date(b.maturity_date))
+            .slice(0, 4)
+            .map(inv => {
+                const matDate = new Date(inv.maturity_date);
+                const diff = Math.ceil((matDate - now) / (1000 * 60 * 60 * 24));
+                const isDone = inv.status === 'منتهي';
+
+                let color = 'var(--accent-blue)';
+                let tag = `${diff} يوم`;
+                if (isDone) { color = 'var(--accent-green)'; tag = 'تم الإغلاق ✅'; }
+                else if (diff <= 0) { color = 'var(--accent-red)'; tag = 'مستحقة الآن 🔴'; }
+                else if (diff <= 7) { color = 'var(--accent-orange)'; tag = `خلال ${diff} أيام ⏰`; }
+
+                return `
+                <div class="dash-row" onclick="switchTab('bank-deposits')" style="cursor:pointer;${isDone ? 'opacity:0.65' : ''}">
+                    <div class="dash-row-icon">${isDone ? '✅' : '💰'}</div>
+                    <div class="dash-row-main">
+                        <span class="dash-row-title">${inv.deposit_name || 'وديعة'}</span>
+                        <span class="dash-row-sub">${inv.account_name || ''} — ${inv.interest_rate || 0}% سنوياً</span>
+                    </div>
+                    <div class="dash-row-meta">
+                        <span class="dash-row-amount">${fmtMoney(parseFloat(inv.amount || 0))}</span>
+                        <span class="dash-row-tag" style="color:${color}">${tag}</span>
+                    </div>
+                </div>`;
+            }).join('');
+
+        container.innerHTML = html;
+
+    } catch (e) {
+        console.error('Investment summary error:', e);
+        if (container) container.innerHTML = '<div class="dash-empty-sm">خطأ في تحميل بيانات الودائع</div>';
+    }
 }

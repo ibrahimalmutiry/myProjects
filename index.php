@@ -32,6 +32,8 @@ $userRole = $_SESSION['user_role'] ?? '';
     <link rel="stylesheet" href="css/bank_deposits_new.css">
     <link rel="stylesheet" href="css/investment_styles.css">
     <link rel="stylesheet" href="css/correspondence.css">
+    <link rel="stylesheet" href="css/dashboard-redesign.css">
+    <link rel="stylesheet" href="css/bank-rows.css">
     <link rel="icon"
         href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
 </head>
@@ -287,7 +289,7 @@ $userRole = $_SESSION['user_role'] ?? '';
 
     <!-- رسالة التنبيه -->
     <div class="toast" id="toast"></div>
-
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
     <script src="js/app-common.js"></script>
     <script src="js/app-notifications.js"></script>
     <script src="js/app-dashboard.js"></script>
@@ -296,6 +298,7 @@ $userRole = $_SESSION['user_role'] ?? '';
     <script src="js/app-budget.js"></script>
     <script src="js/app-bank.js"></script>
     <script src="js/correspondence.js"></script>
+    <script src="js/excel-import-ui.js"></script>
 
     <script>
     // معلومات المستخدم الحالي

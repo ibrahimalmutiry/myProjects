@@ -54,21 +54,6 @@ function fmtMoneyCur(amount, currencyCode) {
 }
 
 // ── ثوابت نموذج الحجز ───────────────────────────────────────
-const BUDGET_CATEGORIES = [
-    'رأس المال', 'تشغيلي', 'صيانة وإصلاح', 'تقنية معلومات',
-    'تدريب وتطوير', 'خدمات استشارية', 'مستلزمات مكتبية',
-    'أثاث ومعدات', 'سيارات ومركبات', 'إنشاءات وبنية تحتية',
-];
-const COST_CENTERS = [
-    { id: '102200001', name: 'الإدارة العامة' },
-    { id: '102200002', name: 'التخطيط والميزانية' },
-    { id: '102200003', name: 'الموارد البشرية' },
-    { id: '102200004', name: 'تقنية المعلومات' },
-    { id: '102200005', name: 'المشتريات' },
-    { id: '102200006', name: 'المالية والحسابات' },
-    { id: '102200007', name: 'الشؤون الإدارية' },
-    { id: '102200008', name: 'التدريب والتطوير' },
-];
 
 // حالة أصناف الطلب (multi-item)
 let _rfItems = [];
@@ -230,7 +215,7 @@ function renderBudgetPage() {
         <div class="budget-page-wrap">
             <div class="budget-page-header">
                 <div>
-                    <h2 class="budget-page-title">📑 شاشة الحجوزات</h2>
+                    <h2 class="budget-page-title">📑 حجوزات الموازنة</h2>
                     <p class="budget-page-sub">إدارة حجوزات الموازنة المالية لكافة الأقسام</p>
                 </div>
             </div>
@@ -345,9 +330,9 @@ function renderReservationForm(step = BudgetState.currentStep) {
     const { departments, suppliers, cost_centers, budget_categories } = BudgetState.meta;
     const today = new Date().toISOString().split('T')[0];
 
-    // fallback للثوابت المحلية لو لم تُحمَّل البيانات بعد
-    const ccList = cost_centers?.length ? cost_centers : COST_CENTERS.map(c => ({ code: c.id, name: c.name }));
-    const catList = budget_categories?.length ? budget_categories : BUDGET_CATEGORIES.map(n => ({ name: n }));
+    // القوائم من قاعدة البيانات فقط (النشطة)
+    const ccList = (cost_centers || []).filter(c => c.is_active != 0);
+    const catList = (budget_categories || []).filter(c => c.is_active != 0);
 
     const steps = [
         { n: 1, label: 'البيانات الأساسية', icon: '📌' },
@@ -371,7 +356,7 @@ function renderReservationForm(step = BudgetState.currentStep) {
     // ── الخطوة 1: البيانات الأساسية ─────────────────────────
     if (step === 1) {
         const savedCC = _budgetFormData['rf_cost_center'] || '';
-        const savedDept = savedCC ? (COST_CENTERS.find(c => c.id === savedCC)?.name || '') : '';
+        const savedDept = savedCC ? (ccList.find(c => c.code === savedCC)?.name || '') : '';
         formBody = `
             <div class="res-form-grid">
                 <div class="res-form-group">
@@ -703,9 +688,7 @@ function onSupplierChange(el) {
 }
 
 function onCostCenterChange(val) {
-    const ccList = BudgetState.meta.cost_centers?.length
-        ? BudgetState.meta.cost_centers
-        : COST_CENTERS.map(c => ({ code: c.id, name: c.name }));
+    const ccList = (BudgetState.meta.cost_centers || []).filter(c => c.is_active != 0);
     const cc = ccList.find(c => c.code === val);
     const display = document.getElementById('rf_department_display');
     const hiddenId = document.getElementById('rf_department_id');

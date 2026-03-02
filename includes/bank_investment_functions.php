@@ -208,17 +208,18 @@ function createInvestment($data) {
                 'message' => "رصيد الحساب غير كافٍ. المتاح: " . number_format($account['current_balance'], 2)];
     }
 
-    $expectedProfit = round($amount * $interestRate / 100 * $days / 360, 2);
+  // بعد التعديل ✅
+$expectedProfit = round($amount * $interestRate / 100 * $days / 360, 2);
 
-    // إدراج الوديعة
-    $conn->query("INSERT INTO bank_deposits_investment
-                    (account_id, return_account_id, deposit_name, reference_number,
-                     amount, interest_rate, days, start_date, maturity_date,
-                     expected_profit, notes, status, created_by)
-                  VALUES
-                    ($accountId, $returnAccountId, '$depositName', '$referenceNumber',
-                     $amount, $interestRate, $days, '$startDate', '$maturityDate',
-                     $expectedProfit, '$notes', 'نشط', $createdBy)");
+// إدراج الوديعة — بدون expected_profit لأنه GENERATED COLUMN (MySQL يحسبه تلقائياً)
+$conn->query("INSERT INTO bank_deposits_investment
+                (account_id, return_account_id, deposit_name, reference_number,
+                 amount, interest_rate, days, start_date, maturity_date,
+                 notes, status, created_by)
+              VALUES
+                ($accountId, $returnAccountId, '$depositName', '$referenceNumber',
+                 $amount, $interestRate, $days, '$startDate', '$maturityDate',
+                 '$notes', 'نشط', $createdBy)");
 
     $investmentId = $conn->insert_id;
 

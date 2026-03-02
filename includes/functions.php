@@ -330,26 +330,90 @@ function getChartData() {
 
 /**
  * الحصول على المعاملات العاجلة
+ * تشمل: المعاملات ذات الأولوية المحددة يدوياً + المعاملات ذات alert_type
  */
 function getUrgentTransactions() {
     $conn = db();
-    
-    $sql = "SELECT * FROM v_full_transactions WHERE alert_type IN ('عاجل', 'متابعة') ORDER BY 
-            CASE alert_type 
-                WHEN 'عاجل' THEN 1 
-                WHEN 'متابعة' THEN 2 
-            END, transaction_date DESC";
-    
+
+    // ضمان وجود أعمدة priority في جدول transactions
+    $conn->query("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS priority ENUM('normal','high','urgent') DEFAULT 'normal'");
+    $conn->query("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS priority_set_by INT DEFAULT NULL");
+    $conn->query("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS priority_set_at DATETIME DEFAULT NULL");
+    $conn->query("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS priority_note VARCHAR(255) DEFAULT NULL");
+
+    // جلب المعاملات العاجلة: join بين transactions (للأولوية اليدوية) والـ View (لبقية البيانات)
+    $sql = "
+        SELECT
+            vft.*,
+            t.priority,
+            t.priority_set_by,
+            t.priority_note,
+            t.priority_set_at,
+            CASE
+                WHEN t.priority = 'urgent' THEN 'عاجل'
+                WHEN t.priority = 'high'   THEN 'مهم'
+                WHEN vft.alert_type = 'عاجل'    THEN 'عاجل'
+                WHEN vft.alert_type = 'متابعة'  THEN 'متابعة'
+                ELSE COALESCE(vft.alert_type, 'متابعة')
+            END AS effective_priority,
+            ep.name AS priority_set_by_name,
+            CASE
+                WHEN t.priority = 'urgent'       THEN 1
+                WHEN t.priority = 'high'         THEN 2
+                WHEN vft.alert_type = 'عاجل'    THEN 3
+                WHEN vft.alert_type = 'متابعة'  THEN 4
+                ELSE 5
+            END AS sort_order
+        FROM v_full_transactions vft
+        JOIN transactions t ON t.id = vft.id
+        LEFT JOIN employees ep ON t.priority_set_by = ep.id
+        WHERE t.priority IN ('high','urgent')
+           OR vft.alert_type IN ('عاجل','متابعة')
+        ORDER BY sort_order ASC, vft.transaction_date DESC
+    ";
+
     $result = $conn->query($sql);
     $transactions = [];
-    
+
     if ($result && $result->num_rows > 0) {
         while ($row = $result->fetch_assoc()) {
             $transactions[] = $row;
         }
     }
-    
+
     return $transactions;
+}
+
+/**
+ * تحديد أولوية معاملة
+ */
+function setTransactionPriority($transactionId, $priority, $note = null) {
+    $conn = db();
+
+    // ضمان وجود الأعمدة
+    $conn->query("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS priority ENUM('normal','high','urgent') DEFAULT 'normal'");
+    $conn->query("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS priority_set_by INT DEFAULT NULL");
+    $conn->query("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS priority_set_at DATETIME DEFAULT NULL");
+    $conn->query("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS priority_note VARCHAR(255) DEFAULT NULL");
+
+    $transactionId = (int)$transactionId;
+    $priority = $conn->real_escape_string($priority);
+    $employeeId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : 'NULL';
+    $now = date('Y-m-d H:i:s');
+    $noteSql = $note ? "'" . $conn->real_escape_string($note) . "'" : 'NULL';
+
+    $sql = "UPDATE transactions SET 
+                priority = '$priority',
+                priority_set_by = $employeeId,
+                priority_set_at = '$now',
+                priority_note = $noteSql,
+                updated_at = NOW()
+            WHERE id = $transactionId";
+
+    if ($conn->query($sql)) {
+        return ['success' => true, 'message' => 'تم تحديث الأولوية بنجاح'];
+    }
+    return ['success' => false, 'message' => 'فشل تحديث الأولوية: ' . $conn->error];
 }
 
 /**
@@ -1190,14 +1254,17 @@ function getTransactionEvents($transactionId, $stage = null) {
 /**
  * الحصول على جميع الأحداث
  */
-function getAllEvents($limit = 50, $stage = null, $employeeId = null) {
-    $conn = db();
+function getAllEvents($limit = 50, $stage = null, $employeeId = null, $dateFrom = null, $dateTo = null) {
+        $conn = db();
     ensureEventsTable();
     
     $limit = (int)$limit;
     
     $sql = "
-        SELECT te.*, e.name as employee_name, t.transaction_number
+        SELECT te.*, 
+            e.name as employee_name, 
+            t.transaction_number,
+            t.description as transaction_description
         FROM transaction_events te
         LEFT JOIN employees e ON te.employee_id = e.id
         LEFT JOIN transactions t ON te.transaction_id = t.id
@@ -1213,7 +1280,14 @@ function getAllEvents($limit = 50, $stage = null, $employeeId = null) {
         $employeeId = (int)$employeeId;
         $sql .= " AND te.employee_id = $employeeId";
     }
-    
+    if ($dateFrom) {
+    $dateFrom = $conn->real_escape_string($dateFrom);
+    $sql .= " AND DATE(te.event_time) >= '$dateFrom'";
+}
+if ($dateTo) {
+    $dateTo = $conn->real_escape_string($dateTo);
+    $sql .= " AND DATE(te.event_time) <= '$dateTo'";
+}
     $sql .= " ORDER BY te.event_time DESC LIMIT $limit";
     
     $result = $conn->query($sql);

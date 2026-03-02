@@ -320,6 +320,7 @@ function renderTransactionRows(transactions) {
             html += renderAttachmentsSection(tx.id, txAtts);
             html += `</td></tr>`;
         }
+
     }
 
     return html;
@@ -1579,6 +1580,10 @@ function openAddEmployeeModal() {
     DOM.modalBody.innerHTML = `
         <form id="employeeForm" onsubmit="saveEmployee(event)">
             <input type="hidden" name="id" id="empId" value="">
+             <div class="form-group">
+                    <label class="form-label">رقم الموظف</label>
+                    <input type="text" class="form-input" name="empNumber" id="empNumber" required>
+                </div>
             <div class="modal-form-grid">
                 <div class="form-group">
                     <label class="form-label">اسم الموظف</label>
@@ -1653,6 +1658,10 @@ function editEmployee(id) {
     DOM.modalTitle.textContent = 'تعديل موظف';
     DOM.modalBody.innerHTML = `
         <form id="employeeForm" onsubmit="saveEmployee(event)">
+               <div class="form-group">
+                    <label class="form-label">رقم الموظف</label>
+                    <input type="text" class="form-input" name="employee_number" id="empNumber" value="${emp.employee_number}" required>
+                </div>
             <input type="hidden" name="id" id="empId" value="${emp.id}">
             <div class="modal-form-grid">
                 <div class="form-group">
@@ -2371,21 +2380,42 @@ async function loadEventsTimeline() {
     container.innerHTML = '<div class="loading-spinner">جاري التحميل...</div>';
 
     try {
-        var employeeId = document.getElementById('perfEmployeeFilter')?.value || '';
         var stage = document.getElementById('perfStageFilter')?.value || '';
+        var dateFrom = document.getElementById('perfDateFrom')?.value || '';
+        var dateTo = document.getElementById('perfDateTo')?.value || '';
+
+        // perfEmployeeFilter اختياري — قد لا يكون موجوداً في هذا الـ HTML
+        var employeeId = document.getElementById('perfEmployeeFilter')?.value || '';
 
         var params = new URLSearchParams();
-        params.append('limit', '100');
+        params.append('limit', '200');
         if (employeeId) params.append('employee_id', employeeId);
         if (stage) params.append('stage', stage);
+        if (dateFrom) params.append('date_from', dateFrom);
+        if (dateTo) params.append('date_to', dateTo);
 
         var res = await fetch('api/?action=all_events&' + params.toString());
         var result = await res.json();
 
+        // تحديث إحصاءات الهيدر
+        if (result.success && result.data) {
+            const today = new Date().toISOString().split('T')[0];
+            const todayEvents = result.data.filter(e => e.event_time?.startsWith(today));
+            const todayEl = document.getElementById('totalEventsToday');
+            if (todayEl) todayEl.textContent = todayEvents.length;
+
+            const durations = result.data.filter(e => e.duration_from_previous > 0).map(e => e.duration_from_previous);
+            const avgEl = document.getElementById('avgTimeToday');
+            if (avgEl && durations.length) {
+                const avg = Math.round(durations.reduce((a, b) => a + b, 0) / durations.length);
+                avgEl.textContent = avg < 60 ? avg + ' د' : Math.round(avg / 60) + ' س';
+            } else if (avgEl) {
+                avgEl.textContent = '—';
+            }
+        }
+
         if (result.success && result.data && result.data.length > 0) {
             if (countEl) countEl.textContent = result.data.length + ' حدث';
-
-            var html = '<div class="timeline-list">';
 
             var stageInfo = {
                 'creation': { name: 'الإنشاء', color: '#4dabf7', icon: '➕' },
@@ -2395,43 +2425,46 @@ async function loadEventsTimeline() {
                 'invoice': { name: 'الفوترة', color: '#b197fc', icon: '🧾' }
             };
 
+            var html = '<div class="timeline-list">';
             result.data.forEach(function (event) {
                 var info = stageInfo[event.stage] || { name: event.stage, color: '#888', icon: '📋' };
                 var duration = event.duration_from_previous;
-                var durationClass = duration <= 5 ? 'fast' : (duration <= 30 ? 'normal' : 'slow');
+                var durClass = !duration ? '' : duration <= 5 ? 'fast' : duration <= 30 ? 'normal' : 'slow';
+                // تعريف txDesc هنا في البداية قبل أي استخدام
+                var rawDesc = event.transaction_description || '';
+                var txDesc = rawDesc.length > 45 ? rawDesc.substring(0, 45) + '...' : rawDesc;
 
                 html += `
-                <div class="timeline-item">
-                    <div class="timeline-dot" style="background: ${info.color};">${info.icon}</div>
-                    <div class="timeline-content">
-                        <div class="timeline-header">
-                            <span class="timeline-tx">${event.transaction_number || '-'}</span>
-                            <span class="timeline-stage" style="background: ${info.color}20; color: ${info.color}; border: 1px solid ${info.color}40;">${info.name}</span>
-                            ${duration !== null ? `<span class="timeline-duration ${durationClass}">${duration} دقيقة</span>` : ''}
+                    <div class="timeline-item">
+                        <div class="timeline-dot" style="background:${info.color}">${info.icon}</div>
+                        <div class="timeline-content">
+                            <div class="timeline-header">
+                                <span class="timeline-tx" style="font-weight:700">${event.transaction_number || '—'}</span>
+                                ${txDesc ? `<span style="color:var(--text-muted);font-size:0.8rem;margin-right:0.4rem">— ${txDesc}</span>` : ''}
+                                <span class="timeline-stage" style="background:${info.color}20;color:${info.color};border:1px solid ${info.color}40">${info.name}</span>
+                                ${duration != null ? `<span class="timeline-duration ${durClass}">${duration} دقيقة</span>` : ''}
+                            </div>
+                            <div class="timeline-status">
+                                ${event.old_status ? `<span class="status-old">${event.old_status}</span><span class="status-arrow">←</span>` : ''}
+                                <span class="status-new">${event.new_status || '-'}</span>
+                            </div>
+                            ${event.notes ? `<div class="timeline-notes">${event.notes}</div>` : ''}
+                            <div class="timeline-footer">
+                                <span class="timeline-employee">👤 ${event.employee_name || 'النظام'}</span>
+                                <span class="timeline-time">${formatEventDateTime(event.event_time)}</span>
+                            </div>
                         </div>
-                        <div class="timeline-status">
-                            ${event.old_status ? `<span class="status-old">${event.old_status}</span><span class="status-arrow">←</span>` : ''}
-                            <span class="status-new">${event.new_status || '-'}</span>
-                        </div>
-                        ${event.notes ? `<div class="timeline-notes"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>${event.notes}</div>` : ''}
-                        <div class="timeline-footer">
-                            <span class="timeline-employee">
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-                                ${event.employee_name || 'النظام'}
-                            </span>
-                            <span class="timeline-time">${formatEventDateTime(event.event_time)}</span>
-                        </div>
-                    </div>
-                </div>`;
+                    </div>`;
             });
-
             html += '</div>';
             container.innerHTML = html;
+
         } else {
             if (countEl) countEl.textContent = '0 حدث';
-            container.innerHTML = '<div class="empty-state"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg><p>لا توجد أحداث مسجلة</p></div>';
+            container.innerHTML = '<div class="empty-state"><p>لا توجد أحداث مسجلة</p></div>';
         }
     } catch (err) {
+        console.error(err);
         container.innerHTML = '<div class="error-state">خطأ في تحميل الأحداث</div>';
     }
 }

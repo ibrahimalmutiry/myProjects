@@ -365,12 +365,14 @@ try {
             break;
 
         // ─── جميع الأحداث ──────────────────────────────────────
-        case 'all_events':
-            $limit      = isset($_GET['limit'])       ? (int)$_GET['limit'] : 50;
-            $stage      = $_GET['stage']              ?? null;
-            $employeeId = isset($_GET['employee_id']) ? (int)$_GET['employee_id'] : null;
-            $events     = getAllEvents($limit, $stage, $employeeId);
-            jsonResponse(['success' => true, 'data' => $events]);
+       case 'all_events':
+            $limit      = (int)($_GET['limit']       ?? 50);
+            $stage      = $_GET['stage']             ?? null;
+            $employeeId = $_GET['employee_id']       ?? null;
+            $dateFrom   = $_GET['date_from']         ?? null;
+            $dateTo     = $_GET['date_to']           ?? null;
+            $data = getAllEvents($limit, $stage, $employeeId, $dateFrom, $dateTo);
+            jsonResponse(['success' => true, 'data' => $data]);
             break;
         
             /* ── نهاية الـ PATCH ── أضف هذا قبل default: في الـ switch ── */
@@ -943,7 +945,14 @@ try {
             jsonResponse(['success' => true, 'data' => getSlaEmailEscalations($params)]);
             break;
         
-        
+        case 'set_priority':
+            $input    = json_decode(file_get_contents('php://input'), true) ?? [];
+            $id       = (int)($input['id']       ?? 0);
+            $priority = $input['priority']        ?? 'normal';
+            $note     = $input['note']            ?? null;
+            if ($id <= 0) { jsonResponse(['success'=>false,'message'=>'معرف غير صالح'],400); break; }
+            jsonResponse(setTransactionPriority($id, $priority, $note));
+            break;
         
         
         

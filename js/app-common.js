@@ -800,15 +800,15 @@ document.addEventListener('DOMContentLoaded', function () {
  *   أحمر: مرفوض / ملغاة
  */
 function getStatusBadge(status) {
-    if (!status) return '<span class="badge badge-slate"></span>—</span>';
+    if (!status) return '<span class="badge badge-slate">—</span>';
 
     let color = 'slate';
-    if (status === 'مستلم' || status === 'تم الدفع' || status === 'صدرت الفاتورة' || status === 'معتمد') color = 'green';
-    else if (status === 'قيد المراجعة' || status === 'بدون فاتورة') color = 'amber';
-    else if (status === 'قيد المعالجة' || status === 'قيد الإصدار') color = 'blue';
-    else if (status === 'مرفوض' || status === 'ملغاة') color = 'red';
+    if (['مستلم', 'تم الدفع', 'صدرت الفاتورة', 'معتمد'].includes(status)) color = 'green';
+    else if (['قيد المراجعة', 'بدون فاتورة'].includes(status)) color = 'amber';
+    else if (['قيد المعالجة', 'قيد الإصدار'].includes(status)) color = 'blue';
+    else if (['مرفوض', 'ملغاة'].includes(status)) color = 'red';
 
-    return '<span class="badge badge-' + color + '"></span>' + status + '</span>';
+    return '<span class="badge badge-' + color + '">' + status + '</span>';
 }
 
 /**
@@ -817,7 +817,7 @@ function getStatusBadge(status) {
  * @returns {string} HTML للـ badge مع أيقونة مناسبة
  */
 function getAlertBadge(alert) {
-    if (!alert) return '<span class="badge badge-slate"></span>—</span>';
+    if (!alert) return '<span class="badge badge-slate">—</span>';
 
     let color = 'slate';
     let icon = '⏳';
