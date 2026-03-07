@@ -45,8 +45,11 @@ async function loadBankDepositsPage() {
         loadInvestments(),
     ]);
 
-    // رسم الواجهة
-    switchBankTab('overview');
+    // تحديد التبويب المطلوب من السايدبار (لو نقر عليه)
+    const activeSubBtn = document.querySelector('.nav-child-btn[data-bank-sub].active');
+    const startTab = activeSubBtn ? activeSubBtn.dataset.bankSub : 'overview';
+
+    switchBankTab(startTab);
     startDepositAlertChecker();
 }
 
@@ -74,21 +77,6 @@ function renderBankPageSkeleton() {
    
         </div>
 
-        <!-- تبويبات البنوك -->
-        <div class="bank-tabs-nav">
-            <button class="bank-tab-btn active" data-bank-tab="overview"   onclick="switchBankTab('overview')">
-                <span class="bank-tab-icon">📊</span> نظرة عامة
-            </button>
-    
-            <button class="bank-tab-btn" data-bank-tab="accounts" onclick="switchBankTab('accounts')">
-                <span class="bank-tab-icon">🏛️</span> الحسابات
-            </button>
-            <button class="bank-tab-btn" data-bank-tab="investments" onclick="switchBankTab('investments')">
-                <span class="bank-tab-icon">📈</span> ودائع استثمارية
-                <span class="tab-badge" id="investments-badge" style="display:none">0</span>
-            </button>
-        </div>
-
         <!-- محتوى التبويبات -->
         <div class="bank-tab-panels">
             <div id="bank-tab-overview"     class="bank-tab-panel active"></div>
@@ -105,16 +93,26 @@ function renderBankPageSkeleton() {
 function switchBankTab(tabName) {
     activeBankTab = tabName;
 
-    // تحديث أزرار التبويب
-    document.querySelectorAll('.bank-tab-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.bankTab === tabName);
-    });
-
-    // إخفاء جميع اللوحات
+    // إخفاء جميع اللوحات وإظهار النشطة
     document.querySelectorAll('.bank-tab-panel').forEach(p => p.classList.remove('active'));
-
     const panel = document.getElementById(`bank-tab-${tabName}`);
     if (panel) panel.classList.add('active');
+
+    // تحديث العنصر النشط في السايدبار
+    document.querySelectorAll('.nav-child-btn[data-bank-sub]').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.bankSub === tabName);
+    });
+
+    // تحديث عنوان الصفحة حسب التبويب
+    const tabTitles = {
+        overview: 'نظرة عامة',
+        deposits: 'الحسابات البنكية',
+        monthly: 'ودائع الشهر',
+        accounts: 'الحسابات البنكية',
+        investments: 'الودائع الاستثمارية',
+    };
+    const titleEl = document.querySelector('.bank-page-title h1');
+    if (titleEl && tabTitles[tabName]) titleEl.textContent = tabTitles[tabName];
 
     // رسم المحتوى
     const renderers = {
@@ -132,99 +130,256 @@ function switchBankTab(tabName) {
 // ════════════════════════════════════════════════════════
 function renderOverviewTab() {
     const panel = document.getElementById('bank-tab-overview');
+    if (!panel) return;
 
+    // ── البيانات ──
     const totalBalance = bankAccounts.reduce((s, a) => s + parseFloat(a.current_balance || 0), 0);
     const thisMonth = getCurrentMonthDeposits();
-    const pendingDeps = bankDeposits.filter(d => d.status === 'معلق');
-    const confirmedDeps = bankDeposits.filter(d => d.status === 'تم التأكيد');
+    const activeInv = investments.filter(i => i.status === 'نشط');
+    const doneInv = investments.filter(i => i.status === 'منتهي');
+    const totalInvested = activeInv.reduce((s, i) => s + parseFloat(i.amount || 0), 0);
+    const totalProfit = doneInv.reduce((s, i) => s + parseFloat(i.actual_profit || i.expected_profit || 0), 0);
+    const today = new Date();
 
-    updateQuickStats(totalBalance, thisMonth, pendingDeps.length, confirmedDeps.length);
+    // آخر 6 أشهر للرسم البياني — الودائع الاستثمارية
+    const months = [];
+    for (let i = 5; i >= 0; i--) {
+        const d = new Date(); d.setMonth(d.getMonth() - i);
+        months.push({
+            label: d.toLocaleString('ar', { month: 'short' }),
+            month: d.getMonth(), year: d.getFullYear(),
+            isCurrent: i === 0
+        });
+    }
+    const monthlyData = months.map(m => {
+        const amt = investments.filter(inv => {
+            const dd = new Date(inv.start_date || inv.created_at);
+            return dd.getMonth() === m.month && dd.getFullYear() === m.year;
+        }).reduce((s, inv) => s + parseFloat(inv.amount || 0), 0);
+        return { ...m, amount: amt };
+    });
+    const maxAmt = Math.max(...monthlyData.map(m => m.amount), 1);
 
-    // ── ملخص الودائع الأخيرة ──
-    const recentDeps = [...bankDeposits].slice(0, 5);
+    // أقرب استثمارات للاستحقاق
+    const upcoming = [...activeInv]
+        .filter(i => i.maturity_date)
+        .sort((a, b) => new Date(a.maturity_date) - new Date(b.maturity_date))
+        .slice(0, 4);
+
+    const daysLeft = d => Math.ceil((new Date(d) - today) / 86400000);
+    const urgencyColor = days => days < 0 ? '#ef4444' : days <= 7 ? '#ef4444' : days <= 30 ? '#f59e0b' : '#22c55e';
+    const urgencyLabel = days => days < 0 ? 'منتهي' : days === 0 ? 'اليوم' : `${days} يوم`;
+
+    // Y-axis labels
+    const ySteps = [0, 0.25, 0.5, 0.75, 1].reverse();
+    const fmtY = v => {
+        const val = v * maxAmt;
+        if (val >= 1000000) return (val / 1000000).toFixed(1) + 'م';
+        if (val >= 1000) return (val / 1000).toFixed(0) + 'ك';
+        return val.toFixed(0);
+    };
+
+    updateQuickStats(totalBalance, thisMonth, activeInv.length, doneInv.length);
 
     panel.innerHTML = `
-    <div class="bank-rows-page">
+    <div class="bov2-page">
 
-        <!-- ═══ الحسابات البنكية ═══ -->
-        <div class="bank-section">
-            <div class="bank-section-header">
-                <div class="bsh-title"><span>🏦</span><h3>الحسابات البنكية</h3><span class="bsh-badge">${bankAccounts.length}</span></div>
-                <div style="display:flex;gap:.5rem">
-                    <button class="bsh-btn green" onclick="openRecordAllBalancesModal()">📊 تسجيل الأرصدة</button>
-                    <button class="bsh-btn" onclick="switchBankTab('accounts')">إدارة الحسابات ←</button>
+        <!-- ══ KPI Row ══ -->
+        <div class="bov2-kpi-row">
+            <div class="bov2-kpi" style="--kpi-accent:#4dabf7">
+                <div class="bov2-kpi-top">
+                    <div class="bov2-kpi-icon" style="background:rgba(77,171,247,.12);color:#4dabf7">🏦</div>
+                    <span class="bov2-kpi-tag">${bankAccounts.length} حساب</span>
+                </div>
+                <div class="bov2-kpi-val">${fmtMoney(totalBalance)}</div>
+                <div class="bov2-kpi-lbl">إجمالي أرصدة الحسابات</div>
+            </div>
+            <div class="bov2-kpi" style="--kpi-accent:#a78bfa">
+                <div class="bov2-kpi-top">
+                    <div class="bov2-kpi-icon" style="background:rgba(167,139,250,.12);color:#a78bfa">📈</div>
+                    <span class="bov2-kpi-tag">${activeInv.length} نشطة</span>
+                </div>
+                <div class="bov2-kpi-val">${fmtMoney(totalInvested)}</div>
+                <div class="bov2-kpi-lbl">إجمالي الاستثمارات النشطة</div>
+            </div>
+            <div class="bov2-kpi" style="--kpi-accent:#22c55e">
+                <div class="bov2-kpi-top">
+                    <div class="bov2-kpi-icon" style="background:rgba(34,197,94,.12);color:#22c55e">💰</div>
+                    <span class="bov2-kpi-tag">${doneInv.length} منتهية</span>
+                </div>
+                <div class="bov2-kpi-val">${fmtMoney(totalProfit)}</div>
+                <div class="bov2-kpi-lbl">إجمالي الأرباح المحققة</div>
+            </div>
+            <div class="bov2-kpi" style="--kpi-accent:#f59e0b">
+                <div class="bov2-kpi-top">
+                    <div class="bov2-kpi-icon" style="background:rgba(245,158,11,.12);color:#f59e0b">📅</div>
+                    <span class="bov2-kpi-tag" style="color:${upcoming[0] ? urgencyColor(daysLeft(upcoming[0].maturity_date)) : 'var(--text-muted)'}">
+                        ${upcoming[0] ? urgencyLabel(daysLeft(upcoming[0].maturity_date)) : '—'}
+                    </span>
+                </div>
+                <div class="bov2-kpi-val">${upcoming[0] ? fmtMoney(upcoming[0].amount) : '—'}</div>
+                <div class="bov2-kpi-lbl">أقرب استحقاق</div>
+            </div>
+        </div>
+
+        <!-- ══ Mid Row: Chart + Upcoming ══ -->
+        <div class="bov2-mid">
+
+            <!-- الرسم البياني -->
+            <div class="bov2-card bov2-chart-card">
+                <div class="bov2-card-hdr">
+                    <div>
+                        <div class="bov2-card-title">نشاط الودائع الاستثمارية</div>
+                        <div class="bov2-card-sub">آخر 6 أشهر · إجمالي ${fmtMoney(monthlyData.reduce((s, m) => s + m.amount, 0))}</div>
+                    </div>
+                    <div class="bov2-legend">
+                        <span class="bov2-legend-dot" style="background:#4dabf7"></span>
+                        <span>الودائع الاستثمارية الشهرية</span>
+                    </div>
+                </div>
+                <div class="bov2-chart-wrap">
+                    <!-- Y axis -->
+                    <div class="bov2-y-axis">
+                        ${ySteps.map(v => `<span>${fmtY(v)}</span>`).join('')}
+                    </div>
+                    <!-- Bars -->
+                    <div class="bov2-bars-area">
+                        <div class="bov2-grid-lines">
+                            ${ySteps.map(() => `<div class="bov2-grid-line"></div>`).join('')}
+                        </div>
+                        <div class="bov2-bars">
+                            ${monthlyData.map(m => {
+        const h = maxAmt > 0 ? Math.max(2, Math.round(m.amount / maxAmt * 100)) : 2;
+        return `
+                                <div class="bov2-bar-col">
+                                    <div class="bov2-bar-hover">
+                                        <div class="bov2-tooltip">${m.label}<br><strong>${fmtMoney(m.amount)}</strong></div>
+                                        <div class="bov2-bar-fill ${m.isCurrent ? 'bov2-bar-current' : ''}"
+                                             style="height:${h}%"></div>
+                                    </div>
+                                    <div class="bov2-bar-lbl">${m.label}</div>
+                                </div>`;
+    }).join('')}
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            <!-- صف ملخص الأرصدة -->
-            <div class="bank-summary-bar">
-                <div class="bsb-item"><span class="bsb-val">${fmtMoney(totalBalance)}</span><span class="bsb-lbl">إجمالي الأرصدة</span></div>
-                <div class="bsb-sep"></div>
-                <div class="bsb-item"><span class="bsb-val green">${fmtMoney(thisMonth)}</span><span class="bsb-lbl">ودائع الشهر</span></div>
-                <div class="bsb-sep"></div>
-                <div class="bsb-item"><span class="bsb-val orange">${pendingDeps.length}</span><span class="bsb-lbl">معلقة</span></div>
-                <div class="bsb-sep"></div>
-                <div class="bsb-item"><span class="bsb-val">${confirmedDeps.length}</span><span class="bsb-lbl">مؤكدة</span></div>
-            </div>
-
-            <!-- صفوف الحسابات -->
-            <div class="bank-rows-list">
-                ${bankAccounts.length ? bankAccounts.map(acc => {
-        const trend = parseFloat(acc.current_balance) >= parseFloat(acc.initial_balance || 0) ? 'up' : 'down';
+            <!-- الاستحقاقات -->
+            <div class="bov2-card bov2-upcoming-card">
+                <div class="bov2-card-hdr">
+                    <div>
+                        <div class="bov2-card-title">الاستحقاقات القادمة</div>
+                        <div class="bov2-card-sub">${activeInv.length} وديعة نشطة</div>
+                    </div>
+                    <button class="bov2-link" onclick="switchBankTab('investments')">عرض الكل ←</button>
+                </div>
+                <div class="bov2-upcoming-list">
+                    ${upcoming.length ? upcoming.map(inv => {
+        const days = daysLeft(inv.maturity_date);
+        const col = urgencyColor(days);
+        const pct = inv.profit_rate ? parseFloat(inv.profit_rate) : 0;
+        const totalDays = inv.start_date ?
+            Math.max(1, Math.ceil((new Date(inv.maturity_date) - new Date(inv.start_date)) / 86400000)) : 365;
+        const elapsed = inv.start_date ?
+            Math.ceil((today - new Date(inv.start_date)) / 86400000) : 0;
+        const progress = Math.min(100, Math.max(0, Math.round(elapsed / totalDays * 100)));
         return `
-                    <div class="bank-row" onclick="switchBankTab('accounts')">
-                        <div class="br-indicator" style="background:${trend === 'up' ? 'var(--accent-green)' : 'var(--accent-red)'}"></div>
-                        <div class="br-icon">🏦</div>
-                        <div class="br-main">
-                            <span class="br-title">${acc.account_name}</span>
-                            <span class="br-sub">${acc.bank_name} · ${acc.account_number || ''} · ${acc.account_type || 'جاري'}</span>
-                        </div>
-                        <div class="br-meta">
-                            <span class="br-amount ${trend === 'up' ? 'green' : 'red'}">${fmtMoney(acc.current_balance)}</span>
-                            <span class="br-tag">${acc.currency || 'SAR'}</span>
-                        </div>
-                        <div class="br-trend ${trend === 'up' ? 'up' : 'dn'}">${trend === 'up' ? '▲' : '▼'}</div>
-                        <div class="br-actions">
-                            <button class="br-btn" onclick="event.stopPropagation();openRecordBalanceModal(${acc.id})" title="تسجيل رصيد">📊</button>
-                            <button class="br-btn" onclick="event.stopPropagation();openBalanceHistoryModal(${acc.id})" title="السجل">📜</button>
-                        </div>
-                    </div>`;
-    }).join('') : `<div class="bank-empty">لا توجد حسابات بنكية مضافة بعد</div>`}
+                        <div class="bov2-up-item" onclick="switchBankTab('investments')">
+                            <div class="bov2-up-accent" style="background:${col}"></div>
+                            <div class="bov2-up-body">
+                                <div class="bov2-up-top">
+                                    <span class="bov2-up-num">${inv.investment_number || '#' + inv.id}</span>
+                                    <span class="bov2-up-days" style="color:${col};background:${col}18">${urgencyLabel(days)}</span>
+                                </div>
+                                <div class="bov2-up-meta">${inv.bank_name || ''} · عائد ${pct}%</div>
+                                <div class="bov2-up-progress">
+                                    <div class="bov2-up-bar" style="width:${progress}%;background:${col}"></div>
+                                </div>
+                                <div class="bov2-up-footer">
+                                    <span>${fmtMoney(inv.amount)}</span>
+                                    <span>${progress}% منقضي</span>
+                                </div>
+                            </div>
+                        </div>`;
+    }).join('') : `<div class="bov2-empty">لا توجد استثمارات نشطة</div>`}
+                    ${activeInv.length > 4 ? `
+                    <div class="bov2-more" onclick="switchBankTab('investments')">
+                        + ${activeInv.length - 4} ودائع أخرى
+                    </div>` : ''}
+                </div>
             </div>
         </div>
 
-        <!-- ═══ آخر الودائع ═══ -->
-        <div class="bank-section">
-            <div class="bank-section-header">
-                <div class="bsh-title"><span>📥</span><h3>آخر الودائع</h3></div>
-                <button class="bsh-btn green" onclick="openAddDepositModal()" style="${showIf('bank.add_deposit')}">+ إيداع جديد</button>
-            </div>
-            <div class="bank-rows-list">
-                ${recentDeps.length ? recentDeps.map(dep => {
-        const confirmed = dep.status === 'تم التأكيد';
-        return `
-                    <div class="bank-row">
-                        <div class="br-indicator" style="background:${confirmed ? 'var(--accent-green)' : 'var(--accent-orange)'}"></div>
-                        <div class="br-icon">${confirmed ? '✅' : '⏳'}</div>
-                        <div class="br-main">
-                            <span class="br-title">${dep.deposit_number}</span>
-                            <span class="br-sub">${dep.account_name} · ${fmtDate(dep.deposit_date)} · ${dep.deposit_type}</span>
-                        </div>
-                        <div class="br-meta">
-                            <span class="br-amount green">+${fmtMoney(dep.amount)}</span>
-                            <span class="br-badge ${confirmed ? 'confirmed' : 'pending'}">${dep.status}</span>
-                        </div>
-                        <div class="br-actions">
-                            ${!confirmed && canDo('bank.confirm_deposit') ? `<button class="br-btn success" onclick="handleConfirmDeposit(${dep.id})" title="تأكيد">✓</button>` : ''}
-                            <button class="br-btn" onclick="viewDepositDetails(${dep.id})" title="تفاصيل">👁</button>
-                        </div>
-                    </div>`;
-    }).join('') : `<div class="bank-empty">لا توجد ودائع مسجلة</div>`}
-            </div>
-        </div>
+        <!-- ══ Bottom Row: Accounts + Deposits ══ -->
+        <div class="bov2-bot">
 
+            <!-- بطاقات الحسابات البنكية -->
+            <div class="bov2-card bov2-accounts-card">
+                <div class="bov2-card-hdr">
+                    <div>
+                        <div class="bov2-card-title">الحسابات البنكية</div>
+                        <div class="bov2-card-sub">${bankAccounts.length} حساب · ${fmtMoney(totalBalance)} إجمالي</div>
+                    </div>
+                    <button class="bov2-link" onclick="switchBankTab('accounts')">إدارة ←</button>
+                </div>
+                <div class="bov2-acc-grid">
+                    ${bankAccounts.length ? bankAccounts.slice(0, 4).map(acc => {
+        const bal = parseFloat(acc.current_balance || 0);
+        const init = parseFloat(acc.initial_balance || 0);
+        const pct = totalBalance > 0 ? Math.round(bal / totalBalance * 100) : 0;
+        const up = bal >= init;
+        return `
+                        <div class="bov2-acc-card" onclick="switchBankTab('accounts')">
+                            <div class="bov2-acc-stripe" style="background:${up ? '#22c55e' : '#ef4444'}"></div>
+                            <div class="bov2-acc-inner">
+                                <div class="bov2-acc-bank">${acc.bank_name || ''}</div>
+                                <div class="bov2-acc-name">${acc.account_name}</div>
+                                <div class="bov2-acc-bal">${fmtMoney(bal)}</div>
+                                <div class="bov2-acc-bottom">
+                                    <div class="bov2-acc-track">
+                                        <div class="bov2-acc-fill" style="width:${pct}%;background:${up ? '#22c55e' : '#ef4444'}"></div>
+                                    </div>
+                                    <span class="bov2-acc-pct" style="color:${up ? '#22c55e' : '#ef4444'}">${pct}%</span>
+                                </div>
+                            </div>
+                        </div>`;
+    }).join('') : `<div class="bov2-empty" style="grid-column:1/-1">لا توجد حسابات</div>`}
+                </div>
+            </div>
+
+            <!-- آخر الودائع -->
+            <div class="bov2-card bov2-deps-card">
+                <div class="bov2-card-hdr">
+                    <div>
+                        <div class="bov2-card-title">آخر الودائع</div>
+                        <div class="bov2-card-sub">ودائع الشهر الحالي: ${fmtMoney(thisMonth)}</div>
+                    </div>
+                </div>
+                <div class="bov2-deps-list">
+                    ${bankDeposits.length ? [...bankDeposits].slice(0, 6).map(dep => {
+        const ok = dep.status === 'تم التأكيد';
+        return `
+                        <div class="bov2-dep-row">
+                            <div class="bov2-dep-dot" style="background:${ok ? '#22c55e' : '#f59e0b'}"></div>
+                            <div class="bov2-dep-info">
+                                <div class="bov2-dep-num">${dep.deposit_number}</div>
+                                <div class="bov2-dep-meta">${dep.account_name} · ${fmtDate(dep.deposit_date)}</div>
+                            </div>
+                            <div class="bov2-dep-right">
+                                <div class="bov2-dep-amt">+${fmtMoney(dep.amount)}</div>
+                                <div class="bov2-dep-badge" style="color:${ok ? '#22c55e' : '#f59e0b'};background:${ok ? 'rgba(34,197,94,.1)' : 'rgba(245,158,11,.1)'}">${dep.status}</div>
+                            </div>
+                        </div>`;
+    }).join('') : `<div class="bov2-empty">لا توجد ودائع</div>`}
+                </div>
+            </div>
+
+        </div>
     </div>`;
 }
+
+
 
 // ─── renderAccountCards — تبقى للتوافق ──────────────────
 function renderAccountCards() {

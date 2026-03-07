@@ -235,7 +235,7 @@ try {
             }
 
             $number      = generateReservationNumber($conn);
-            $fiscalYear  = (int)date('y');
+            $fiscalYear  = (int)date('Y');
             $priority    = $conn->real_escape_string($body['priority'] ?? 'عادي');
             $budgetCat   = $conn->real_escape_string($body['budget_category'] ?? '');
             $costCenter  = $conn->real_escape_string($body['cost_center'] ?? '');
@@ -251,21 +251,47 @@ try {
             $totalAmount = (float)($body['total_amount'] ?? 0);
             $vatAmount   = (float)($body['vat_amount'] ?? 0);
             $grandTotal  = (float)($body['grand_total'] ?? 0);
-            $currency    = $conn->real_escape_string($body['currency'] ?? 'SAR');
+            $currency    = strtoupper($conn->real_escape_string($body['currency'] ?? 'SAR'));
             $reqDate     = $conn->real_escape_string($body['request_date'] ?? date('Y-m-d'));
+
+            // ── سعر الصرف: يدوي من المستخدم أو من الجدول ────────
+            $exchangeRate = 1.0;
+            if ($currency !== 'SAR') {
+                // أولوية: سعر الصرف اليدوي من الطلب
+                $manualRate = (float)($body['exchange_rate'] ?? 0);
+                if ($manualRate > 0) {
+                    $exchangeRate = $manualRate;
+                } else {
+                    $rEx = $conn->query("SELECT rate_to_sar FROM exchange_rates WHERE currency='$currency' LIMIT 1");
+                    if ($rEx && ($exRow = $rEx->fetch_assoc())) {
+                        $exchangeRate = (float)$exRow['rate_to_sar'];
+                    }
+                }
+            }
+            $grandTotalSar = round($grandTotal * $exchangeRate, 2);
+
+            // ── ربط بخطة الموازنة التقديرية ─────────────────────
+            $budgetPlanId = 'NULL';
+            if (!empty($body['budget_plan_id'])) {
+                $budgetPlanId = (int)$body['budget_plan_id'];
+            } elseif (!empty($body['budget_plan_item_id'])) {
+                $budgetPlanId = (int)$body['budget_plan_item_id'];
+            }
 
             $sql = "INSERT INTO budget_reservations
                 (reservation_number, fiscal_year, department_id, requested_by, request_date,
                  purpose, priority, budget_category, cost_center,
                  supplier_id, supplier_name_manual, quotation_number, quotation_date,
                  items_description, quantity, unit, unit_price,
-                 total_amount, vat_amount, grand_total, currency, status)
+                 total_amount, vat_amount, grand_total, currency,
+                 exchange_rate_sar, grand_total_sar, budget_plan_id, exchange_rate, amount_sar, status)
                 VALUES
                 ('$number', $fiscalYear, $deptId, $userId, '$reqDate',
                  '$purpose', '$priority', '$budgetCat', '$costCenter',
                  $suppId, '$suppManual', '$quotNo', $quotDate,
                  '$itemsDesc', $qty, '$unit', $unitPrice,
-                 $totalAmount, $vatAmount, $grandTotal, '$currency', 'قيد المراجعة')";
+                 $totalAmount, $vatAmount, $grandTotal, '$currency',
+                 $exchangeRate, $grandTotalSar, $budgetPlanId, $exchangeRate, $grandTotalSar, 'قيد المراجعة')";
 
             if ($conn->query($sql)) {
                 $newId = $conn->insert_id;
@@ -521,6 +547,151 @@ try {
             jsonResponse(['success' => true]);
             break;
 
+        // ══════════════════════════════════════════════════════
+        //  الموازنة التقديرية — Budget Plans
+        // ══════════════════════════════════════════════════════
+
+        case 'plans_list':
+            $rows = [];
+            $r = $conn->query("
+                SELECT bp.*,
+                       e.name AS created_by_name,
+                       COUNT(DISTINCT bpi.id) AS items_count,
+                       COALESCE(SUM(bpi.allocated_sar),0) AS total_allocated
+                FROM budget_plans bp
+                LEFT JOIN employees e   ON e.id  = bp.created_by
+                LEFT JOIN budget_plan_items bpi ON bpi.plan_id = bp.id
+                GROUP BY bp.id ORDER BY bp.fiscal_year DESC
+            ");
+            if ($r) while ($row = $r->fetch_assoc()) $rows[] = $row;
+            jsonResponse(['success' => true, 'data' => $rows]);
+            break;
+
+        case 'plan_save':
+            $b = json_decode(file_get_contents('php://input'), true) ?? [];
+            $id         = (int)($b['id'] ?? 0);
+            $fiscalYear = (int)($b['fiscal_year'] ?? date('Y'));
+            $name       = $conn->real_escape_string($b['name'] ?? '');
+            $status     = $conn->real_escape_string($b['status'] ?? 'مسودة');
+            $notes      = $conn->real_escape_string($b['notes'] ?? '');
+            if (!$name) jsonResponse(['success' => false, 'error' => 'اسم الخطة مطلوب']);
+            if ($id) {
+                $conn->query("UPDATE budget_plans SET fiscal_year=$fiscalYear, name='$name', status='$status', notes='$notes' WHERE id=$id");
+            } else {
+                $conn->query("INSERT INTO budget_plans (fiscal_year,name,status,notes,created_by) VALUES ($fiscalYear,'$name','$status','$notes',$userId)");
+                $id = $conn->insert_id;
+            }
+            jsonResponse(['success' => true, 'id' => $id]);
+            break;
+
+        case 'plan_get':
+            $planId = (int)($_GET['id'] ?? 0);
+            $plan = null;
+            $r = $conn->query("SELECT * FROM budget_plans WHERE id=$planId LIMIT 1");
+            if ($r) $plan = $r->fetch_assoc();
+            if (!$plan) jsonResponse(['success' => false, 'error' => 'الخطة غير موجودة'], 404);
+
+            // بنود الخطة مع الإحصاء
+            $items = [];
+            $r2 = $conn->query("
+                SELECT bpi.*,
+                       bc.name AS category_name, bc.code AS category_code,
+                       cc.name AS cost_center_name, cc.code AS cost_center_code,
+                       COALESCE(SUM(CASE WHEN br.status NOT IN ('مرفوض','ملغى','مسودة') THEN br.grand_total_sar ELSE 0 END),0) AS reserved_sar,
+                       COALESCE(SUM(CASE WHEN br.status='منفذ' THEN br.grand_total_sar ELSE 0 END),0) AS spent_sar
+                FROM budget_plan_items bpi
+                JOIN budget_categories bc ON bc.id = bpi.category_id
+                JOIN cost_centers      cc ON cc.id = bpi.cost_center_id
+                LEFT JOIN budget_reservations br ON br.budget_plan_item_id = bpi.id
+                WHERE bpi.plan_id = $planId
+                GROUP BY bpi.id
+                ORDER BY bc.code, cc.code
+            ");
+            if ($r2) while ($row = $r2->fetch_assoc()) $items[] = $row;
+            jsonResponse(['success' => true, 'data' => $plan, 'items' => $items]);
+            break;
+
+        case 'plan_item_save':
+            $b = json_decode(file_get_contents('php://input'), true) ?? [];
+            // حفظ مجموعة بنود دفعة واحدة (upsert)
+            $planId  = (int)($b['plan_id'] ?? 0);
+            $itemsIn = $b['items'] ?? [];
+            if (!$planId || !$itemsIn) jsonResponse(['success' => false, 'error' => 'بيانات ناقصة']);
+            $saved = 0;
+            foreach ($itemsIn as $item) {
+                $catId  = (int)($item['category_id']    ?? 0);
+                $ccId   = (int)($item['cost_center_id'] ?? 0);
+                $amount = (float)($item['allocated_sar'] ?? 0);
+                $notes  = $conn->real_escape_string($item['notes'] ?? '');
+                if (!$catId || !$ccId || $amount < 0) continue;
+                $conn->query("
+                    INSERT INTO budget_plan_items (plan_id, category_id, cost_center_id, allocated_sar, notes)
+                    VALUES ($planId, $catId, $ccId, $amount, '$notes')
+                    ON DUPLICATE KEY UPDATE allocated_sar=$amount, notes='$notes'
+                ");
+                $saved++;
+            }
+            jsonResponse(['success' => true, 'saved' => $saved]);
+            break;
+
+        case 'plan_item_delete':
+            $itemId = (int)($_GET['item_id'] ?? 0);
+            $conn->query("DELETE FROM budget_plan_items WHERE id=$itemId");
+            jsonResponse(['success' => true]);
+            break;
+
+        case 'exchange_rates':
+            $rows = [];
+            $r = $conn->query("SELECT * FROM exchange_rates ORDER BY currency");
+            if ($r) while ($row = $r->fetch_assoc()) $rows[] = $row;
+            jsonResponse(['success' => true, 'data' => $rows]);
+            break;
+
+        case 'exchange_rate_save':
+            $b        = json_decode(file_get_contents('php://input'), true) ?? [];
+            $currency = strtoupper($conn->real_escape_string($b['currency'] ?? ''));
+            $rate     = (float)($b['rate_to_sar'] ?? 0);
+            if (!$currency || $rate <= 0) jsonResponse(['success' => false, 'error' => 'بيانات غير صحيحة']);
+            $conn->query("INSERT INTO exchange_rates (currency, rate_to_sar) VALUES ('$currency', $rate)
+                          ON DUPLICATE KEY UPDATE rate_to_sar=$rate");
+            jsonResponse(['success' => true]);
+            break;
+
+        case 'plan_budget_status':
+            // يرجع ملخص الموازنة لبند + مركز تكلفة محدد (للحجوزات)
+            $planItemId = (int)($_GET['plan_item_id'] ?? 0);
+            if (!$planItemId) jsonResponse(['success' => false, 'error' => 'plan_item_id مطلوب']);
+            $r = $conn->query("SELECT * FROM v_budget_plan_summary WHERE plan_item_id=$planItemId LIMIT 1");
+            $row = $r ? $r->fetch_assoc() : null;
+            if (!$row) jsonResponse(['success' => false, 'error' => 'البند غير موجود']);
+            jsonResponse(['success' => true, 'data' => $row]);
+            break;
+
+        case 'find_plan_item':
+            // يجد بند الموازنة بناءً على category_id + cost_center_code + fiscal_year
+            $catId      = (int)($_GET['category_id'] ?? 0);
+            $ccCode     = $conn->real_escape_string($_GET['cost_center_code'] ?? '');
+            $fiscalYear = (int)($_GET['fiscal_year'] ?? date('Y'));
+            $r = $conn->query("
+                SELECT bpi.id AS plan_item_id, bpi.allocated_sar,
+                       COALESCE(SUM(CASE WHEN br.status NOT IN ('مرفوض','ملغى','مسودة') THEN br.grand_total_sar ELSE 0 END),0) AS reserved_sar,
+                       COALESCE(SUM(CASE WHEN br.status='منفذ' THEN br.grand_total_sar ELSE 0 END),0) AS spent_sar
+                FROM budget_plan_items bpi
+                JOIN budget_plans bp    ON bp.id = bpi.plan_id  AND bp.fiscal_year = $fiscalYear AND bp.status = 'معتمدة'
+                JOIN cost_centers cc    ON cc.id = bpi.cost_center_id AND cc.code = '$ccCode'
+                LEFT JOIN budget_reservations br ON br.budget_plan_item_id = bpi.id
+                WHERE bpi.category_id = $catId
+                GROUP BY bpi.id LIMIT 1
+            ");
+            $row = $r ? $r->fetch_assoc() : null;
+            if ($row) {
+                $row['remaining_sar'] = (float)$row['allocated_sar'] - (float)$row['reserved_sar'];
+                jsonResponse(['success' => true, 'data' => $row]);
+            } else {
+                jsonResponse(['success' => false, 'error' => 'لا يوجد بند موازنة مخصص لهذا الاختيار']);
+            }
+            break;
+
         default:
             jsonResponse(['success' => false, 'error' => 'action غير معروف']);
     }
@@ -534,14 +705,18 @@ try {
 // ════════════════════════════════════════════════════════════
 
 function generateReservationNumber($conn) {
-    $year   = date('y');
+    $year2  = (int)date('y');   // 26
+    $year4  = (int)date('Y');   // 2026
+    $prefix = (string)$year2;   // "26"
     $result = $conn->query("
         SELECT MAX(CAST(SUBSTRING(reservation_number, 3) AS UNSIGNED)) AS maxSeq
-        FROM budget_reservations WHERE fiscal_year = $year
+        FROM budget_reservations
+        WHERE fiscal_year = $year4
+          AND reservation_number LIKE '{$prefix}%'
     ");
-    $row = $result->fetch_assoc();
+    $row = $result ? $result->fetch_assoc() : null;
     $seq = (int)($row['maxSeq'] ?? 0) + 1;
-    return $year . str_pad($seq, 5, '0', STR_PAD_LEFT);
+    return $prefix . str_pad($seq, 5, '0', STR_PAD_LEFT);
 }
 
 function getDepartmentByEmployee($conn, $empId) {

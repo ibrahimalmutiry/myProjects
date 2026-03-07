@@ -3037,6 +3037,7 @@ async function deleteBudgetCategory(id, name) {
 // ========== قسم النظام ==========
 async function renderSystemSection() {
     var content = document.getElementById('settingsContent');
+    if (!content) return;
 
     // جلب الإحصائيات
     var stats = { transactions: 0, employees: 0, types: 0, total_amount: 0 };
@@ -3081,17 +3082,39 @@ async function renderSystemSection() {
     html += '</div>';
 
     // منطقة الخطر
+    const dangerItems = [
+        { key: 'correspondence', icon: '💬', label: 'الخطابات', desc: 'حذف جميع الخطابات والمراحل والمرفقات وسجل الأحداث' },
+        { key: 'reservations', icon: '📋', label: 'حجوزات الموازنة', desc: 'حذف جميع الحجوزات وأصنافها وسجل الأحداث' },
+        { key: 'sla', icon: '🎯', label: 'بيانات SLA / OLA', desc: 'حذف بيانات مستوى الخدمة المرتبطة بالمعاملات والحجوزات' },
+        { key: 'investments', icon: '🏦', label: 'الودائع الاستثمارية', desc: 'حذف جميع الودائع والاستثمارات وسجل أحداثها' },
+        { key: 'transactions', icon: '💳', label: 'المعاملات المالية', desc: 'حذف جميع المعاملات والفواتير والمدفوعات وسجل الأحداث' },
+    ];
     html += '<div class="system-card danger-zone">';
     html += '<h3>⚠️ منطقة الخطر</h3>';
-    html += '<p>هذه الإجراءات لا يمكن التراجع عنها</p>';
-    html += '<div class="danger-buttons">';
-    html += '<button class="btn btn-danger" onclick="clearAllTransactions()">حذف جميع المعاملات</button>';
-    html += '</div>';
-    html += '</div>';
+    html += '<p>هذه الإجراءات لا يمكن التراجع عنها. تأكد جيداً قبل تنفيذ أي إجراء.</p>';
+    html += '<div class="danger-items">';
+    dangerItems.forEach(function (item) {
+        html += '<div class="danger-item">';
+        html += '<div class="danger-item-info">';
+        html += '<span class="danger-item-icon">' + item.icon + '</span>';
+        html += '<div><strong>' + item.label + '</strong><small>' + item.desc + '</small></div>';
+        html += '</div>';
+        html += '<button class="btn btn-danger btn-danger-sm" data-section="' + item.key + '">حذف</button>';
+        html += '</div>';
+    });
+    html += '</div>'; // danger-items
+    html += '</div>'; // danger-zone
 
     html += '</div>';
     content.innerHTML = html;
     loadPrefixesSection();
+
+    // ربط أزرار منطقة الخطر عبر event delegation
+    content.querySelectorAll('.btn-danger-sm[data-section]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            clearSection(btn.getAttribute('data-section'));
+        });
+    });
 }
 
 async function loadPrefixesSection() {
@@ -3151,26 +3174,67 @@ async function savePrefix(key) {
 }
 
 async function clearAllTransactions() {
-    if (!confirm('⚠️ تحذير!\n\nسيتم حذف جميع المعاملات نهائياً.\nهذا الإجراء لا يمكن التراجع عنه.\n\nهل أنت متأكد؟')) return;
-    if (!confirm('تأكيد نهائي: سيتم حذف كل شيء!')) return;
+    await clearSection('transactions');
+}
+
+const CLEAR_SECTION_CONFIG = {
+    correspondence: {
+        label: 'الخطابات وجميع بياناتها',
+        action: 'clear_correspondence',
+        reload: null,
+    },
+    reservations: {
+        label: 'حجوزات الموازنة وجميع بياناتها',
+        action: 'clear_reservations',
+        reload: null,
+    },
+    sla: {
+        label: 'بيانات SLA / OLA',
+        action: 'clear_sla',
+        reload: null,
+    },
+    investments: {
+        label: 'الودائع الاستثمارية وجميع بياناتها',
+        action: 'clear_investments',
+        reload: null,
+    },
+    transactions: {
+        label: 'المعاملات المالية وجميع بياناتها',
+        action: 'clear_transactions',
+        reload: () => loadTransactions(),
+    },
+};
+
+async function clearSection(section) {
+    const cfg = CLEAR_SECTION_CONFIG[section];
+    if (!cfg) return;
+
+    // أول تأكيد
+    if (!confirm(`⚠️ تحذير!\n\nسيتم حذف ${cfg.label} نهائياً.\nهذا الإجراء لا يمكن التراجع عنه.\n\nهل أنت متأكد؟`)) return;
+    // ثاني تأكيد
+    if (!confirm(`تأكيد نهائي: حذف ${cfg.label}؟`)) return;
+
+    // تعطيل الأزرار أثناء التنفيذ
+    document.querySelectorAll('.btn-danger-sm').forEach(b => b.disabled = true);
 
     try {
-        var res = await fetch('api/settings.php?action=clear_all', {
+        const res = await fetch(`api/settings.php?action=${cfg.action}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' }
         });
-
-        var result = await res.json();
+        const result = await res.json();
 
         if (result.success) {
-            showToast('تم حذف جميع المعاملات', 'success');
-            await loadTransactions();
+            showToast(`✅ تم حذف ${cfg.label}`, 'success');
+            if (cfg.reload) await cfg.reload();
             renderSystemSection();
         } else {
-            showToast(result.message || 'خطأ', 'error');
+            showToast(result.message || 'خطأ في التنفيذ', 'error');
         }
     } catch (err) {
-        showToast('خطأ في الاتصال', 'error');
+        showToast('خطأ في الاتصال بالخادم', 'error');
+    } finally {
+        document.querySelectorAll('.btn-danger-sm').forEach(b => b.disabled = false);
     }
 }
 
@@ -3227,7 +3291,7 @@ var PAGES_CONFIG = [
     { key: 'notifications', label: 'التنبيهات', icon: '🔔', group: 'رئيسية' },
     { key: 'transactions', label: 'المعاملات المالية', icon: '💰', group: 'معاملات' },
     { key: 'reservations', label: 'الحجوزات', icon: '📅', group: 'رئيسية' },
-    { key: 'bank-deposits', label: 'الودائع البنكية', icon: '🏦', group: 'معاملات' },
+    { key: 'bank-deposits', label: 'الحسابات البنكية', icon: '🏦', group: 'معاملات' },
     { key: 'correspondence', label: 'الخطابات', icon: '📨', group: 'معاملات' },
     { key: 'sla', label: 'SLA / OLA', icon: '⏱', group: 'متابعة' },
     { key: 'performance', label: 'متابعة الأداء', icon: '📈', group: 'متابعة' },

@@ -216,6 +216,81 @@ try {
             break;
         
         // حذف جميع المعاملات
+        // ══════════════════════════════════════════════════════
+        //  حذف الخطابات وما يتعلق بها
+        // ══════════════════════════════════════════════════════
+        case 'clear_correspondence':
+            if ($method !== 'POST') { jsonResponse(['success'=>false,'message'=>'POST فقط'],405); break; }
+            $conn = db();
+            $conn->query("DELETE FROM correspondence_attachments");
+            $conn->query("DELETE FROM correspondence_audit_log");
+            $conn->query("DELETE FROM correspondence_comments");
+            $conn->query("DELETE FROM correspondence_stages");
+            $conn->query("DELETE FROM stage_pause_log");
+            $conn->query("DELETE FROM correspondence_workflow");
+            $conn->query("DELETE FROM correspondence");
+            $conn->query("ALTER TABLE correspondence AUTO_INCREMENT = 1");
+            jsonResponse(['success'=>true,'message'=>'تم حذف جميع الخطابات']);
+            break;
+
+        // ══════════════════════════════════════════════════════
+        //  حذف حجوزات الموازنة وما يتعلق بها
+        // ══════════════════════════════════════════════════════
+        case 'clear_reservations':
+            if ($method !== 'POST') { jsonResponse(['success'=>false,'message'=>'POST فقط'],405); break; }
+            $conn = db();
+            $conn->query("DELETE FROM budget_reservation_items");
+            $conn->query("DELETE FROM budget_reservation_log");
+            $conn->query("DELETE FROM budget_reservations");
+            $conn->query("ALTER TABLE budget_reservations AUTO_INCREMENT = 1");
+            jsonResponse(['success'=>true,'message'=>'تم حذف جميع حجوزات الموازنة']);
+            break;
+
+        // ══════════════════════════════════════════════════════
+        //  حذف بيانات SLA / OLA
+        // ══════════════════════════════════════════════════════
+        case 'clear_sla':
+            if ($method !== 'POST') { jsonResponse(['success'=>false,'message'=>'POST فقط'],405); break; }
+            $conn = db();
+            $conn->query("DELETE FROM sla_breaches");
+            $conn->query("DELETE FROM ola_rules");
+            $conn->query("DELETE FROM sla_policies");
+            jsonResponse(['success'=>true,'message'=>'تم حذف بيانات SLA / OLA']);
+            break;
+
+        // ══════════════════════════════════════════════════════
+        //  حذف الودائع الاستثمارية
+        // ══════════════════════════════════════════════════════
+        case 'clear_investments':
+            if ($method !== 'POST') { jsonResponse(['success'=>false,'message'=>'POST فقط'],405); break; }
+            $conn = db();
+            $conn->query("DELETE FROM investment_transactions");
+            $conn->query("DELETE FROM bank_deposits_investment");
+            $conn->query("DELETE FROM bank_withdrawals");
+            $conn->query("DELETE FROM monthly_deposits");
+            $conn->query("DELETE FROM bank_reconciliations");
+            $conn->query("DELETE FROM daily_balances");
+            $conn->query("DELETE FROM bank_deposits");
+            $conn->query("ALTER TABLE bank_deposits AUTO_INCREMENT = 1");
+            jsonResponse(['success'=>true,'message'=>'تم حذف جميع الودائع الاستثمارية']);
+            break;
+
+        // ══════════════════════════════════════════════════════
+        //  حذف المعاملات المالية
+        // ══════════════════════════════════════════════════════
+        case 'clear_transactions':
+            if ($method !== 'POST') { jsonResponse(['success'=>false,'message'=>'POST فقط'],405); break; }
+            $conn = db();
+            $conn->query("DELETE FROM activity_log");
+            $conn->query("DELETE FROM invoice_data");
+            $conn->query("DELETE FROM payment_data");
+            $conn->query("DELETE FROM budget_data");
+            $conn->query("DELETE FROM receiving_data");
+            $conn->query("DELETE FROM transactions");
+            $conn->query("ALTER TABLE transactions AUTO_INCREMENT = 1");
+            jsonResponse(['success'=>true,'message'=>'تم حذف جميع المعاملات المالية']);
+            break;
+
         case 'clear_all':
             if ($method !== 'POST') {
                 jsonResponse(['success' => false, 'message' => 'طريقة غير صحيحة'], 405);

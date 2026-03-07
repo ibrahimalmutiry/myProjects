@@ -1,5 +1,5 @@
 /**
- * app-budget.js — شاشة الحجوزات المالية
+ * app-budget.js — شاشة الحجوزات المالية والموازنة التقديرية
  * ════════════════════════════════════════════════════════════
  */
 
@@ -10,7 +10,17 @@ const BudgetState = {
     filter: { status: '', department_id: '', fiscal_year: '', search: '' },
     currentStep: 1,
     loaded: false,
+    activeTab: 'reservations', // 'reservations' | 'plans'
 };
+
+// ── حالة الموازنة التقديرية ─────────────────────────────────
+const PlanState = {
+    plans: [],
+    meta: { categories: [], cost_centers: [], years: [] },
+    selectedYear: new Date().getFullYear(),
+    loaded: false,
+};
+
 
 // ── تسميات الحالات ──────────────────────────────────────────
 const RES_STATUS = {
@@ -77,8 +87,39 @@ async function loadBudgetReservationsPage() {
         fetchBudgetMeta(),
     ]);
 
-    renderBudgetPage();
+    // حمّل خطط الموازنة للسنة الحالية لاستخدامها في نموذج الحجز
+    if (!PlanState.plans.length) {
+        const [metaR, plansR] = await Promise.all([
+            fetch('api/budget_plan_api.php?action=meta').then(r => r.json()),
+            fetch(`api/budget_plan_api.php?action=list&year=${PlanState.selectedYear}`).then(r => r.json()),
+        ]);
+        if (metaR.success) PlanState.meta = metaR.data;
+        if (plansR.success) PlanState.plans = plansR.data;
+    }
+
+    BudgetState.loaded = true;
+
+    // لو طُلب تاب معيّن من السايدبار قبل التحميل
+    if (BudgetState.activeTab === 'plans') {
+        await loadBudgetPlansTab();
+    } else {
+        renderBudgetPage();
+    }
 }
+
+async function switchBudgetMainTab(tab) {
+    BudgetState.activeTab = tab;
+    if (!BudgetState.loaded) {
+        // الصفحة لم تُحمَّل بعد — loadBudgetReservationsPage ستأخذ activeTab بعين الاعتبار
+        return;
+    }
+    if (tab === 'reservations') {
+        renderBudgetPage();
+    } else {
+        await loadBudgetPlansTab();
+    }
+}
+
 
 // ── جلب البيانات ────────────────────────────────────────────
 async function fetchReservations() {
@@ -389,6 +430,20 @@ function renderReservationForm(step = BudgetState.currentStep) {
                     ...catList.map(c => ({ value: c.name, label: c.code ? `${c.code} — ${c.name}` : c.name }))]
                 })}
                 </div>
+                <div class="res-form-group">
+                    <label>خطة الموازنة التقديرية</label>
+                    <select class="form-select" id="rf_budget_plan_id"
+                        onchange="onBudgetPlanChange(this.value)">
+                        <option value="">-- بدون ربط بخطة --</option>
+                        ${(PlanState.plans.length ? PlanState.plans : []).map(p =>
+                    `<option value="${p.id}" ${_budgetFormData['rf_budget_plan_id'] == p.id ? 'selected' : ''}>
+                                ${p.category_code} — ${p.category_name} (${p.fiscal_year})
+                            </option>`
+                ).join('')}
+                    </select>
+                </div>
+                <div class="res-form-group full" id="rf_budget_info_wrap"></div>
+                </div>
                       <div class="res-form-group">
                     <label>الأولوية</label>
                     ${searchableSelect({
@@ -490,6 +545,13 @@ function renderReservationForm(step = BudgetState.currentStep) {
                     <option value="KWD">دينار كويتي (KWD) د.ك</option>
                     <option value="QAR">ريال قطري (QAR) ر.ق</option>
                 </select>
+            </div>
+            <div class="res-form-group" id="rf_exchange_rate_wrap" style="margin-top:.25rem;${(_budgetFormData['rf_currency'] && _budgetFormData['rf_currency'] !== 'SAR') ? '' : 'display:none'}">
+                <label>سعر الصرف (1 وحدة = ؟ ريال) <span class="req">*</span></label>
+                <input type="number" class="form-input" id="rf_exchange_rate" style="max-width:220px"
+                    value="${_budgetFormData['rf_exchange_rate'] || 1}" min="0.0001" step="0.0001"
+                    placeholder="مثال: 3.75 للدولار"
+                    oninput="onExchangeRateChange(this.value)">
             </div>`;
     }
 
@@ -563,7 +625,18 @@ function _onCurrencyChange(val) {
     document.querySelectorAll('.rf-currency-live').forEach(el => {
         el.textContent = getCurrencySymbol(val) + ' ' + val;
     });
+    // إظهار / إخفاء حقل سعر الصرف
+    const wrap = document.getElementById('rf_exchange_rate_wrap');
+    if (wrap) wrap.style.display = val !== 'SAR' ? '' : 'none';
+    // تحديث شريط الميزانية
+    refreshBudgetInfoBar();
 }
+
+function onExchangeRateChange(val) {
+    _budgetFormData['rf_exchange_rate'] = val;
+    refreshBudgetInfoBar();
+}
+
 
 function updateItem(i, field, value) {
     if (_rfItems[i]) _rfItems[i][field] = value;
@@ -617,7 +690,7 @@ function saveBudgetFormData() {
         'rf_purpose', 'rf_department_id', 'rf_department_name', 'rf_request_date', 'rf_priority',
         'rf_budget_category', 'rf_cost_center',
         'rf_supplier_id', 'rf_supplier_name_manual', 'rf_quotation_number', 'rf_quotation_date',
-        'rf_currency',
+        'rf_currency', 'rf_budget_plan_id', 'rf_exchange_rate',
     ];
     fields.forEach(id => {
         const el = document.getElementById(id);
@@ -707,6 +780,25 @@ function onCostCenterChange(val) {
         _budgetFormData['rf_department_id'] = '';
         _budgetFormData['rf_department_name'] = '';
     }
+    refreshBudgetInfoBar();
+}
+
+async function onBudgetPlanChange(planId) {
+    _budgetFormData['rf_budget_plan_id'] = planId;
+    await refreshBudgetInfoBar();
+}
+
+async function refreshBudgetInfoBar() {
+    const wrap = document.getElementById('rf_budget_info_wrap');
+    if (!wrap) return;
+    const planId = document.getElementById('rf_budget_plan_id')?.value || _budgetFormData['rf_budget_plan_id'];
+    const ccCode = document.getElementById('rf_cost_center')?._selectedValue
+        || _budgetFormData['rf_cost_center'];
+    const currency = document.getElementById('rf_currency')?.value || 'SAR';
+    const rate = parseFloat(document.getElementById('rf_exchange_rate')?.value || 1);
+    if (!planId || !ccCode) { wrap.innerHTML = ''; return; }
+    const info = await loadPlanBudgetInfo(planId, ccCode);
+    wrap.innerHTML = renderBudgetInfoBar(info, currency, rate);
 }
 
 // ── إرسال الحجز ─────────────────────────────────────────────
@@ -731,6 +823,8 @@ async function submitReservation() {
         quotation_number: _budgetFormData['rf_quotation_number'],
         quotation_date: _budgetFormData['rf_quotation_date'],
         currency: _budgetFormData['rf_currency'] || _rfCurrency || 'SAR',
+        budget_plan_id: _budgetFormData['rf_budget_plan_id'] || null,
+        exchange_rate: parseFloat(_budgetFormData['rf_exchange_rate'] || 1),
         items: activeItems,
         items_description: activeItems.map(it => `${it.description} (${it.qty} ${it.unit})`).join('\n'),
         quantity: activeItems.reduce((s, it) => s + (it.qty || 0), 0),
@@ -960,6 +1054,9 @@ async function openReservationDetails(id) {
                     </div>
                 </div>
 
+                <!-- ══ ميزانية البند التقديرية ══ -->
+                <div id="rdv2_budget_bar_wrap"></div>
+
                 <div class="rdv2-divider"></div>
 
                 <!-- جدول الأصناف -->
@@ -1066,6 +1163,9 @@ async function openReservationDetails(id) {
 
             </div><!-- /rdv2-doc -->
         </div><!-- /rdv2-shell -->`;
+
+        // ── تحميل ميزانية البند التقديرية ─────────────────
+        loadReservationBudgetBar(r);
 
     } catch (e) {
         DOM.modalBody.innerHTML = '<p style="color:var(--accent-red);padding:2rem;text-align:center">خطأ في تحميل البيانات</p>';
@@ -1611,6 +1711,7 @@ function injectBudgetStyles() {
     /* ── توسيع المودل لشاشة الحجوزات ───────────── */
     .budget-modal-wide { max-width: 860px !important; width: 92% !important; }
 
+    /* ── تابز رئيسية ────────────────────────────── */
     /* ── الإحصائيات ─────────────────────────────── */
     .budget-stats-row { display:grid; grid-template-columns:repeat(4,1fr) 1.5fr; gap:.75rem; }
     .budget-stat-card { background:var(--bg-card); border:1px solid var(--border-color);
@@ -1841,6 +1942,118 @@ function injectBudgetStyles() {
         .rf-items-header     { display:none; }
         .rf-item-row         { flex-wrap:wrap; }
     }
+
+    /* ── الموازنة التقديرية — accordion ─────────────── */
+    .bp-categories-list  { display:flex; flex-direction:column; gap:.4rem; }
+
+    .bp-cat-row          { border:1px solid var(--border-color); border-radius:10px;
+                           overflow:hidden; background:var(--bg-card);
+                           transition:box-shadow .15s; }
+    .bp-cat-row:hover    { box-shadow:0 2px 8px rgba(0,0,0,.08); }
+    .bp-cat-row.has-plan { border-color:rgba(99,102,241,.3); }
+
+    .bp-cat-header       { display:grid;
+                           grid-template-columns: 28px 1fr 200px 160px 110px 32px;
+                           align-items:center; gap:.75rem;
+                           padding:.65rem 1rem; cursor:pointer;
+                           user-select:none; }
+    .bp-cat-header:hover { background:var(--bg-surface); }
+
+    .bp-cat-toggle       { font-size:1rem; color:var(--text-muted); width:20px; text-align:center; }
+    .bp-cat-info         { display:flex; flex-direction:column; gap:.1rem; overflow:hidden; }
+    .bp-cat-code         { font-size:.73rem; color:var(--text-muted); font-family:monospace; }
+    .bp-cat-name         { font-size:.87rem; font-weight:600; color:var(--text-primary);
+                           white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+    .bp-budget-input     { width:100%; padding:.35rem .6rem; border-radius:7px;
+                           border:1px solid var(--border-color); background:var(--bg-surface);
+                           color:var(--text-primary); font-size:.85rem; text-align:left;
+                           direction:ltr; }
+    .bp-budget-input:focus     { outline:none; border-color:var(--accent-blue); box-shadow:0 0 0 2px rgba(77,171,247,.2); }
+    .bp-budget-input.bp-budget-new { border-style:dashed; color:var(--text-muted); }
+
+    .bp-sar-label        { font-size:.75rem; color:var(--text-muted); white-space:nowrap; }
+
+    .bp-cat-bar-wrap     { display:flex; align-items:center; gap:.4rem; }
+    .bp-cat-bar-bg       { flex:1; height:6px; background:var(--bg-surface); border-radius:3px; min-width:50px; }
+    .bp-cat-bar-fill     { height:6px; border-radius:3px; transition:width .3s; }
+    .bp-cat-pct          { font-size:.72rem; font-weight:700; width:32px; text-align:left; }
+
+    .bp-cat-remaining    { font-size:.8rem; font-weight:600; text-align:left; direction:ltr; }
+    .bp-cat-del          { background:none; border:none; cursor:pointer; color:var(--text-muted);
+                           font-size:.9rem; padding:.2rem; border-radius:4px; opacity:.5;
+                           transition:opacity .15s; }
+    .bp-cat-del:hover    { opacity:1; color:#ef4444; }
+    .bp-cat-del-hide     { visibility:hidden; }
+
+    /* panel مراكز التكلفة */
+    .bp-cc-panel         { border-top:1px solid var(--border-color); background:var(--bg-surface); }
+    .bp-cc-header-row    { display:grid; grid-template-columns:36px 1fr 180px 1fr;
+                           gap:.5rem; padding:.4rem 1rem;
+                           font-size:.75rem; font-weight:700; color:var(--text-muted);
+                           border-bottom:1px solid var(--border-color); }
+    .bp-cc-rows-wrap     { max-height:400px; overflow-y:auto; }
+    .bp-cc-row           { display:grid; grid-template-columns:36px 1fr 180px 1fr;
+                           gap:.5rem; align-items:center; padding:.45rem 1rem;
+                           border-bottom:1px solid rgba(0,0,0,.04);
+                           transition:background .1s; }
+    .bp-cc-row:hover     { background:var(--bg-card); }
+    .bp-cc-row.active    { background:rgba(99,102,241,.05); }
+
+    .bp-cc-toggle-wrap   { display:flex; align-items:center; justify-content:center; }
+    .bp-cc-check         { width:16px; height:16px; cursor:pointer; accent-color:var(--accent-blue); }
+    .bp-cc-name-wrap     { display:flex; flex-direction:column; gap:.05rem; overflow:hidden; }
+    .bp-cc-code-sm       { font-size:.7rem; color:var(--text-muted); font-family:monospace; }
+    .bp-cc-name-sm       { font-size:.82rem; color:var(--text-primary);
+                           white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .bp-cc-amount-wrap   { display:flex; align-items:center; gap:.35rem; }
+    .bp-cc-amount-input  { width:100%; padding:.3rem .5rem; border-radius:6px;
+                           border:1px solid var(--border-color); background:var(--bg-card);
+                           color:var(--text-primary); font-size:.83rem;
+                           text-align:left; direction:ltr; }
+    .bp-cc-amount-input:disabled { opacity:.35; cursor:not-allowed; }
+    .bp-cc-amount-input:focus    { outline:none; border-color:var(--accent-blue); }
+
+    /* CC row reserved/remaining */
+    .bp-cc-reserved-wrap     { display:flex; align-items:center; gap:.35rem; min-width:180px; }
+    .bp-cc-stat              { display:flex; flex-direction:column; align-items:center;
+                               background:var(--bg-card); border-radius:6px;
+                               padding:.2rem .55rem; min-width:76px; flex:1; }
+    .bp-cc-stat-lbl          { font-size:.68rem; color:var(--text-muted); line-height:1.2; }
+    .bp-cc-stat-val          { font-size:.8rem; font-weight:700; line-height:1.4; }
+    .bp-cc-stat-val.reserved { color:#f59e0b; }
+    .bp-cc-stat-val.ok       { color:#22c55e; }
+    .bp-cc-stat-val.over     { color:#ef4444; }
+    .bp-cc-stat-sep          { width:1px; height:28px; background:var(--border-color); margin:0 .1rem; }
+    /* Footer */
+    .bp-cc-footer-inner      { padding:.6rem .75rem; }
+    .bp-cc-footer-cards      { display:flex; gap:.5rem; margin-bottom:.55rem; flex-wrap:wrap; }
+    .bp-cc-footer-card       { flex:1; min-width:90px; background:var(--bg-card);
+                               border-radius:7px; padding:.35rem .6rem;
+                               border:1px solid var(--border-color); }
+    .bp-cc-footer-card.over  { border-color:#ef444440; background:rgba(239,68,68,.06); }
+    .bp-cc-footer-card.alloc { border-color:rgba(34,197,94,.3); background:rgba(34,197,94,.05); }
+    .bp-cc-footer-card-lbl   { display:block; font-size:.68rem; color:var(--text-muted); margin-bottom:.15rem; }
+    .bp-cc-footer-card-val   { font-size:.88rem; font-weight:700; color:var(--text-primary); }
+    .bp-cc-footer-card-val small { font-size:.68rem; font-weight:400; color:var(--text-muted); }
+    .bp-cc-footer-bar-wrap   { display:flex; align-items:center; gap:.5rem; }
+    .bp-cc-footer-bar-track  { flex:1; height:6px; background:var(--bg-surface);
+                               border-radius:4px; overflow:hidden;
+                               border:1px solid var(--border-color); }
+    .bp-cc-footer-bar-fill   { height:100%; border-radius:4px; transition:width .4s; }
+    .bp-cc-footer-bar-pct    { font-size:.75rem; font-weight:700; min-width:34px; text-align:left; }
+    .bp-cc-remaining-val { font-weight:600; }
+
+    .bp-cc-footer        { padding:.6rem 1rem; border-top:1px solid var(--border-color);
+                           background:var(--bg-card); }
+
+    /* شريط الحفظ */
+    .bp-save-bar         { position:sticky; top:0; z-index:10;
+                           display:flex; align-items:center; gap:1rem;
+                           background:rgba(245,158,11,.12); border:1px solid rgba(245,158,11,.3);
+                           border-radius:10px; padding:.6rem 1.2rem;
+                           margin-bottom:1rem; flex-wrap:wrap; }
+    #bp-save-bar-msg     { color:#b45309; font-weight:600; font-size:.85rem; flex:1; }
     `;
     document.head.appendChild(s);
 
@@ -1854,4 +2067,812 @@ function injectBudgetStyles() {
         });
         _modalEl._budgetObserver.observe(_modalEl, { attributes: true, attributeFilter: ['class'] });
     }
+}
+
+// ════════════════════════════════════════════════════════════
+//  الموازنة التقديرية
+// ════════════════════════════════════════════════════════════
+
+async function loadBudgetPlansTab() {
+    DOM.mainContent.innerHTML = `
+        <div class="budget-page-wrap">
+            <div class="budget-page-header">
+                <div>
+                    <h2 class="budget-page-title">📊 الموازنة التقديرية</h2>
+                    <p class="budget-page-sub">تخصيص الميزانيات السنوية على البنود ومراكز التكلفة</p>
+                </div>
+            </div>
+            <div id="plans-body"><div class="spinner" style="margin:3rem auto;display:block"></div></div>
+        </div>`;
+
+    if (!PlanState.meta.categories.length) {
+        const m = await fetch('api/budget_plan_api.php?action=meta').then(r => r.json());
+        if (m.success) PlanState.meta = m.data;
+    }
+
+    await fetchPlans();
+    renderPlansPage();
+}
+
+async function fetchPlans() {
+    const r = await fetch(`api/budget_plan_api.php?action=list&year=${PlanState.selectedYear}`).then(r => r.json());
+    if (r.success) PlanState.plans = r.data;
+}
+
+async function fetchPlanMeta() {
+    const m = await fetch('api/budget_plan_api.php?action=meta').then(r => r.json());
+    if (m.success) PlanState.meta = m.data;
+}
+
+function renderPlansPage() {
+    const { plans, selectedYear, meta } = PlanState;
+    const totalBudget = plans.reduce((s, p) => s + parseFloat(p.total_budget || 0), 0);
+    const totalReserved = plans.reduce((s, p) => s + parseFloat(p.total_reserved || 0), 0);
+    const totalRemaining = totalBudget - totalReserved;
+
+    const yearsOpts = meta.years.map(y =>
+        `<option value="${y}" ${y == selectedYear ? 'selected' : ''}>${y}</option>`
+    ).join('');
+    // السنة القادمة لو مش موجودة
+    const nextY = selectedYear + 1;
+    const hasNext = meta.years.includes(nextY);
+
+    const statsHtml = `
+        <div class="budget-stats-row" style="margin-bottom:1.25rem">
+            <div class="budget-stat-card">
+                <div class="bsc-icon" style="background:rgba(99,102,241,.12);color:#6366f1">📋</div>
+                <div class="bsc-body"><div class="bsc-num">${plans.length}</div><div class="bsc-label">عدد البنود</div></div>
+            </div>
+            <div class="budget-stat-card">
+                <div class="bsc-icon" style="background:rgba(34,197,94,.12);color:#22c55e">💰</div>
+                <div class="bsc-body"><div class="bsc-num">${formatMoney(totalBudget)}</div><div class="bsc-label">إجمالي الميزانية</div></div>
+            </div>
+            <div class="budget-stat-card">
+                <div class="bsc-icon" style="background:rgba(245,158,11,.12);color:#f59e0b">📤</div>
+                <div class="bsc-body"><div class="bsc-num">${formatMoney(totalReserved)}</div><div class="bsc-label">المحجوز</div></div>
+            </div>
+            <div class="budget-stat-card">
+                <div class="bsc-icon" style="background:rgba(139,92,246,.12);color:#8b5cf6">📥</div>
+                <div class="bsc-body"><div class="bsc-num" style="color:${totalRemaining < 0 ? '#ef4444' : 'inherit'}">${formatMoney(totalRemaining)}</div><div class="bsc-label">المتبقي</div></div>
+            </div>
+        </div>`;
+
+    // بنود accordion
+    const categoriesHtml = meta.categories.map(cat => {
+        const plan = plans.find(p => p.category_id == cat.id);
+        const budget = plan ? parseFloat(plan.total_budget || 0) : 0;
+        const reserved = plan ? parseFloat(plan.total_reserved || 0) : 0;
+        const allocated = plan ? parseFloat(plan.total_allocated || 0) : 0;
+        const remaining = budget - reserved;
+        const pct = budget > 0 ? Math.min(100, Math.round(reserved / budget * 100)) : 0;
+        const barColor = pct >= 90 ? '#ef4444' : pct >= 70 ? '#f59e0b' : '#22c55e';
+        const hasPlan = !!plan;
+        const isOpen = PlanState.openCategories?.has(cat.id);
+
+        return `
+        <div class="bp-cat-row ${hasPlan ? 'has-plan' : 'no-plan'}" id="bp-cat-${cat.id}">
+            <div class="bp-cat-header" onclick="togglePlanCategory(${cat.id})">
+                <div class="bp-cat-toggle">${isOpen ? '▾' : '▸'}</div>
+                <div class="bp-cat-info">
+                    <span class="bp-cat-code">${cat.code}</span>
+                    <span class="bp-cat-name">${cat.name}</span>
+                </div>
+                <div class="bp-cat-budget">
+                    ${hasPlan
+                ? `<input type="number" class="bp-budget-input" id="bp-total-${cat.id}"
+                                value="${budget}" min="0" step="0.01"
+                                onclick="event.stopPropagation()"
+                                onchange="onCatBudgetChange(${cat.id}, this.value)"
+                                title="إجمالي ميزانية البند">`
+                : `<input type="number" class="bp-budget-input bp-budget-new" id="bp-total-${cat.id}"
+                                placeholder="أضف ميزانية..." min="0" step="0.01"
+                                onclick="event.stopPropagation()"
+                                onchange="onCatBudgetChange(${cat.id}, this.value)"
+                                title="إجمالي ميزانية البند">`
+            }
+                    <span class="bp-sar-label">ر.س</span>
+                </div>
+                ${hasPlan ? `
+                <div class="bp-cat-bar-wrap">
+                    <div class="bp-cat-bar-bg">
+                        <div class="bp-cat-bar-fill" style="width:${pct}%;background:${barColor}"></div>
+                    </div>
+                    <span class="bp-cat-pct" style="color:${barColor}">${pct}%</span>
+                </div>
+                <div class="bp-cat-remaining" style="color:${remaining < 0 ? '#ef4444' : 'var(--text-muted)'}">
+                    ${remaining < 0 ? '⚠' : ''}${formatMoney(remaining)}
+                </div>` : '<div class="bp-cat-bar-wrap"></div><div class="bp-cat-remaining"></div>'}
+                <button class="bp-cat-del ${hasPlan ? '' : 'bp-cat-del-hide'}" onclick="event.stopPropagation();deletePlan(${plan?.id || 0},'${cat.name.replace(/'/g, "\'")}',${cat.id})" title="حذف البند">🗑</button>
+            </div>
+
+            <!-- مراكز التكلفة (مخفية افتراضياً) -->
+            <div class="bp-cc-panel" id="bp-cc-panel-${cat.id}" style="display:${isOpen ? 'block' : 'none'}">
+                <div class="bp-cc-loading" id="bp-cc-loading-${cat.id}">
+                    <div class="spinner" style="width:20px;height:20px;margin:1rem auto;display:block"></div>
+                </div>
+                <div class="bp-cc-content" id="bp-cc-content-${cat.id}" style="display:none"></div>
+            </div>
+        </div>`;
+    }).join('');
+
+    document.getElementById('plans-body').innerHTML = `
+        <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1rem;flex-wrap:wrap">
+            <label style="font-weight:600;color:var(--text-secondary)">السنة المالية:</label>
+            <select class="form-select" style="width:110px" onchange="changePlanYear(this.value)">
+                ${yearsOpts}
+                ${!hasNext ? `<option value="${nextY}">${nextY}</option>` : ''}
+            </select>
+            <div style="margin-right:auto;display:flex;gap:.5rem;align-items:center">
+                <input type="text" id="bp-search" class="filter-input" placeholder="🔍 بحث في البنود..."
+                    style="width:200px" oninput="filterPlanCategories(this.value)">
+                <button class="btn btn-ghost-sm" onclick="expandAllPlanCategories()" title="توسيع الكل">⊞</button>
+                <button class="btn btn-ghost-sm" onclick="collapseAllPlanCategories()" title="طي الكل">⊟</button>
+            </div>
+        </div>
+        ${statsHtml}
+        <div class="bp-save-bar" id="bp-save-bar" style="display:none">
+            <span id="bp-save-bar-msg">📝 يوجد تغييرات غير محفوظة</span>
+            <button class="btn btn-primary" onclick="saveAllPlanChanges()">💾 حفظ الكل</button>
+            <button class="btn btn-secondary" onclick="discardPlanChanges()">↩ تجاهل</button>
+        </div>
+        <div class="bp-categories-list" id="bp-categories-list">
+            ${categoriesHtml}
+        </div>`;
+
+    // إعادة فتح الأقسام المفتوحة سابقاً (مع تحميل مراكزها)
+    if (PlanState.openCategories?.size) {
+        PlanState.openCategories.forEach(catId => loadCCPanel(catId));
+    }
+}
+async function changePlanYear(year) {
+    PlanState.selectedYear = parseInt(year);
+    PlanState.openCategories = new Set();
+    PlanState.pendingChanges = {};
+    const pb = document.getElementById('plans-body');
+    if (pb) pb.innerHTML = '<div class="spinner" style="margin:2rem auto;display:block"></div>';
+    // أعد تحميل الخطط + meta معاً لتحديث قائمة السنوات
+    await Promise.all([fetchPlans(), fetchPlanMeta()]);
+    renderPlansPage();
+}
+
+// ── Accordion: فتح / إغلاق بند ─────────────────────────────
+if (!PlanState.openCategories) PlanState.openCategories = new Set();
+if (!PlanState.pendingChanges) PlanState.pendingChanges = {};
+
+async function togglePlanCategory(catId) {
+    const panel = document.getElementById(`bp-cc-panel-${catId}`);
+    const toggle = document.querySelector(`#bp-cat-${catId} .bp-cat-toggle`);
+    if (!panel) return;
+
+    if (PlanState.openCategories.has(catId)) {
+        // إغلاق
+        PlanState.openCategories.delete(catId);
+        panel.style.display = 'none';
+        if (toggle) toggle.textContent = '▸';
+    } else {
+        // فتح
+        PlanState.openCategories.add(catId);
+        panel.style.display = 'block';
+        if (toggle) toggle.textContent = '▾';
+        await loadCCPanel(catId);
+    }
+}
+
+async function loadCCPanel(catId) {
+    const loading = document.getElementById(`bp-cc-loading-${catId}`);
+    const content = document.getElementById(`bp-cc-content-${catId}`);
+    if (!content || content.dataset.loaded === '1') {
+        if (loading) loading.style.display = 'none';
+        if (content) content.style.display = 'block';
+        return;
+    }
+
+    // جلب مراكز التكلفة الكاملة + الحالية للخطة إن وجدت
+    const plan = PlanState.plans.find(p => p.category_id == catId);
+    const allCCs = PlanState.meta.cost_centers || [];
+
+    let existingCCs = {}; // cost_center_id → allocated
+    if (plan) {
+        const r = await fetch(`api/budget_plan_api.php?action=detail&id=${plan.id}`).then(r => r.json());
+        if (r.success) {
+            (r.data.cost_centers || []).forEach(cc => {
+                existingCCs[cc.cost_center_id] = { allocated: parseFloat(cc.allocated || 0), reserved: parseFloat(cc.reserved || 0) };
+            });
+        }
+    }
+
+    const rows = allCCs.map(cc => {
+        const ex = existingCCs[cc.id] || null;
+        const allocated = ex ? ex.allocated : 0;
+        const reserved = ex ? ex.reserved : 0;
+        const remaining = allocated - reserved;
+        const isActive = !!ex && allocated > 0;
+
+        return `
+        <div class="bp-cc-row ${isActive ? 'active' : ''}" id="bp-cc-row-${catId}-${cc.id}">
+            <label class="bp-cc-toggle-wrap">
+                <input type="checkbox" class="bp-cc-check" ${isActive ? 'checked' : ''}
+                    onchange="onCCToggle(${catId}, ${cc.id}, this.checked)">
+            </label>
+            <div class="bp-cc-name-wrap">
+                <span class="bp-cc-code-sm">${cc.code}</span>
+                <span class="bp-cc-name-sm">${cc.name}</span>
+            </div>
+            <div class="bp-cc-amount-wrap">
+                <input type="number" class="bp-cc-amount-input" id="bp-cc-amt-${catId}-${cc.id}"
+                    value="${isActive ? allocated : ''}" placeholder="0.00" min="0" step="0.01"
+                    ${isActive ? '' : 'disabled'}
+                    onchange="onCCAmountChange(${catId}, ${cc.id}, this.value)">
+                <span class="bp-sar-label">ر.س</span>
+            </div>
+            ${isActive ? `
+            <div class="bp-cc-reserved-wrap">
+                <div class="bp-cc-stat">
+                    <span class="bp-cc-stat-lbl">محجوز</span>
+                    <span class="bp-cc-stat-val reserved">${formatMoney(reserved)}</span>
+                </div>
+                <div class="bp-cc-stat-sep"></div>
+                <div class="bp-cc-stat">
+                    <span class="bp-cc-stat-lbl">متبقي</span>
+                    <span class="bp-cc-stat-val ${remaining < 0 ? 'over' : 'ok'}">${formatMoney(remaining)}</span>
+                </div>
+            </div>` : '<div class="bp-cc-reserved-wrap"></div>'}
+        </div>`;
+    }).join('');
+
+    content.innerHTML = `
+        <div class="bp-cc-header-row">
+            <span></span>
+            <span>مركز التكلفة</span>
+            <span>المخصص</span>
+            <span>محجوز / متبقي</span>
+        </div>
+        <div class="bp-cc-rows-wrap">${rows}</div>
+        <div class="bp-cc-footer" id="bp-cc-footer-${catId}">
+            ${renderCCFooter(catId)}
+        </div>`;
+    content.dataset.loaded = '1';
+
+    if (loading) loading.style.display = 'none';
+    content.style.display = 'block';
+}
+
+function renderCCFooter(catId) {
+    const budgetEl = document.getElementById(`bp-total-${catId}`);
+    const total = parseFloat(budgetEl?.value || 0);
+    const rows = document.querySelectorAll(`#bp-cc-content-${catId} .bp-cc-amount-input`);
+    const alloc = Array.from(rows).reduce((s, el) => {
+        const v = parseFloat(el.value || 0);
+        return el.disabled ? s : s + v;
+    }, 0);
+    const diff = total - alloc;
+    const pct = total > 0 ? Math.min(100, Math.round(alloc / total * 100)) : 0;
+    const barColor = pct >= 100 ? '#ef4444' : pct >= 80 ? '#f59e0b' : '#22c55e';
+    return `
+        <div class="bp-cc-footer-inner">
+            <div class="bp-cc-footer-cards">
+                <div class="bp-cc-footer-card">
+                    <span class="bp-cc-footer-card-lbl">الميزانية الكلية</span>
+                    <span class="bp-cc-footer-card-val">${formatMoney(total)} <small>ر.س</small></span>
+                </div>
+                <div class="bp-cc-footer-card alloc">
+                    <span class="bp-cc-footer-card-lbl">الموزع على المراكز</span>
+                    <span class="bp-cc-footer-card-val" style="color:${alloc > total ? '#ef4444' : '#22c55e'}">${formatMoney(alloc)} <small>ر.س</small></span>
+                </div>
+                <div class="bp-cc-footer-card ${diff < 0 ? 'over' : 'remain'}">
+                    <span class="bp-cc-footer-card-lbl">${diff < 0 ? '⚠ تجاوز' : 'غير موزع'}</span>
+                    <span class="bp-cc-footer-card-val" style="color:${diff < 0 ? '#ef4444' : 'var(--text-muted)'}">${formatMoney(Math.abs(diff))} <small>ر.س</small></span>
+                </div>
+            </div>
+            <div class="bp-cc-footer-bar-wrap">
+                <div class="bp-cc-footer-bar-track">
+                    <div class="bp-cc-footer-bar-fill" style="width:${pct}%;background:${barColor}"></div>
+                </div>
+                <span class="bp-cc-footer-bar-pct" style="color:${barColor}">${pct}%</span>
+            </div>
+        </div>`;
+}
+
+function onCCToggle(catId, ccId, checked) {
+    const amtInput = document.getElementById(`bp-cc-amt-${catId}-${ccId}`);
+    const row = document.getElementById(`bp-cc-row-${catId}-${ccId}`);
+    if (!amtInput) return;
+    amtInput.disabled = !checked;
+    if (!checked) { amtInput.value = ''; }
+    row?.classList.toggle('active', checked);
+    markPendingChange(catId, ccId, checked ? parseFloat(amtInput.value || 0) : 0, checked);
+    updateCCFooter(catId);
+    showSaveBar();
+}
+
+function onCCAmountChange(catId, ccId, val) {
+    const checked = !document.getElementById(`bp-cc-amt-${catId}-${ccId}`)?.disabled;
+    markPendingChange(catId, ccId, parseFloat(val || 0), checked);
+    updateCCFooter(catId);
+    showSaveBar();
+}
+
+function onCatBudgetChange(catId, val) {
+    if (!PlanState.pendingChanges[catId]) PlanState.pendingChanges[catId] = { total: 0, ccs: {} };
+    PlanState.pendingChanges[catId].total = parseFloat(val || 0);
+    updateCCFooter(catId);
+    showSaveBar();
+}
+
+function markPendingChange(catId, ccId, amount, enabled) {
+    if (!PlanState.pendingChanges[catId]) PlanState.pendingChanges[catId] = { total: null, ccs: {} };
+    PlanState.pendingChanges[catId].ccs[ccId] = { amount, enabled };
+}
+
+function updateCCFooter(catId) {
+    const el = document.getElementById(`bp-cc-footer-${catId}`);
+    if (el) el.innerHTML = renderCCFooter(catId);
+}
+
+function showSaveBar() {
+    const bar = document.getElementById('bp-save-bar');
+    if (bar) bar.style.display = 'flex';
+}
+
+function filterPlanCategories(q) {
+    const term = q.toLowerCase();
+    document.querySelectorAll('.bp-cat-row').forEach(row => {
+        const text = row.querySelector('.bp-cat-name')?.textContent.toLowerCase() +
+            row.querySelector('.bp-cat-code')?.textContent.toLowerCase();
+        row.style.display = text.includes(term) ? '' : 'none';
+    });
+}
+
+function expandAllPlanCategories() {
+    const { meta } = PlanState;
+    meta.categories.forEach(cat => {
+        if (!PlanState.openCategories.has(cat.id)) togglePlanCategory(cat.id);
+    });
+}
+
+function collapseAllPlanCategories() {
+    [...PlanState.openCategories].forEach(id => togglePlanCategory(id));
+}
+
+async function saveAllPlanChanges() {
+    const changes = PlanState.pendingChanges;
+    if (!Object.keys(changes).length) return;
+
+    const saveBtn = document.querySelector('#bp-save-bar .btn-primary');
+    if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = '⏳ جاري الحفظ...'; }
+
+    let errors = 0;
+    for (const [catIdStr, change] of Object.entries(changes)) {
+        const catId = parseInt(catIdStr);
+        const cat = PlanState.meta.categories.find(c => c.id == catId);
+        if (!cat) continue;
+
+        // إجمالي الميزانية
+        const totalEl = document.getElementById(`bp-total-${catId}`);
+        const total = change.total ?? parseFloat(totalEl?.value || 0);
+        if (total <= 0 && !Object.values(change.ccs || {}).some(cc => cc.enabled)) continue; // لا شيء
+
+        // مراكز التكلفة المفعّلة
+        const ccs = Object.entries(change.ccs || {})
+            .filter(([, v]) => v.enabled && v.amount > 0)
+            .map(([ccId, v]) => ({ cost_center_id: parseInt(ccId), allocated: v.amount }));
+
+        // هل الخطة موجودة؟
+        const existingPlan = PlanState.plans.find(p => p.category_id == catId);
+
+        const payload = {
+            id: existingPlan?.id || 0,
+            fiscal_year: PlanState.selectedYear,
+            category_id: catId,
+            total_budget: total,
+            notes: '',
+            cost_centers: ccs,
+        };
+
+        const r = await fetch('api/budget_plan_api.php?action=save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        }).then(r => r.json());
+
+        if (!r.success) errors++;
+    }
+
+    if (errors) {
+        showToast(`فشل حفظ ${errors} بند`, 'error');
+    } else {
+        showToast('✅ تم حفظ جميع التغييرات', 'success');
+    }
+
+    // إعادة تحميل
+    PlanState.pendingChanges = {};
+    const openBefore = new Set(PlanState.openCategories);
+    await fetchPlans();
+    renderPlansPage();
+    // إعادة فتح الأقسام
+    openBefore.forEach(id => togglePlanCategory(id));
+    document.getElementById('bp-save-bar')?.style && (document.getElementById('bp-save-bar').style.display = 'none');
+}
+
+function discardPlanChanges() {
+    PlanState.pendingChanges = {};
+    const openBefore = new Set(PlanState.openCategories);
+    PlanState.openCategories = new Set();
+    // إعادة رسم بدون إعادة تحميل
+    renderPlansPage();
+    openBefore.forEach(id => togglePlanCategory(id));
+}
+
+// ── Modal إضافة/تعديل خطة ──────────────────────────────────
+async function openPlanModal(planId) {
+    const { meta } = PlanState;
+    let plan = null;
+    let existingCCs = [];
+
+    if (planId) {
+        const r = await fetch(`api/budget_plan_api.php?action=detail&id=${planId}`).then(r => r.json());
+        if (r.success) { plan = r.data; existingCCs = r.data.cost_centers || []; }
+    }
+
+    const catOpts = meta.categories
+        .filter(c => !planId ? true : true) // كل البنود متاحة للتعديل
+        .map(c => `<option value="${c.id}" ${plan && plan.category_id == c.id ? 'selected' : ''}>${c.code} — ${c.name}</option>`)
+        .join('');
+
+    // بناء صفوف مراكز التكلفة المخصصة
+    const buildCCRows = (ccs) => ccs.map((cc, i) => renderPlanCCRow(cc, i)).join('');
+
+    DOM.modalTitle.innerHTML = planId ? `✏️ تعديل بند الموازنة` : `➕ إضافة بند للموازنة`;
+    DOM.modalBody.innerHTML = `
+        <div style="display:grid;gap:1rem">
+            <div class="form-row-2">
+                <div>
+                    <label class="form-label">السنة المالية *</label>
+                    <input type="number" id="pl_year" class="form-input" value="${plan ? plan.fiscal_year : PlanState.selectedYear}" min="2020" max="2099">
+                </div>
+                <div>
+                    <label class="form-label">البند *</label>
+                    <select id="pl_category" class="form-select">${catOpts}</select>
+                </div>
+            </div>
+            <div>
+                <label class="form-label">إجمالي ميزانية البند (ريال) *</label>
+                <input type="number" id="pl_total" class="form-input" value="${plan ? plan.total_budget : ''}" min="0" step="0.01" placeholder="0.00"
+                    oninput="updatePlanAllocSummary()">
+            </div>
+            <div>
+                <label class="form-label">ملاحظات</label>
+                <textarea id="pl_notes" class="form-textarea" rows="2">${plan ? (plan.notes || '') : ''}</textarea>
+            </div>
+
+            <!-- مراكز التكلفة -->
+            <div style="border:1px solid var(--border-color);border-radius:8px;padding:1rem">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem">
+                    <strong>توزيع الميزانية على مراكز التكلفة</strong>
+                    <button class="btn btn-ghost-sm" onclick="addPlanCCRow()">➕ إضافة مركز</button>
+                </div>
+                <div id="plan-cc-rows">
+                    ${buildCCRows(existingCCs)}
+                </div>
+                <div id="plan-alloc-summary" style="margin-top:.75rem;font-size:.85rem;color:var(--text-muted)"></div>
+            </div>
+        </div>`;
+
+    DOM.modalFooter.innerHTML = `
+        <button class="btn btn-secondary" onclick="closeModal()">إلغاء</button>
+        <button class="btn btn-primary" onclick="savePlan(${planId || 0})">💾 حفظ</button>`;
+
+    openModal();
+    updatePlanAllocSummary();
+}
+
+let _planCCIndex = 0;
+function renderPlanCCRow(cc, i) {
+    _planCCIndex = Math.max(_planCCIndex, i + 1);
+    const { meta } = PlanState;
+    const ccOpts = meta.cost_centers.map(c =>
+        `<option value="${c.id}" data-code="${c.code}" ${cc.cost_center_id == c.id ? 'selected' : ''}>${c.code} — ${c.name}</option>`
+    ).join('');
+    return `
+    <div class="plan-cc-row" id="plan-cc-row-${i}" style="display:grid;grid-template-columns:1fr 160px auto;gap:.5rem;align-items:center;margin-bottom:.5rem">
+        <select class="form-select plan-cc-select" data-row="${i}" onchange="updatePlanAllocSummary()">${ccOpts}</select>
+        <input type="number" class="form-input plan-cc-amount" data-row="${i}" value="${cc.allocated || 0}"
+            min="0" step="0.01" placeholder="المبلغ بالريال" oninput="updatePlanAllocSummary()">
+        <button class="btn btn-ghost-sm" style="color:#ef4444" onclick="removePlanCCRow(${i})">🗑</button>
+    </div>`;
+}
+
+function addPlanCCRow() {
+    const container = document.getElementById('plan-cc-rows');
+    const i = _planCCIndex++;
+    const { meta } = PlanState;
+    const ccOpts = meta.cost_centers.map(c =>
+        `<option value="${c.id}" data-code="${c.code}">${c.code} — ${c.name}</option>`
+    ).join('');
+    container.insertAdjacentHTML('beforeend', `
+    <div class="plan-cc-row" id="plan-cc-row-${i}" style="display:grid;grid-template-columns:1fr 160px auto;gap:.5rem;align-items:center;margin-bottom:.5rem">
+        <select class="form-select plan-cc-select" data-row="${i}" onchange="updatePlanAllocSummary()">${ccOpts}</select>
+        <input type="number" class="form-input plan-cc-amount" data-row="${i}" value="0"
+            min="0" step="0.01" placeholder="المبلغ بالريال" oninput="updatePlanAllocSummary()">
+        <button class="btn btn-ghost-sm" style="color:#ef4444" onclick="removePlanCCRow(${i})">🗑</button>
+    </div>`);
+    updatePlanAllocSummary();
+}
+
+function removePlanCCRow(i) {
+    document.getElementById(`plan-cc-row-${i}`)?.remove();
+    updatePlanAllocSummary();
+}
+
+function updatePlanAllocSummary() {
+    const total = parseFloat(document.getElementById('pl_total')?.value || 0);
+    const rows = document.querySelectorAll('.plan-cc-amount');
+    const alloc = Array.from(rows).reduce((s, el) => s + parseFloat(el.value || 0), 0);
+    const remain = total - alloc;
+    const el = document.getElementById('plan-alloc-summary');
+    if (!el) return;
+    el.innerHTML = `
+        إجمالي الميزانية: <strong>${formatMoney(total)}</strong> |
+        الموزع: <strong style="color:${alloc > total ? '#ef4444' : '#22c55e'}">${formatMoney(alloc)}</strong> |
+        غير الموزع: <strong style="color:${remain < 0 ? '#ef4444' : 'var(--text-muted)'}">${formatMoney(remain)}</strong>
+        ${alloc > total ? '<span style="color:#ef4444">⚠ المبالغ الموزعة تتجاوز إجمالي الميزانية</span>' : ''}`;
+}
+
+async function savePlan(planId) {
+    const year = parseInt(document.getElementById('pl_year')?.value || 0);
+    const catId = parseInt(document.getElementById('pl_category')?.value || 0);
+    const total = parseFloat(document.getElementById('pl_total')?.value || 0);
+    const notes = document.getElementById('pl_notes')?.value || '';
+
+    if (!year || !catId) { showToast('السنة والبند مطلوبان', 'error'); return; }
+
+    // جمع مراكز التكلفة
+    const ccRows = [];
+    document.querySelectorAll('.plan-cc-row').forEach(row => {
+        const sel = row.querySelector('.plan-cc-select');
+        const amount = row.querySelector('.plan-cc-amount');
+        if (sel && amount && parseFloat(amount.value) > 0) {
+            ccRows.push({ cost_center_id: parseInt(sel.value), allocated: parseFloat(amount.value) });
+        }
+    });
+
+    const payload = { id: planId, fiscal_year: year, category_id: catId, total_budget: total, notes, cost_centers: ccRows };
+    const r = await fetch('api/budget_plan_api.php?action=save', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    }).then(r => r.json());
+
+    if (r.success) {
+        showToast('تم الحفظ بنجاح', 'success');
+        closeModal();
+        await fetchPlans();
+        renderPlansPage();
+    } else {
+        showToast(r.message || 'فشل الحفظ', 'error');
+    }
+}
+
+async function deletePlan(planId, name) {
+    if (!confirm(`حذف بند "${name}" من الموازنة؟ سيتم حذف جميع التوزيعات.`)) return;
+    const r = await fetch('api/budget_plan_api.php?action=delete', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: planId })
+    }).then(r => r.json());
+    if (r.success) {
+        showToast('تم الحذف', 'success');
+        await fetchPlans();
+        renderPlansPage();
+    } else {
+        showToast(r.message, 'error');
+    }
+}
+
+// ── تفاصيل البند ───────────────────────────────────────────
+async function openPlanDetail(planId) {
+    const r = await fetch(`api/budget_plan_api.php?action=detail&id=${planId}`).then(r => r.json());
+    if (!r.success) { showToast('فشل تحميل البيانات', 'error'); return; }
+    const plan = r.data;
+    const ccs = plan.cost_centers || [];
+
+    const ccRows = ccs.map(cc => {
+        const pct = cc.allocated > 0 ? Math.min(100, Math.round(cc.reserved / cc.allocated * 100)) : 0;
+        const barColor = pct >= 90 ? '#ef4444' : pct >= 70 ? '#f59e0b' : '#22c55e';
+        return `<tr>
+            <td><span style="font-size:.78rem;color:var(--text-muted)">${cc.cc_code}</span><br>${cc.cc_name}</td>
+            <td style="text-align:left">${formatMoney(cc.allocated)}</td>
+            <td style="text-align:left">${formatMoney(cc.reserved)}</td>
+            <td style="text-align:left;color:${cc.remaining < 0 ? '#ef4444' : 'inherit'}">${formatMoney(cc.remaining)}</td>
+            <td>
+                <div style="background:var(--bg-surface);border-radius:4px;height:6px;min-width:60px">
+                    <div style="background:${barColor};height:6px;border-radius:4px;width:${pct}%"></div>
+                </div>
+                <span style="font-size:.72rem;color:var(--text-muted)">${pct}%</span>
+            </td>
+        </tr>`;
+    }).join('');
+
+    DOM.modalTitle.innerHTML = `📊 ${plan.category_code} — ${plan.category_name} (${plan.fiscal_year})`;
+    DOM.modalBody.innerHTML = `
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-bottom:1rem">
+            <div class="budget-stat-card">
+                <div class="bsc-body"><div class="bsc-num">${formatMoney(plan.total_budget)}</div><div class="bsc-label">إجمالي الميزانية</div></div>
+            </div>
+            <div class="budget-stat-card">
+                <div class="bsc-body"><div class="bsc-num" style="color:#f59e0b">${formatMoney(plan.total_reserved)}</div><div class="bsc-label">المحجوز</div></div>
+            </div>
+            <div class="budget-stat-card">
+                <div class="bsc-body"><div class="bsc-num" style="color:${(plan.total_budget - plan.total_reserved) < 0 ? '#ef4444' : '#22c55e'}">${formatMoney(plan.total_budget - plan.total_reserved)}</div><div class="bsc-label">المتبقي</div></div>
+            </div>
+        </div>
+        ${ccs.length ? `
+        <div class="table-wrapper" style="max-height:50vh;overflow-y:auto">
+            <table class="data-table">
+                <thead><tr>
+                    <th>مركز التكلفة</th><th>المخصص</th><th>المحجوز</th><th>المتبقي</th><th>الاستهلاك</th>
+                </tr></thead>
+                <tbody>${ccRows}</tbody>
+            </table>
+        </div>` : '<p style="text-align:center;color:var(--text-muted)">لا توجد مراكز تكلفة مخصصة</p>'}`;
+    DOM.modalFooter.innerHTML = `
+        <button class="btn btn-secondary" onclick="closeModal()">إغلاق</button>
+        <button class="btn btn-primary" onclick="closeModal();openPlanModal(${planId})">✏️ تعديل</button>`;
+    openModal();
+}
+
+// ── ربط الحجز بخطة الموازنة ────────────────────────────────
+async function loadPlanBudgetInfo(planId, ccCode) {
+    if (!planId || !ccCode) return null;
+    const r = await fetch(`api/budget_plan_api.php?action=cc_budget&plan_id=${planId}&cc_code=${encodeURIComponent(ccCode)}`).then(r => r.json());
+    return r.success ? r.data : null;
+}
+
+function renderBudgetInfoBar(info, currency, exchangeRate) {
+    if (!info) return '';
+    const rate = parseFloat(exchangeRate || 1);
+    const allocated = parseFloat(info.allocated);
+    const reserved = parseFloat(info.reserved);
+    const remaining = parseFloat(info.remaining);
+    const pct = allocated > 0 ? Math.min(100, Math.round(reserved / allocated * 100)) : 0;
+    const barColor = pct >= 90 ? '#ef4444' : pct >= 70 ? '#f59e0b' : '#22c55e';
+
+    return `
+    <div class="budget-info-bar" style="border:1px solid var(--border-color);border-radius:8px;padding:.75rem 1rem;margin:.75rem 0;background:var(--bg-surface)">
+        <div style="font-size:.8rem;font-weight:700;margin-bottom:.5rem;color:var(--text-secondary)">📊 ميزانية البند لهذا المركز</div>
+        <div style="display:flex;gap:1.5rem;flex-wrap:wrap;font-size:.82rem">
+            <span>الميزانية: <strong>${formatMoney(allocated)}</strong></span>
+            <span>المحجوز: <strong style="color:#f59e0b">${formatMoney(reserved)}</strong></span>
+            <span>المتبقي: <strong style="color:${remaining < 0 ? '#ef4444' : '#22c55e'}">${formatMoney(remaining)}</strong></span>
+            ${currency !== 'SAR' ? `<span style="color:var(--text-muted)">سعر الصرف: <strong>${rate}</strong> ريال</span>` : ''}
+        </div>
+        <div style="margin-top:.4rem;background:var(--bg-card);border-radius:4px;height:6px">
+            <div style="background:${barColor};height:6px;border-radius:4px;width:${pct}%;transition:.3s"></div>
+        </div>
+        ${remaining < 0 ? `<div style="color:#ef4444;font-size:.78rem;margin-top:.3rem">⚠ تجاوز الميزانية بمقدار ${formatMoney(Math.abs(remaining))}</div>` : ''}
+    </div>`;
+}
+
+
+// ═══════════════════════════════════════════════════════════
+//  تحميل وعرض بار ميزانية الحجز (يعمل بـ plan_id أو budget_category)
+// ═══════════════════════════════════════════════════════════
+async function loadReservationBudgetBar(r) {
+    const wrap = document.getElementById('rdv2_budget_bar_wrap');
+    if (!wrap) return;
+
+    const rate = parseFloat(r.exchange_rate || 1);
+    const catCode = r.budget_category || '';
+    const ccCode = r.cost_center || '';
+    // fiscal_year قد يأتي كـ 26 (2 رقم) أو 2026 (4 أرقام) — نوحّده
+    let fiscalYear = parseInt(r.fiscal_year || new Date().getFullYear());
+    if (fiscalYear < 100) fiscalYear = 2000 + fiscalYear;
+
+    if (!catCode) return; // لا يوجد بند موازنة
+
+    wrap.innerHTML = `<div style="padding:.5rem 1.5rem;color:var(--text-muted);font-size:.8rem">⏳ جاري تحميل بيانات الموازنة...</div>`;
+
+    let info = null;
+
+    // الحالة 1: الحجز مرتبط مباشرة بـ plan_id + cost_center
+    if (r.budget_plan_id && ccCode) {
+        info = await loadPlanBudgetInfo(r.budget_plan_id, ccCode);
+    }
+
+    // الحالة 2: لا يوجد plan_id — ابحث تلقائياً من cat_code + cc_code + fiscal_year
+    if (!info && catCode && ccCode) {
+        const res = await fetch(
+            `api/budget_plan_api.php?action=cc_budget_by_category` +
+            `&cat_code=${encodeURIComponent(catCode)}` +
+            `&cc_code=${encodeURIComponent(ccCode)}` +
+            `&fiscal_year=${fiscalYear}`
+        ).then(r => r.json()).catch(() => null);
+        if (res && res.success && res.data) info = res.data;
+    }
+
+    // الحالة 3: لا يوجد cost_center — اعرض إجمالي البند فقط
+    if (!info && catCode) {
+        const res = await fetch(
+            `api/budget_plan_api.php?action=cc_budget_by_category` +
+            `&cat_code=${encodeURIComponent(catCode)}` +
+            `&cc_code=__all__` +
+            `&fiscal_year=${fiscalYear}`
+        ).then(r => r.json()).catch(() => null);
+        if (res && res.success && res.data) {
+            info = res.data;
+            info._allCC = true;
+        }
+    }
+
+    if (!info) {
+        wrap.innerHTML = `<div style="padding:.4rem 1.5rem;font-size:.8rem;color:var(--text-muted)">⚠ لا توجد خطة موازنة لهذا البند في سنة ${fiscalYear}</div>`;
+        return;
+    }
+
+    const allocated = parseFloat(info.allocated || 0);
+    const reserved = parseFloat(info.reserved || 0);
+    const remaining = parseFloat(info.remaining || 0);
+    const pct = allocated > 0 ? Math.min(100, Math.round(reserved / allocated * 100)) : 0;
+    const barColor = pct >= 90 ? '#ef4444' : pct >= 70 ? '#f59e0b' : '#22c55e';
+    const isTotal = info.scope === 'category_total' || info._allCC;
+    const scopeLabel = isTotal ? 'إجمالي البند' : `مركز التكلفة ${ccCode}`;
+
+    // حصة هذا الحجز من الميزانية
+    const thisAmount = parseFloat(r.currency === 'SAR' ? r.grand_total : (r.grand_total * rate)) || 0;
+    const thisPct = allocated > 0 ? Math.min(100, Math.round(thisAmount / allocated * 100)) : 0;
+
+    wrap.innerHTML = `
+    <div style="margin:.5rem 1.5rem 0">
+        <div style="border:1px solid var(--border-color);border-radius:10px;padding:.9rem 1.1rem;
+                    background:var(--bg-surface);margin-bottom:.5rem">
+
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.6rem">
+                <span style="font-size:.82rem;font-weight:700;color:var(--text-secondary)">
+                    📊 ميزانية ${info.category_name || catCode} — ${scopeLabel}
+                </span>
+                <span style="font-size:.75rem;color:var(--text-muted)">
+                    سنة ${info.fiscal_year || fiscalYear}
+                </span>
+            </div>
+
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.5rem;margin-bottom:.7rem">
+                <div style="text-align:center;padding:.5rem;background:var(--bg-card);border-radius:8px">
+                    <div style="font-size:.72rem;color:var(--text-muted);margin-bottom:.2rem">الميزانية المخصصة</div>
+                    <div style="font-size:.95rem;font-weight:700;color:var(--text-primary)">${formatMoney(allocated)}</div>
+                    <div style="font-size:.7rem;color:var(--text-muted)">ر.س</div>
+                </div>
+                <div style="text-align:center;padding:.5rem;background:var(--bg-card);border-radius:8px">
+                    <div style="font-size:.72rem;color:var(--text-muted);margin-bottom:.2rem">المحجوز</div>
+                    <div style="font-size:.95rem;font-weight:700;color:#f59e0b">${formatMoney(reserved)}</div>
+                    <div style="font-size:.7rem;color:var(--text-muted)">${pct}% من الميزانية</div>
+                </div>
+                <div style="text-align:center;padding:.5rem;background:var(--bg-card);border-radius:8px">
+                    <div style="font-size:.72rem;color:var(--text-muted);margin-bottom:.2rem">المتبقي</div>
+                    <div style="font-size:.95rem;font-weight:700;color:${remaining < 0 ? '#ef4444' : '#22c55e'}">${formatMoney(remaining)}</div>
+                    <div style="font-size:.7rem;color:${remaining < 0 ? '#ef4444' : 'var(--text-muted)'}">
+                        ${remaining < 0 ? '⚠ تجاوز الميزانية' : 'متاح'}
+                    </div>
+                </div>
+            </div>
+
+            <!-- شريط نسبة الاستخدام -->
+            <div style="background:var(--bg-card);border-radius:6px;height:8px;overflow:hidden;margin-bottom:.3rem">
+                <div style="background:${barColor};height:100%;width:${pct}%;border-radius:6px;transition:.4s"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:.72rem;color:var(--text-muted)">
+                <span>0</span>
+                <span style="color:${barColor};font-weight:600">${pct}% مُستخدم</span>
+                <span>${formatMoney(allocated)}</span>
+            </div>
+
+            ${thisAmount > 0 ? `
+            <!-- حصة هذا الحجز -->
+            <div style="margin-top:.6rem;padding:.5rem .75rem;background:rgba(99,179,237,.1);
+                        border:1px solid rgba(99,179,237,.3);border-radius:7px;
+                        display:flex;justify-content:space-between;align-items:center;font-size:.8rem">
+                <span style="color:var(--text-secondary)">💼 قيمة هذا الحجز:</span>
+                <span style="font-weight:700;color:var(--accent-blue)">${formatMoney(thisAmount)} ر.س
+                    <span style="font-weight:400;color:var(--text-muted)">(${thisPct}% من الميزانية)</span>
+                </span>
+            </div>` : ''}
+        </div>
+    </div>`;
 }

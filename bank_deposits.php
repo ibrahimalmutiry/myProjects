@@ -1,6 +1,6 @@
 <?php
 /**
- * صفحة الودائع البنكية ومتابعة الأرصدة
+ * صفحة الحسابات البنكية ومتابعة الأرصدة
  * Bank Deposits & Balance Tracking Page
  */
 
@@ -15,7 +15,7 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
-$pageTitle = 'الودائع البنكية';
+$pageTitle = 'الحسابات البنكية';
 $currentPage = 'bank_deposits';
 ?>
 <!DOCTYPE html>
@@ -86,7 +86,7 @@ $currentPage = 'bank_deposits';
                     <rect x="2" y="5" width="20" height="14" rx="2"></rect>
                     <path d="M2 10h20"></path>
                 </svg>
-                <span class="nav-text">الودائع البنكية</span>
+                <span class="nav-text">الحسابات البنكية</span>
             </a>
 
             <a href="settings.php" class="nav-item">
@@ -137,7 +137,7 @@ $currentPage = 'bank_deposits';
                         <rect x="2" y="5" width="20" height="14" rx="2"></rect>
                         <path d="M2 10h20"></path>
                     </svg>
-                    الودائع البنكية والأرصدة
+                    الحسابات البنكية والأرصدة
                 </h1>
             </div>
             <div class="top-bar-right">
@@ -197,7 +197,7 @@ $currentPage = 'bank_deposits';
                             <polyline points="17 11 12 6 7 11"></polyline>
                             <line x1="12" y1="18" x2="12" y2="6"></line>
                         </svg>
-                        الودائع البنكية
+                        الحسابات البنكية
                     </button>
 
                     <button class="tab-btn" data-tab="accounts">
@@ -274,7 +274,7 @@ $currentPage = 'bank_deposits';
                 </div>
             </div>
 
-            <!-- Tab: الودائع البنكية -->
+            <!-- Tab: الحسابات البنكية -->
             <div id="deposits-tab" class="tab-content">
                 <div class="section-header">
                     <h2>
@@ -283,7 +283,7 @@ $currentPage = 'bank_deposits';
                             <polyline points="17 11 12 6 7 11"></polyline>
                             <line x1="12" y1="18" x2="12" y2="6"></line>
                         </svg>
-                        الودائع البنكية
+                        الحسابات البنكية
                     </h2>
                     <button class="btn-primary" onclick="openAddDepositModal()">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"

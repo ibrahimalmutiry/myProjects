@@ -1086,7 +1086,7 @@ const TABLE_LABELS = {
     payment_data: 'بيانات الدفع', invoice_data: 'بيانات الفواتير',
     bank_accounts: 'الحسابات البنكية', bank_balances: 'أرصدة البنوك',
     bank_investments: 'الاستثمارات', bank_monthly_data: 'البيانات الشهرية',
-    bank_deposits: 'الودائع البنكية', correspondence: 'الخطابات',
+    bank_deposits: 'الحسابات البنكية', correspondence: 'الخطابات',
     correspondence_attachments: 'مرفقات الخطابات',
     employee_page_permissions: 'صلاحيات الصفحات',
     notifications: 'التنبيهات', activity_logs: 'سجل الأنشطة',

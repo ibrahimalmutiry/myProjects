@@ -735,15 +735,28 @@ function switchTab(tab) {
         loadTransactions();
     } else if (tab === 'correspondence') {
         loadCorrespondencePage();
-    } else if (tab === 'bank-deposits') {
-        loadBankDepositsPage();
+    } else if (tab === 'bank-overview' || tab === 'bank-accounts' || tab === 'bank-investments') {
+        // كل تبويبات الخزينة تمر عبر loadBankDepositsPage
+        const subMap = { 'bank-overview': 'overview', 'bank-accounts': 'accounts', 'bank-investments': 'investments' };
+        const sub = subMap[tab] || 'overview';
+        if (typeof loadBankDepositsPage === 'function') {
+            const result = loadBankDepositsPage();
+            const doSwitch = () => { if (typeof switchBankTab === 'function') switchBankTab(sub); };
+            if (result && typeof result.then === 'function') result.then(doSwitch);
+            else setTimeout(doSwitch, 300);
+        }
     } else if (tab === 'notifications') {
         if (typeof loadNotificationsPage === 'function') loadNotificationsPage();
     } else if (tab === 'sla') {
         if (typeof loadSlaPage === 'function') loadSlaPage();
     } else if (tab === 'performance') {
         if (typeof loadPerformancePage === 'function') loadPerformancePage();
+    } else if (tab === 'budget-plans') {
+        // الموازنة التقديرية — تُستدعى عبر openBudgetSubTab عادةً
+        if (typeof BudgetState !== 'undefined') BudgetState.activeTab = 'plans';
+        if (typeof loadBudgetReservationsPage === 'function') loadBudgetReservationsPage();
     } else if (tab === 'reservations') {
+        if (typeof BudgetState !== 'undefined') BudgetState.activeTab = 'reservations';
         if (typeof loadBudgetReservationsPage === 'function') loadBudgetReservationsPage();
     } else if (tab === 'settings') {
         loadSettingsPage();
@@ -766,7 +779,10 @@ function switchTab(tab) {
 // خريطة: tab → groupId
 const NAV_GROUP_MAP = {
     'reservations': 'budget',
-    'bank-deposits': 'treasury',
+    'budget-plans': 'budget',
+    'bank-overview': 'treasury',
+    'bank-accounts': 'treasury',
+    'bank-investments': 'treasury',
     'daily-payments': 'treasury',
 };
 
@@ -790,6 +806,65 @@ function openTab(tab, groupId) {
     if (parent) parent.classList.add('open');
     // فعّل التبويب
     switchTab(tab);
+}
+
+// ── خاص بتبويبات الخزينة (bank-deposits sub-tabs) ──────────
+function openBankSubTab(subTab, groupId) {
+    // افتح مجموعة treasury
+    document.querySelectorAll('.nav-parent').forEach(p => p.classList.remove('open'));
+    const parent = document.getElementById('nav-parent-' + (groupId || 'treasury'));
+    if (parent) parent.classList.add('open');
+
+    // خريطة subTab → data-tab
+    const dataTabMap = {
+        overview: 'bank-overview',
+        accounts: 'bank-accounts',
+        investments: 'bank-investments',
+    };
+    const dataTab = dataTabMap[subTab] || 'bank-overview';
+    document.querySelectorAll('.nav-tab').forEach(t => {
+        t.classList.toggle('active', t.dataset.tab === dataTab);
+    });
+    App.currentTab = dataTab;
+
+    // حمّل صفحة bank-deposits إذا لم تكن محملة، ثم انتقل للتاب
+    if (typeof loadBankDepositsPage === 'function') {
+        const doSwitch = () => { if (typeof switchBankTab === 'function') switchBankTab(subTab); };
+        const result = loadBankDepositsPage();
+        if (result && typeof result.then === 'function') result.then(doSwitch);
+        else setTimeout(doSwitch, 300);
+    }
+}
+
+// ── خاص بتبويبات الموازنة (حجوزات / موازنة تقديرية) ─────────
+function openBudgetSubTab(subTab) {
+    // افتح مجموعة budget
+    document.querySelectorAll('.nav-parent').forEach(p => p.classList.remove('open'));
+    const parent = document.getElementById('nav-parent-budget');
+    if (parent) parent.classList.add('open');
+
+    // فعّل الزر الصحيح بناءً على data-tab
+    const targetDataTab = subTab === 'plans' ? 'budget-plans' : 'reservations';
+    document.querySelectorAll('.nav-tab').forEach(t => {
+        t.classList.toggle('active', t.dataset.tab === targetDataTab);
+    });
+
+    // حدّث App.currentTab
+    App.currentTab = targetDataTab;
+
+    // شغّل الصفحة
+    if (subTab === 'plans') {
+        // لو الصفحة محملة — انتقل مباشرة، لو لا — حمّلها ثم انتقل
+        if (typeof BudgetState !== 'undefined' && BudgetState.loaded) {
+            switchBudgetMainTab('plans');
+        } else {
+            if (typeof BudgetState !== 'undefined') BudgetState.activeTab = 'plans';
+            if (typeof loadBudgetReservationsPage === 'function') loadBudgetReservationsPage();
+        }
+    } else {
+        if (typeof BudgetState !== 'undefined') BudgetState.activeTab = 'reservations';
+        if (typeof loadBudgetReservationsPage === 'function') loadBudgetReservationsPage();
+    }
 }
 
 // تبديل الوضع الليلي/النهاري

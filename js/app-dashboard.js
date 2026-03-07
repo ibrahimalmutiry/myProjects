@@ -115,6 +115,22 @@ function renderDashboard(urgentTransactions) {
                 </div>
             </div>
 
+                   <!-- آخر الحجوزات -->
+            <div class="dash-panel">
+                <div class="dash-panel-header">
+                    <div class="dash-panel-title">
+                        <span>📋</span>
+                        <h3>آخر الحجوزات</h3>
+                    </div>
+                    <button class="dash-panel-link" onclick="switchTab('reservations')">
+                        عرض الكل <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+                    </button>
+                </div>
+                <div id="reservationsContainer" class="dash-rows-container">
+                    <div class="dash-loading-row">جاري التحميل...</div>
+                </div>
+            </div>
+
             <!-- نظرة عامة - صفوف -->
             <div class="dash-panel">
                 <div class="dash-panel-header">
@@ -125,6 +141,21 @@ function renderDashboard(urgentTransactions) {
                 </div>
                 <div class="dash-rows-container" id="overviewRowsContainer">
                     ${renderSystemRows(s)}
+                </div>
+            </div>
+                    <!-- الرصيد البنكي اليوم -->
+            <div class="dash-panel">
+                <div class="dash-panel-header">
+                    <div class="dash-panel-title">
+                        <span>🏦</span>
+                        <h3>الرصيد البنكي — اليوم</h3>
+                    </div>
+                    <button class="dash-panel-link" onclick="switchTab('bank-accounts')">
+                        عرض الكل <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+                    </button>
+                </div>
+                <div id="bankBalanceContainer" class="dash-rows-container">
+                    <div class="dash-loading-row">جاري التحميل...</div>
                 </div>
             </div>
         </div>
@@ -145,21 +176,7 @@ function renderDashboard(urgentTransactions) {
                 </div>
             </div>
 
-            <!-- الرصيد البنكي اليوم -->
-            <div class="dash-panel">
-                <div class="dash-panel-header">
-                    <div class="dash-panel-title">
-                        <span>🏦</span>
-                        <h3>الرصيد البنكي — اليوم</h3>
-                    </div>
-                    <button class="dash-panel-link" onclick="switchTab('bank-deposits')">
-                        عرض الكل <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
-                    </button>
-                </div>
-                <div id="bankBalanceContainer" class="dash-rows-container">
-                    <div class="dash-loading-row">جاري التحميل...</div>
-                </div>
-            </div>
+    
             <!-- ══ ملخص الودائع الاستثمارية ══ -->
             <div class="dash-panel">
                 <div class="dash-panel-header">
@@ -168,7 +185,7 @@ function renderDashboard(urgentTransactions) {
                         <h3>الودائع الاستثمارية — هذا الشهر</h3>
                         <span class="panel-badge" id="invDashBadge" style="display:none;background:var(--accent-red)">!</span>
                     </div>
-                    <button class="dash-panel-link" onclick="switchTab('bank-deposits')">
+                    <button class="dash-panel-link" onclick="switchTab('bank-investments')">
                         عرض الكل <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
                     </button>
                 </div>
@@ -181,21 +198,7 @@ function renderDashboard(urgentTransactions) {
         <!-- ══ الصف الثالث: الحجوزات + الأحداث ══ -->
         <div class="dash-bottom-grid">
 
-            <!-- آخر الحجوزات -->
-            <div class="dash-panel">
-                <div class="dash-panel-header">
-                    <div class="dash-panel-title">
-                        <span>📋</span>
-                        <h3>آخر الحجوزات</h3>
-                    </div>
-                    <button class="dash-panel-link" onclick="switchTab('reservations')">
-                        عرض الكل <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
-                    </button>
-                </div>
-                <div id="reservationsContainer" class="dash-rows-container">
-                    <div class="dash-loading-row">جاري التحميل...</div>
-                </div>
-            </div>
+     
 
             <!-- آخر الأحداث -->
             <div class="dash-panel">
@@ -215,18 +218,7 @@ function renderDashboard(urgentTransactions) {
             </div>
         </div>
 
-        <!-- ══ الرسم البياني ══ -->
-        <div class="dash-panel">
-            <div class="dash-panel-header">
-                <div class="dash-panel-title">
-                    <span>📈</span>
-                    <h3>معاملات آخر 6 أشهر</h3>
-                </div>
-            </div>
-            <div style="padding:1rem 1.25rem 1.25rem;height:220px">
-                <canvas id="dashLineChart"></canvas>
-            </div>
-        </div>
+
 
     </div>`;
 
@@ -287,7 +279,7 @@ function renderSystemRows(s) {
         { icon: '💳', name: 'قسم الدفع', tab: 'transactions', cols: [{ v: s.paid || 0, l: 'مدفوع', c: 'green' }, { v: s.pending || 0, l: 'معلق', c: 'orange' }, { v: fmtMoney(s.paid_amount || 0), l: 'المدفوعات' }] },
         { icon: '🧾', name: 'قسم الفوترة', tab: 'transactions', cols: [{ v: s.invoiced || 0, l: 'مفوترة', c: 'green' }, { v: Math.max(0, (s.total || 0) - (s.invoiced || 0)), l: 'قيد الإجراء', c: 'orange' }] },
         { icon: '📨', name: 'الخطابات والمراسلات', tab: 'correspondence', cols: [], id: 'corrRowCols' },
-        { icon: '🏦', name: 'الودائع البنكية', tab: 'bank-deposits', cols: [], id: 'bankRowCols' },
+        { icon: '🏦', name: 'الحسابات البنكية', tab: 'bank-deposits', cols: [], id: 'bankRowCols' },
         { icon: '📑', name: 'الحجوزات', tab: 'reservations', cols: [], id: 'resRowCols' },
         { icon: '⏱️', name: 'نظام SLA', tab: 'sla', cols: [] },
     ];
@@ -325,7 +317,7 @@ async function loadBankBalances() {
             totalBalance += bal;
             const trend = bal >= parseFloat(acc.initial_balance || 0) ? 'up' : 'down';
             return `
-            <div class="dash-row bank-row" onclick="switchTab('bank-deposits')">
+            <div class="dash-row bank-row" onclick="switchTab('bank-accounts')">
                 <div class="dash-row-icon">🏦</div>
                 <div class="dash-row-main">
                     <span class="dash-row-title">${acc.account_name}</span>
@@ -823,7 +815,7 @@ async function loadInvestmentsSummary() {
                 else if (diff <= 7) { color = 'var(--accent-orange)'; tag = `خلال ${diff} أيام ⏰`; }
 
                 return `
-                <div class="dash-row" onclick="switchTab('bank-deposits')" style="cursor:pointer;${isDone ? 'opacity:0.65' : ''}">
+                <div class="dash-row" onclick="switchTab('bank-investments')" style="cursor:pointer;${isDone ? 'opacity:0.65' : ''}">
                     <div class="dash-row-icon">${isDone ? '✅' : '💰'}</div>
                     <div class="dash-row-main">
                         <span class="dash-row-title">${inv.deposit_name || 'وديعة'}</span>

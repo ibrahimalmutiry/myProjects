@@ -124,6 +124,15 @@ $userRole = $_SESSION['user_role'] ?? '';
                 <span class="nav-label">المعاملات المالية</span>
             </button>
 
+            <button class="nav-tab" data-tab="correspondence" data-tooltip="الخطابات">
+                <span class="nav-icon">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                        <polyline points="22,6 12,13 2,6"></polyline>
+                    </svg>
+                </span>
+                <span class="nav-label">الخطابات</span>
+            </button>
 
 
             <!-- ══ التخطيط المالي والموازنة (قابل للطي) ══ -->
@@ -147,10 +156,15 @@ $userRole = $_SESSION['user_role'] ?? '';
                     </span>
                 </button>
                 <div class="nav-children" id="nav-children-budget">
-                    <button class="nav-tab nav-child-btn" data-tab="reservations" data-tooltip="الحجوزات"
-                        onclick="openTab('reservations','budget')">
+                    <button class="nav-tab nav-child-btn" data-tab="reservations" data-tooltip="حجوزات الموازنة"
+                        onclick="openBudgetSubTab('reservations')">
                         <span class="nav-child-dot"></span>
-                        <span class="nav-label">الحجوزات</span>
+                        <span class="nav-label">حجوزات الموازنة</span>
+                    </button>
+                    <button class="nav-tab nav-child-btn" data-tab="budget-plans" data-tooltip="الموازنة التقديرية"
+                        onclick="openBudgetSubTab('plans')">
+                        <span class="nav-child-dot"></span>
+                        <span class="nav-label">الموازنة التقديرية</span>
                     </button>
                 </div>
             </div>
@@ -176,10 +190,20 @@ $userRole = $_SESSION['user_role'] ?? '';
                     </span>
                 </button>
                 <div class="nav-children" id="nav-children-treasury">
-                    <button class="nav-tab nav-child-btn" data-tab="bank-deposits" data-tooltip="الودائع البنكية"
-                        onclick="openTab('bank-deposits','treasury')">
+                    <button class="nav-tab nav-child-btn" data-tab="bank-overview" data-tooltip="نظرة عامة"
+                        onclick="openBankSubTab('overview','treasury')">
                         <span class="nav-child-dot"></span>
-                        <span class="nav-label">الودائع البنكية</span>
+                        <span class="nav-label">نظرة عامة</span>
+                    </button>
+                    <button class="nav-tab nav-child-btn" data-tab="bank-accounts" data-tooltip="الحسابات البنكية"
+                        onclick="openBankSubTab('accounts','treasury')">
+                        <span class="nav-child-dot"></span>
+                        <span class="nav-label">الحسابات البنكية</span>
+                    </button>
+                    <button class="nav-tab nav-child-btn" data-tab="bank-investments" data-tooltip="الودائع الاستثمارية"
+                        onclick="openBankSubTab('investments','treasury')">
+                        <span class="nav-child-dot"></span>
+                        <span class="nav-label">الودائع الاستثمارية</span>
                     </button>
                     <button class="nav-tab nav-child-btn" data-tab="daily-payments" data-tooltip="المدفوعات اليومية"
                         onclick="openTab('daily-payments','treasury')">
@@ -189,15 +213,6 @@ $userRole = $_SESSION['user_role'] ?? '';
                 </div>
             </div>
 
-            <button class="nav-tab" data-tab="correspondence" data-tooltip="الخطابات">
-                <span class="nav-icon">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
-                        <polyline points="22,6 12,13 2,6"></polyline>
-                    </svg>
-                </span>
-                <span class="nav-label">الخطابات</span>
-            </button>
 
             <span class="nav-group-label">المتابعة</span>
 
@@ -365,7 +380,7 @@ function loadPermissionsForSession($userId) {
             $_SESSION['permission_level'] = 'employee';
             $_SESSION['can_delete'] = false;
         }
-        $allPages = ['dashboard','transactions','correspondence','bank-deposits','sla','performance','settings','notifications','reservations'];
+        $allPages = ['dashboard','transactions','correspondence','bank-deposits','sla','performance','settings','notifications','reservations','budget-plans'];
         $_SESSION['page_permissions'] = array_fill_keys($allPages, ($_SESSION['permission_level'] === 'system_admin'));
         return;
     }
@@ -383,7 +398,7 @@ function loadPermissionsForSession($userId) {
     $_SESSION['permission_level'] = $row['permission_level'];
     $_SESSION['can_delete'] = (bool)$row['can_delete'];
     
-    $allPages = ['dashboard','transactions','correspondence','bank-deposits','sla','performance','settings','notifications','reservations'];
+    $allPages = ['dashboard','transactions','correspondence','bank-deposits','sla','performance','settings','notifications','reservations','budget-plans'];
     
     if ($row['permission_level'] === 'system_admin') {
         $_SESSION['page_permissions']   = array_fill_keys($allPages, true);
@@ -397,8 +412,8 @@ function loadPermissionsForSession($userId) {
             if ($r2) while ($pr = $r2->fetch_assoc()) $stored[$pr['page']] = (bool)$pr['can_access'];
         }
         $defaults = [
-            'manager'  => ['dashboard'=>1,'transactions'=>1,'correspondence'=>1,'bank-deposits'=>1,'sla'=>1,'performance'=>1,'settings'=>0,'notifications'=>1,'reservations'=>1],
-            'employee' => ['dashboard'=>0,'transactions'=>1,'correspondence'=>1,'bank-deposits'=>1,'sla'=>0,'performance'=>0,'settings'=>0,'notifications'=>1,'reservations'=>1],
+            'manager'  => ['dashboard'=>1,'transactions'=>1,'correspondence'=>1,'bank-deposits'=>1,'sla'=>1,'performance'=>1,'settings'=>0,'notifications'=>1,'reservations'=>1,'budget-plans'=>1],
+            'employee' => ['dashboard'=>0,'transactions'=>1,'correspondence'=>1,'bank-deposits'=>1,'sla'=>0,'performance'=>0,'settings'=>0,'notifications'=>1,'reservations'=>1,'budget-plans'=>0],
         ];
         $def = $defaults[$row['permission_level']] ?? [];
         $pagePerms = [];
