@@ -2380,42 +2380,21 @@ async function loadEventsTimeline() {
     container.innerHTML = '<div class="loading-spinner">جاري التحميل...</div>';
 
     try {
-        var stage = document.getElementById('perfStageFilter')?.value || '';
-        var dateFrom = document.getElementById('perfDateFrom')?.value || '';
-        var dateTo = document.getElementById('perfDateTo')?.value || '';
-
-        // perfEmployeeFilter اختياري — قد لا يكون موجوداً في هذا الـ HTML
         var employeeId = document.getElementById('perfEmployeeFilter')?.value || '';
+        var stage = document.getElementById('perfStageFilter')?.value || '';
 
         var params = new URLSearchParams();
-        params.append('limit', '200');
+        params.append('limit', '100');
         if (employeeId) params.append('employee_id', employeeId);
         if (stage) params.append('stage', stage);
-        if (dateFrom) params.append('date_from', dateFrom);
-        if (dateTo) params.append('date_to', dateTo);
 
         var res = await fetch('api/?action=all_events&' + params.toString());
         var result = await res.json();
 
-        // تحديث إحصاءات الهيدر
-        if (result.success && result.data) {
-            const today = new Date().toISOString().split('T')[0];
-            const todayEvents = result.data.filter(e => e.event_time?.startsWith(today));
-            const todayEl = document.getElementById('totalEventsToday');
-            if (todayEl) todayEl.textContent = todayEvents.length;
-
-            const durations = result.data.filter(e => e.duration_from_previous > 0).map(e => e.duration_from_previous);
-            const avgEl = document.getElementById('avgTimeToday');
-            if (avgEl && durations.length) {
-                const avg = Math.round(durations.reduce((a, b) => a + b, 0) / durations.length);
-                avgEl.textContent = avg < 60 ? avg + ' د' : Math.round(avg / 60) + ' س';
-            } else if (avgEl) {
-                avgEl.textContent = '—';
-            }
-        }
-
         if (result.success && result.data && result.data.length > 0) {
             if (countEl) countEl.textContent = result.data.length + ' حدث';
+
+            var html = '<div class="timeline-list">';
 
             var stageInfo = {
                 'creation': { name: 'الإنشاء', color: '#4dabf7', icon: '➕' },
@@ -2425,46 +2404,43 @@ async function loadEventsTimeline() {
                 'invoice': { name: 'الفوترة', color: '#b197fc', icon: '🧾' }
             };
 
-            var html = '<div class="timeline-list">';
             result.data.forEach(function (event) {
                 var info = stageInfo[event.stage] || { name: event.stage, color: '#888', icon: '📋' };
                 var duration = event.duration_from_previous;
-                var durClass = !duration ? '' : duration <= 5 ? 'fast' : duration <= 30 ? 'normal' : 'slow';
-                // تعريف txDesc هنا في البداية قبل أي استخدام
-                var rawDesc = event.transaction_description || '';
-                var txDesc = rawDesc.length > 45 ? rawDesc.substring(0, 45) + '...' : rawDesc;
+                var durationClass = duration <= 5 ? 'fast' : (duration <= 30 ? 'normal' : 'slow');
 
                 html += `
-                    <div class="timeline-item">
-                        <div class="timeline-dot" style="background:${info.color}">${info.icon}</div>
-                        <div class="timeline-content">
-                            <div class="timeline-header">
-                                <span class="timeline-tx" style="font-weight:700">${event.transaction_number || '—'}</span>
-                                ${txDesc ? `<span style="color:var(--text-muted);font-size:0.8rem;margin-right:0.4rem">— ${txDesc}</span>` : ''}
-                                <span class="timeline-stage" style="background:${info.color}20;color:${info.color};border:1px solid ${info.color}40">${info.name}</span>
-                                ${duration != null ? `<span class="timeline-duration ${durClass}">${duration} دقيقة</span>` : ''}
-                            </div>
-                            <div class="timeline-status">
-                                ${event.old_status ? `<span class="status-old">${event.old_status}</span><span class="status-arrow">←</span>` : ''}
-                                <span class="status-new">${event.new_status || '-'}</span>
-                            </div>
-                            ${event.notes ? `<div class="timeline-notes">${event.notes}</div>` : ''}
-                            <div class="timeline-footer">
-                                <span class="timeline-employee">👤 ${event.employee_name || 'النظام'}</span>
-                                <span class="timeline-time">${formatEventDateTime(event.event_time)}</span>
-                            </div>
+                <div class="timeline-item">
+                    <div class="timeline-dot" style="background: ${info.color};">${info.icon}</div>
+                    <div class="timeline-content">
+                        <div class="timeline-header">
+                            <span class="timeline-tx">${event.transaction_number || '-'}</span>
+                            <span class="timeline-stage" style="background: ${info.color}20; color: ${info.color}; border: 1px solid ${info.color}40;">${info.name}</span>
+                            ${duration !== null ? `<span class="timeline-duration ${durationClass}">${duration} دقيقة</span>` : ''}
                         </div>
-                    </div>`;
+                        <div class="timeline-status">
+                            ${event.old_status ? `<span class="status-old">${event.old_status}</span><span class="status-arrow">←</span>` : ''}
+                            <span class="status-new">${event.new_status || '-'}</span>
+                        </div>
+                        ${event.notes ? `<div class="timeline-notes"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>${event.notes}</div>` : ''}
+                        <div class="timeline-footer">
+                            <span class="timeline-employee">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                                ${event.employee_name || 'النظام'}
+                            </span>
+                            <span class="timeline-time">${formatEventDateTime(event.event_time)}</span>
+                        </div>
+                    </div>
+                </div>`;
             });
+
             html += '</div>';
             container.innerHTML = html;
-
         } else {
             if (countEl) countEl.textContent = '0 حدث';
-            container.innerHTML = '<div class="empty-state"><p>لا توجد أحداث مسجلة</p></div>';
+            container.innerHTML = '<div class="empty-state"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg><p>لا توجد أحداث مسجلة</p></div>';
         }
     } catch (err) {
-        console.error(err);
         container.innerHTML = '<div class="error-state">خطأ في تحميل الأحداث</div>';
     }
 }
@@ -3097,6 +3073,13 @@ async function renderSystemSection() {
     html += '</div>';
     html += '</div>';
 
+    // ── بادئات الأرقام التلقائية ──
+    html += '<div class="system-card prefixes-card">';
+    html += '<h3>🏷️ بادئات الأرقام التلقائية</h3>';
+    html += '<p class="prefixes-desc">تُستخدم هذه البادئات في توليد أرقام المستندات تلقائياً — أحرف إنجليزية كبيرة فقط (1-10 محارف)</p>';
+    html += '<div id="prefixes-list"><div class="loading-inline">⏳ جاري التحميل...</div></div>';
+    html += '</div>';
+
     // منطقة الخطر
     html += '<div class="system-card danger-zone">';
     html += '<h3>⚠️ منطقة الخطر</h3>';
@@ -3108,6 +3091,63 @@ async function renderSystemSection() {
 
     html += '</div>';
     content.innerHTML = html;
+    loadPrefixesSection();
+}
+
+async function loadPrefixesSection() {
+    const el = document.getElementById('prefixes-list');
+    if (!el) return;
+    try {
+        const res = await fetch('api/?action=get_system_settings');
+        const data = await res.json();
+        if (!data.success) throw new Error(data.message);
+        const prefixes = (data.data || []).filter(s => s.setting_group === 'prefixes');
+        el.innerHTML = prefixes.map(s => `
+            <div class="prefix-row" id="prefix-row-${s.setting_key}">
+                <div class="prefix-label">${s.setting_label}</div>
+                <div class="prefix-input-wrap">
+                    <input type="text" class="prefix-input" id="prefix-input-${s.setting_key}"
+                        value="${s.setting_value}" maxlength="10" placeholder="مثال: TR"
+                        onkeydown="if(event.key==='Enter') savePrefix('${s.setting_key}')">
+                    <button class="prefix-save-btn" onclick="savePrefix('${s.setting_key}')">حفظ</button>
+                    <span class="prefix-status" id="prefix-status-${s.setting_key}"></span>
+                </div>
+            </div>
+        `).join('');
+    } catch (e) {
+        if (el) el.innerHTML = `<div style="color:#ff6b6b;padding:.5rem">خطأ: ${e.message}</div>`;
+    }
+}
+
+async function savePrefix(key) {
+    const input = document.getElementById('prefix-input-' + key);
+    const status = document.getElementById('prefix-status-' + key);
+    const btn = document.querySelector(`#prefix-row-${key} .prefix-save-btn`);
+    if (!input) return;
+
+    const val = input.value.trim().toUpperCase();
+    input.value = val;
+
+    if (!val || !/^[A-Z0-9]{1,10}$/.test(val)) {
+        if (status) { status.textContent = '⚠️ أحرف إنجليزية كبيرة أو أرقام فقط'; status.style.color = '#ffa94d'; }
+        return;
+    }
+    if (btn) { btn.disabled = true; btn.textContent = '...'; }
+    try {
+        const res = await fetch('api/?action=save_system_setting', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ key, value: val }),
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.message);
+        if (status) { status.textContent = '✓ تم الحفظ'; status.style.color = '#69db7c'; }
+        setTimeout(() => { if (status) status.textContent = ''; }, 2500);
+    } catch (e) {
+        if (status) { status.textContent = '✗ ' + e.message; status.style.color = '#ff6b6b'; }
+    } finally {
+        if (btn) { btn.disabled = false; btn.textContent = 'حفظ'; }
+    }
 }
 
 async function clearAllTransactions() {
@@ -3157,6 +3197,16 @@ var ACTIONS_CONFIG = [
     { key: 'transaction.edit', label: 'تعديل معاملة', icon: '✏️', group: 'المعاملات' },
     { key: 'transaction.delete', label: 'حذف معاملة', icon: '🗑', group: 'المعاملات' },
     { key: 'transaction.export', label: 'تصدير البيانات', icon: '📤', group: 'المعاملات' },
+    { key: 'correspondence.add', label: 'إضافة خطاب', icon: '✉️', group: 'الخطابات' },
+    { key: 'correspondence.edit', label: 'تعديل خطاب', icon: '✏️', group: 'الخطابات' },
+    { key: 'correspondence.delete', label: 'حذف خطاب', icon: '🗑', group: 'الخطابات' },
+    { key: 'correspondence.send', label: 'إرسال خطاب', icon: '📤', group: 'الخطابات' },
+    { key: 'correspondence.view_all', label: 'عرض كل الخطابات', icon: '📋', group: 'الخطابات' },
+    { key: 'correspondence.stage_approve', label: 'موافقة على المرحلة', icon: '✅', group: 'الخطابات' },
+    { key: 'correspondence.stage_reject', label: 'رفض المرحلة', icon: '❌', group: 'الخطابات' },
+    { key: 'correspondence.stage_return', label: 'إعادة المرحلة', icon: '↩️', group: 'الخطابات' },
+    { key: 'correspondence.stage_edit_completed', label: 'تعديل مرحلة مكتملة', icon: '🔓', group: 'الخطابات' },
+    { key: 'correspondence.stage_override', label: 'التصرف في مراحل الآخرين', icon: '🛡️', group: 'الخطابات' },
     { key: 'employee.add', label: 'إضافة موظف', icon: '👤', group: 'الموظفين' },
     { key: 'employee.edit', label: 'تعديل موظف', icon: '✏️', group: 'الموظفين' },
     { key: 'employee.delete', label: 'حذف موظف', icon: '🗑', group: 'الموظفين' },
@@ -3321,6 +3371,18 @@ function renderPermissionsForm(empId, empName, perms) {
             '<div id="permsActionsContainer">' + buildActionsGrid(perms.action_permissions || {}, level) + '</div>') +
         '</div>' +
 
+        // القسم 5: مراحل الخطابات المسموحة
+        '<div class="perm-section">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem">' +
+        '<h4 class="perm-section-title" style="margin:0">📨 مراحل الخطابات المسموحة</h4>' +
+        (!isSystemAdmin ? '<div style="display:flex;gap:.5rem"><button class="btn btn-ghost-sm" onclick="setAllStages(true)">تحديد الكل</button><button class="btn btn-ghost-sm" onclick="setAllStages(false)">إلغاء الكل</button></div>' : '') +
+        '</div>' +
+        '<p style="font-size:.82rem;color:var(--text-muted);margin:0 0 .75rem">حدد المراحل التي يسمح لهذا الموظف بالتصرف فيها (موافقة / رفض / إعادة)</p>' +
+        (isSystemAdmin ?
+            '<div style="padding:.75rem;background:rgba(239,68,68,.08);border-radius:8px;font-size:.82rem;color:var(--accent-red)">🔓 مدير النظام يملك صلاحية التصرف في جميع المراحل</div>' :
+            '<div id="permsStagesContainer">' + buildStagesGrid(perms.action_permissions || {}) + '</div>') +
+        '</div>' +
+
         // أزرار الحفظ
         '<div class="perm-footer">' +
         '<button class="btn btn-secondary" onclick="closeModal()">إلغاء</button>' +
@@ -3336,8 +3398,8 @@ function renderPermissionsForm(empId, empName, perms) {
 function buildActionsGrid(overrides, level) {
     var defaults = {
         system_admin: {},  // كلها true دائماً
-        manager: { 'bank.edit_balance': 1, 'bank.view_history': 1, 'bank.record_balance': 1, 'bank.add_deposit': 1, 'bank.confirm_deposit': 1, 'transaction.add': 1, 'transaction.edit': 1, 'transaction.export': 1 },
-        employee: { 'bank.record_balance': 1, 'bank.view_history': 1, 'bank.add_deposit': 1, 'transaction.add': 1 },
+        manager: { 'bank.edit_balance': 1, 'bank.view_history': 1, 'bank.record_balance': 1, 'bank.add_deposit': 1, 'bank.confirm_deposit': 1, 'transaction.add': 1, 'transaction.edit': 1, 'transaction.export': 1, 'correspondence.add': 1, 'correspondence.edit': 1, 'correspondence.send': 1, 'correspondence.view_all': 1, 'correspondence.stage_approve': 1, 'correspondence.stage_reject': 1, 'correspondence.stage_return': 1, 'correspondence.stage_edit_completed': 1, 'correspondence.stage_override': 1 },
+        employee: { 'bank.record_balance': 1, 'bank.view_history': 1, 'bank.add_deposit': 1, 'transaction.add': 1, 'correspondence.add': 1, 'correspondence.send': 1, 'correspondence.stage_approve': 1, 'correspondence.stage_reject': 1, 'correspondence.stage_return': 1 },
     };
     var def = defaults[level] || {};
 
@@ -3389,6 +3451,62 @@ function setAllActions(state) {
     });
 }
 
+
+var CORRESPONDENCE_STAGES = [
+    { key: 'إنشاء', label: 'إنشاء', types: ['داخلي مالي', 'داخلي عام', 'صادر'] },
+    { key: 'مراجعة', label: 'مراجعة', types: ['داخلي مالي', 'صادر'] },
+    { key: 'اعتماد', label: 'اعتماد', types: ['داخلي مالي', 'داخلي عام', 'صادر'] },
+    { key: 'تسليم', label: 'تسليم', types: ['داخلي مالي', 'داخلي عام'] },
+    { key: 'استلام', label: 'استلام', types: ['وارد'] },
+    { key: 'توجيه', label: 'توجيه', types: ['وارد'] },
+    { key: 'معالجة', label: 'معالجة', types: ['وارد'] },
+    { key: 'أرشفة', label: 'أرشفة', types: ['وارد'] },
+    { key: 'إرسال', label: 'إرسال', types: ['صادر'] },
+];
+
+/** بناء grid مراحل الخطابات */
+function buildStagesGrid(overrides) {
+    var svgOn = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+    var svgOff = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+    var html = '<div class="perm-pages-grid">';
+    CORRESPONDENCE_STAGES.forEach(function (s) {
+        var stageKey = 'correspondence.stage.' + s.key;
+        var isOn = overrides.hasOwnProperty(stageKey) ? !!overrides[stageKey] : false;
+        var cls = isOn ? 'on' : 'off';
+        html += '<div class="perm-page-item" data-stage="' + stageKey + '">' +
+            '<span class="perm-page-icon">📋</span>' +
+            '<span class="perm-page-name">' + s.label + '</span>' +
+            '<span style="font-size:.72rem;color:var(--text-muted);display:block;margin-top:2px">' + s.types.join(' · ') + '</span>' +
+            '<button class="perm-toggle ' + cls + '" onclick="toggleStagePerm(this,\'' + stageKey + '\')">' +
+            (isOn ? svgOn : svgOff) +
+            '</button></div>';
+    });
+    html += '</div>';
+    return html;
+}
+
+/** تبديل حالة مرحلة */
+function toggleStagePerm(btn, stageKey) {
+    var isOn = btn.classList.contains('on');
+    btn.classList.toggle('on', !isOn);
+    btn.classList.toggle('off', isOn);
+    var svgOn = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+    var svgOff = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+    btn.innerHTML = !isOn ? svgOn : svgOff;
+}
+
+/** تحديد/إلغاء كل المراحل */
+function setAllStages(state) {
+    var svgOn = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+    var svgOff = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+    document.querySelectorAll('#permsStagesContainer .perm-toggle').forEach(function (btn) {
+        btn.classList.toggle('on', state);
+        btn.classList.toggle('off', !state);
+        btn.innerHTML = state ? svgOn : svgOff;
+    });
+}
+
+
 /** تبديل حالة صفحة */
 function togglePagePerm(btn, pageKey) {
     var isOn = btn.classList.contains('on');
@@ -3426,11 +3544,16 @@ function onPermLevelChange(input, empId) {
             'bank.edit_balance', 'bank.view_history', 'bank.record_balance',
             'bank.add_deposit', 'bank.confirm_deposit',
             'transaction.add', 'transaction.edit', 'transaction.export',
+            'correspondence.add', 'correspondence.edit', 'correspondence.send', 'correspondence.view_all',
+            'correspondence.stage_approve', 'correspondence.stage_reject', 'correspondence.stage_return',
+            'correspondence.stage_edit_completed', 'correspondence.stage_override',
             'reservation.add', 'reservation.view_own', 'reservation.view_all',
         ],
         employee: [
             'bank.record_balance', 'bank.view_history', 'bank.add_deposit',
             'transaction.add',
+            'correspondence.add', 'correspondence.send',
+            'correspondence.stage_approve', 'correspondence.stage_reject', 'correspondence.stage_return',
             'reservation.add', 'reservation.view_own', 'reservation.view_all',
         ],
     };
@@ -3484,6 +3607,12 @@ async function savePermissions(empId, empName) {
     var actionPerms = {};
     document.querySelectorAll('[data-action]').forEach(function (item) {
         var key = item.dataset.action;
+        var btn = item.querySelector('.perm-toggle');
+        actionPerms[key] = btn ? btn.classList.contains('on') : false;
+    });
+    // إضافة صلاحيات المراحل
+    document.querySelectorAll('[data-stage]').forEach(function (item) {
+        var key = item.dataset.stage;
         var btn = item.querySelector('.perm-toggle');
         actionPerms[key] = btn ? btn.classList.contains('on') : false;
     });

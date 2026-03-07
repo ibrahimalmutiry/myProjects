@@ -1981,6 +1981,45 @@ body {
     padding: 1px 5px !important;
 }
 
+/* ── Status Badges ─────────────────────────────── */
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 20px;
+    font-size: .72rem;
+    font-weight: 700;
+    white-space: nowrap;
+    line-height: 1.6;
+}
+
+.status-completed {
+    background: rgba(105, 219, 124, .15);
+    color: var(--accent-green);
+}
+
+.status-review {
+    background: rgba(255, 169, 77, .15);
+    color: var(--accent-orange);
+}
+
+.status-processing {
+    background: rgba(74, 171, 247, .15);
+    color: var(--accent-blue);
+}
+
+.status-pending {
+    background: rgba(148, 163, 184, .12);
+    color: var(--text-muted);
+}
+
+.status-cancelled {
+    background: rgba(255, 107, 107, .15);
+    color: #ff6b6b;
+}
+
+
+
 /* محتوى المرحلة */
 .xstage-body {
     padding: .7rem .85rem;
@@ -7542,5 +7581,133 @@ input:checked+.toggle-slider:before {
 
     .edit-stage-lbl {
         display: none;
+    }
+}
+
+/* ════════════════════════════════════════════════════════════
+   بادئات الأرقام التلقائية — قسم الإعدادات
+   ════════════════════════════════════════════════════════════ */
+
+.prefixes-card .prefixes-desc {
+    font-size: .82rem;
+    color: var(--text-muted);
+    margin-bottom: 1.25rem;
+    line-height: 1.6;
+}
+
+.prefix-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: .75rem 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.prefix-row:last-child {
+    border-bottom: none;
+}
+
+.prefix-label {
+    font-size: .85rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    min-width: 160px;
+}
+
+.prefix-input-wrap {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    flex: 1;
+    justify-content: flex-end;
+}
+
+.prefix-input {
+    width: 100px;
+    padding: .45rem .75rem;
+    background: var(--bg-surface, rgba(255, 255, 255, .06));
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: .88rem;
+    font-weight: 700;
+    font-family: monospace;
+    text-align: center;
+    text-transform: uppercase;
+    outline: none;
+    transition: border-color .15s;
+}
+
+.prefix-input:focus {
+    border-color: var(--accent-blue);
+}
+
+.prefix-save-btn {
+    padding: .4rem .9rem;
+    background: var(--accent-blue, #4dabf7);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: .8rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: opacity .15s;
+    white-space: nowrap;
+}
+
+.prefix-save-btn:hover {
+    opacity: .88;
+}
+
+.prefix-save-btn:disabled {
+    opacity: .45;
+    cursor: not-allowed;
+}
+
+.prefix-status {
+    font-size: .78rem;
+    font-weight: 600;
+    min-width: 80px;
+}
+
+/* ════ سجل أوامر الدفع ════ */
+.dp-history-box {
+    max-width: 980px !important;
+}
+
+.dp-hist-filters {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1.5fr auto;
+    gap: .75rem;
+    align-items: flex-end;
+    margin-bottom: 1.25rem;
+    padding-bottom: 1.25rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.dp-hist-search-group {
+    min-width: 0;
+}
+
+.dp-hist-filters input[type="date"],
+.dp-hist-filters input[type="text"] {
+    width: 100%;
+    padding: .45rem .7rem;
+    background: var(--bg-surface, rgba(255, 255, 255, .05));
+    border: 1px solid var(--border-color);
+    border-radius: 9px;
+    color: var(--text-primary);
+    font-size: .82rem;
+    outline: none;
+}
+
+.dp-hist-filters input:focus {
+    border-color: var(--accent-blue);
+}
+
+@media (max-width: 640px) {
+    .dp-hist-filters {
+        grid-template-columns: 1fr 1fr;
     }
 }

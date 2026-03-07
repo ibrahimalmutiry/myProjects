@@ -1823,385 +1823,376 @@ function renderInvestmentsTab() {
     if (!panel) return;
 
     const active = investments.filter(i => i.status === 'نشط');
+    const done = investments.filter(i => i.status === 'منتهي');
+    const cancelled = investments.filter(i => i.status === 'ملغي');
+
+    const activeSort = [...active].sort((a, b) => {
+        const ord = { 'مستحق': 0, 'قريب_الاستحقاق': 1, 'نشط': 2 };
+        const ao = ord[a.maturity_status] ?? 2, bo = ord[b.maturity_status] ?? 2;
+        if (ao !== bo) return ao - bo;
+        return new Date(a.maturity_date) - new Date(b.maturity_date);
+    });
+
     const totalInv = active.reduce((s, i) => s + parseFloat(i.amount || 0), 0);
     const totalPro = active.reduce((s, i) => s + parseFloat(i.accrued_profit || 0), 0);
-    const overdue = investments.filter(i => i.maturity_status === 'مستحق').length;
-    const expiring = investments.filter(i => i.maturity_status === 'قريب_الاستحقاق').length;
+    const overdue = active.filter(i => i.maturity_status === 'مستحق').length;
+    const expiring = active.filter(i => i.maturity_status === 'قريب_الاستحقاق').length;
+    const totalDoneProfit = done.reduce((s, i) => s + parseFloat(i.actual_profit || 0), 0);
 
     panel.innerHTML = `
-        <!-- إحصاءات سريعة -->
-        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;margin-bottom:1.5rem">
-            <div class="quick-stat-card" style="border-right:3px solid var(--accent-blue)">
-                <div class="quick-stat-icon" style="background:rgba(74,171,247,0.1);color:var(--accent-blue)">💰</div>
-                <div>
-                    <div class="quick-stat-label">إجمالي مُستثمر</div>
-                    <div class="quick-stat-value">${fmtMoney(totalInv)}</div>
-                    <div class="quick-stat-change">${active.length} وديعة نشطة</div>
+        <div class="inv-stats-grid">
+            <div class="inv-stat-card inv-stat-blue">
+                <div class="inv-stat-top">
+                    <div class="inv-stat-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-4 0v2"/></svg></div>
+                    <span class="inv-stat-badge">${active.length} وديعة</span>
                 </div>
+                <div class="inv-stat-value">${fmtMoney(totalInv)}</div>
+                <div class="inv-stat-label">إجمالي مُستثمر</div>
             </div>
-            <div class="quick-stat-card" style="border-right:3px solid var(--accent-green)">
-                <div class="quick-stat-icon" style="background:rgba(105,219,124,0.1);color:var(--accent-green)">📈</div>
-                <div>
-                    <div class="quick-stat-label">ربح متراكم</div>
-                    <div class="quick-stat-value">${fmtMoney(totalPro)}</div>
-                    <div class="quick-stat-change">حتى اليوم</div>
+            <div class="inv-stat-card inv-stat-green">
+                <div class="inv-stat-top">
+                    <div class="inv-stat-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg></div>
+                    <span class="inv-stat-badge">حتى اليوم</span>
                 </div>
+                <div class="inv-stat-value">${fmtMoney(totalPro)}</div>
+                <div class="inv-stat-label">ربح متراكم</div>
             </div>
-            <div class="quick-stat-card" style="border-right:3px solid ${overdue > 0 ? 'var(--accent-red)' : 'var(--border-color)'}">
-                <div class="quick-stat-icon" style="background:rgba(255,107,107,0.1);color:var(--accent-red)">⏰</div>
-                <div>
-                    <div class="quick-stat-label">مستحقة الإغلاق</div>
-                    <div class="quick-stat-value">${overdue}</div>
-                    <div class="quick-stat-change">تنتظر التأكيد</div>
+            <div class="inv-stat-card ${overdue > 0 ? 'inv-stat-red' : 'inv-stat-muted'}">
+                <div class="inv-stat-top">
+                    <div class="inv-stat-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+                    <span class="inv-stat-badge ${overdue > 0 ? 'inv-badge-red' : ''}">${overdue > 0 ? 'تنتظر إغلاق' : 'لا شيء'}</span>
                 </div>
+                <div class="inv-stat-value">${overdue}</div>
+                <div class="inv-stat-label">مستحقة الإغلاق</div>
             </div>
-            <div class="quick-stat-card" style="border-right:3px solid ${expiring > 0 ? 'var(--accent-orange)' : 'var(--border-color)'}">
-                <div class="quick-stat-icon" style="background:rgba(255,169,77,0.1);color:var(--accent-orange)">🔔</div>
-                <div>
-                    <div class="quick-stat-label">تستحق خلال 3 أيام</div>
-                    <div class="quick-stat-value">${expiring}</div>
-                    <div class="quick-stat-change">تنبيه مبكر</div>
+            <div class="inv-stat-card ${expiring > 0 ? 'inv-stat-orange' : 'inv-stat-muted'}">
+                <div class="inv-stat-top">
+                    <div class="inv-stat-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></div>
+                    <span class="inv-stat-badge ${expiring > 0 ? 'inv-badge-orange' : ''}">${expiring > 0 ? 'خلال 3 أيام' : 'لا شيء'}</span>
                 </div>
+                <div class="inv-stat-value">${expiring}</div>
+                <div class="inv-stat-label">قريبة الاستحقاق</div>
+            </div>
+            <div class="inv-stat-card inv-stat-teal">
+                <div class="inv-stat-top">
+                    <div class="inv-stat-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div>
+                    <span class="inv-stat-badge">${done.length} وديعة</span>
+                </div>
+                <div class="inv-stat-value">${fmtMoney(totalDoneProfit)}</div>
+                <div class="inv-stat-label">أرباح محققة</div>
             </div>
         </div>
 
-        <!-- شريط الأدوات -->
-        <div class="toolbar" style="margin-bottom:1rem">
-            <div class="toolbar-search">
-                <div class="search-input">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-                    </svg>
-                    <input type="text" id="inv-search" placeholder="بحث في الودائع..."
-                        oninput="filterInvestmentRows()">
-                </div>
-                <select id="inv-status-filter" class="filter-select" onchange="filterInvestmentRows()">
-                    <option value="">جميع الحالات</option>
-                    <option value="نشط">نشطة</option>
-                    <option value="مستحق">مستحقة</option>
-                    <option value="قريب_الاستحقاق">قريبة الاستحقاق</option>
-                    <option value="منتهي">منتهية</option>
-                    <option value="ملغي">ملغاة</option>
-                </select>
+        <div class="inv-toolbar">
+            <div class="search-input" style="max-width:280px">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                <input type="text" id="inv-search" placeholder="بحث في الودائع..." oninput="filterInvestmentTables()">
             </div>
             <button class="btn btn-primary" onclick="openAddInvestmentModal()">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M12 5v14M5 12h14"/>
-                </svg>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
                 ربط وديعة جديدة
             </button>
         </div>
 
-        <!-- الجدول -->
-        <div class="card">
-            <div class="table-container">
+        <div class="inv-root" id="inv-root">
+            <div class="inv-table-col">
                 <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th>رقم الوديعة</th>
-                            <th>الاسم</th>
-                            <th>الحساب</th>
-                            <th>المبلغ</th>
-                            <th>الفائدة</th>
-                            <th>البداية</th>
-                            <th>الاستحقاق</th>
-                            <th>الربح المتوقع</th>
-                            <th>الحالة</th>
-                            <th></th>
-                        </tr>
-                    </thead>
-                    <tbody id="inv-tbody">
-                        ${renderInvestmentRows(investments)}
-                    </tbody>
+                    <colgroup>
+                        <col/><col/><col/><col/><col/><col/><col/>
+                    </colgroup>
+                    <thead><tr>
+                        <th>الاسم</th>
+                        <th>الحساب</th>
+                        <th>المبلغ</th>
+                        <th>الفائدة</th>
+                        <th>الاستحقاق</th>
+                        <th>الربح</th>
+                        <th>الحالة</th>
+                    </tr></thead>
+                    <tbody id="inv-tbody">${renderInvestmentRows([...activeSort, ...done, ...cancelled])}</tbody>
                 </table>
             </div>
+
         </div>
     `;
 }
 
-// ─── رسم صفوف الجدول ────────────────────────────────────────
+function filterInvestmentTables() {
+    const q = (document.getElementById('inv-search')?.value || '').toLowerCase();
+
+    const activeSort = [...investments.filter(i => i.status === 'نشط')].sort((a, b) => {
+        const ord = { 'مستحق': 0, 'قريب_الاستحقاق': 1, 'نشط': 2 };
+        const ao = ord[a.maturity_status] ?? 2, bo = ord[b.maturity_status] ?? 2;
+        if (ao !== bo) return ao - bo;
+        return new Date(a.maturity_date) - new Date(b.maturity_date);
+    });
+    const done = investments.filter(i => i.status === 'منتهي');
+    const cancelled = investments.filter(i => i.status === 'ملغي');
+    const all = [...activeSort, ...done, ...cancelled];
+
+    const filtered = !q ? all : all.filter(i =>
+        (i.reference_number || '').toLowerCase().includes(q) ||
+        (i.deposit_name || '').toLowerCase().includes(q) ||
+        (i.bank_name || '').toLowerCase().includes(q) ||
+        (i.account_name || '').toLowerCase().includes(q)
+    );
+
+    const el = document.getElementById('inv-tbody');
+    if (el) el.innerHTML = renderInvestmentRows(filtered);
+}
 
 function renderInvestmentRows(list) {
     if (!list || !list.length) {
-        return `<tr><td colspan="10" style="text-align:center;padding:3rem;color:var(--text-muted)">
-            لا توجد ودائع استثمارية
-            <br><br>
+        return `<tr><td colspan="7" style="text-align:center;padding:3rem;color:var(--text-muted)">
+            لا توجد ودائع<br><br>
             <button class="btn btn-primary" onclick="openAddInvestmentModal()">ربط وديعة جديدة</button>
         </td></tr>`;
     }
 
     let html = '';
+    let lastStatus = null;
+
     list.forEach(inv => {
-        const isExp = (expandedInvestment == inv.id);
-
+        const status = inv.status;   // نشط / منتهي / ملغي
         const ms = inv.maturity_status;
-        const statusBadge =
-            ms === 'مستحق' ? `<span class="status-badge" style="background:rgba(255,107,107,0.15);color:var(--accent-red)">⏰ مستحقة</span>` :
-                ms === 'قريب_الاستحقاق' ? `<span class="status-badge" style="background:rgba(255,169,77,0.15);color:var(--accent-orange)">🔔 قريبة</span>` :
-                    inv.status === 'نشط' ? `<span class="status-badge" style="background:rgba(105,219,124,0.15);color:var(--accent-green)">✅ نشطة</span>` :
-                        inv.status === 'منتهي' ? `<span class="status-badge" style="background:rgba(74,171,247,0.15);color:var(--accent-blue)">✔ منتهية</span>` :
-                            `<span class="status-badge" style="background:var(--bg-surface);color:var(--text-muted)">✖ ملغاة</span>`;
 
-        const daysLeft = inv.status === 'نشط'
-            ? (ms === 'مستحق'
-                ? `<span style="color:var(--accent-red);font-size:.75rem">متأخرة ${Math.abs(inv.days_remaining)} يوم</span>`
-                : `<span style="color:var(--text-muted);font-size:.75rem">بعد ${inv.days_remaining} يوم</span>`)
-            : '';
-
-        // لون الصف
-        const rowStyle = ms === 'مستحق'
-            ? 'background:rgba(255,107,107,0.04)'
-            : ms === 'قريب_الاستحقاق'
-                ? 'background:rgba(255,169,77,0.04)'
-                : '';
-
-        html += `<tr class="transaction-row ${isExp ? 'expanded' : ''}"
-                     style="${rowStyle}"
-                     onclick="toggleInvestment(${inv.id})">
-            <td><span class="tx-number">${inv.reference_number}</span></td>
-            <td style="font-weight:600">${inv.deposit_name || '—'}</td>
-            <td>
-                <span style="font-size:.85rem">${inv.bank_name || '—'}</span><br>
-                <span style="font-size:.78rem;color:var(--text-muted)">${inv.account_name || '—'}</span>
-            </td>
-            <td><span class="tx-amount">${fmtMoney(inv.amount)}<small></small></span></td>
-            <td style="font-weight:600;color:var(--accent-green)">${parseFloat(inv.interest_rate)}%</td>
-            <td style="font-size:.85rem">${fmtDate(inv.start_date)}</td>
-            <td style="font-size:.85rem">
-                ${fmtDate(inv.maturity_date)}<br>${daysLeft}
-            </td>
-            <td style="color:var(--accent-green);font-weight:600">+${fmtMoney(inv.expected_profit)}</td>
-            <td>${statusBadge}</td>
-            <td>
-                <div style="display:flex;align-items:center;gap:.5rem">
-                    <svg class="expand-icon" width="16" height="16" viewBox="0 0 24 24" fill="none"
-                         stroke="currentColor" stroke-width="2"
-                         style="color:var(--text-muted);transition:transform .3s;${isExp ? 'transform:rotate(180deg)' : ''}">
-                        <polyline points="6 9 12 15 18 9"/>
-                    </svg>
-                </div>
-            </td>
-        </tr>`;
-
-        // ── الصف الموسع ──────────────────────────────────────
-        if (isExp) {
-            const progress = Math.min(100, Math.max(0, parseFloat(inv.completion_pct || 0)));
-            const accrued = parseFloat(inv.accrued_profit || 0);
-            const expected = parseFloat(inv.expected_profit || 0);
-            const isActive = inv.status === 'نشط';
-            const pColor = ms === 'مستحق' ? '#ef4444' : ms === 'قريب_الاستحقاق' ? '#f59e0b' : '#22c55e';
-
-            html += `<tr class="expanded-row">
-                <td colspan="10" style="padding:0">
-
-                    <!-- شريط المعلومات العلوي -->
-                    <div style="background:var(--bg-surface);padding:.75rem 1.5rem;border-bottom:1px solid var(--border-color);display:flex;align-items:center;gap:2rem;flex-wrap:wrap">
-                        <div style="display:flex;align-items:center;gap:.5rem">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent-blue)" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
-                            <span style="color:var(--text-muted);font-size:.85rem">الحساب:</span>
-                            <span style="color:var(--text-primary);font-weight:600">${inv.bank_name} — ${inv.account_name}</span>
-                        </div>
-                        ${inv.return_account_name && inv.return_account_name !== inv.account_name ? `
-                        <div style="display:flex;align-items:center;gap:.5rem">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent-purple)" stroke-width="2"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
-                            <span style="color:var(--text-muted);font-size:.85rem">يُعاد لـ:</span>
-                            <span style="color:var(--text-primary);font-weight:600">${inv.return_bank_name} — ${inv.return_account_name}</span>
-                        </div>` : `
-                        <div style="display:flex;align-items:center;gap:.5rem">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent-purple)" stroke-width="2"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
-                            <span style="color:var(--text-muted);font-size:.85rem">يُعاد لنفس الحساب</span>
-                        </div>`}
-                        <div style="margin-right:auto;display:flex;gap:.5rem">
-                            ${isActive && (ms === 'مستحق' || ms === 'قريب_الاستحقاق') ? `
-                            <button class="btn btn-sm" style="background:var(--accent-green);color:#fff"
-                                onclick="event.stopPropagation();openMatureInvestmentModal(${inv.id})">
-                                🏁 إغلاق واسترداد
-                            </button>` : ''}
-                            ${isActive ? `
-                            <button class="btn btn-sm btn-secondary"
-                                onclick="event.stopPropagation();openCancelInvestmentModal(${inv.id})">
-                                إلغاء مبكر
-                            </button>` : ''}
-                        </div>
-                    </div>
-
-                    <!-- تفاصيل 4 أقسام -->
-                    <div class="expanded-content four-columns">
-
-                        <!-- المبالغ -->
-                        <div class="detail-section receiving">
-                            <div class="detail-header green">
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-                                المبالغ والعائد
-                            </div>
-                            <div class="detail-row">
-                                <span class="detail-label">الأصل:</span>
-                                <span class="detail-value" style="font-weight:700;color:var(--accent-blue)">${fmtMoney(inv.amount)}</span>
-                            </div>
-                            <div class="detail-row">
-                                <span class="detail-label">الفائدة:</span>
-                                <span class="detail-value" style="font-weight:600">${parseFloat(inv.interest_rate)}% سنوي</span>
-                            </div>
-                            <div class="detail-row">
-                                <span class="detail-label">الربح المتوقع:</span>
-                                <span class="detail-value" style="color:var(--accent-green);font-weight:600">+${fmtMoney(expected)}</span>
-                            </div>
-                            <div class="detail-row">
-                                <span class="detail-label">الربح المتراكم:</span>
-                                <span class="detail-value" style="color:var(--accent-cyan);font-weight:600">+${fmtMoney(accrued)}</span>
-                            </div>
-                            <div class="detail-row">
-                                <span class="detail-label">الإجمالي:</span>
-                                <span class="detail-value" style="font-weight:700;font-size:1.05rem">${fmtMoney(parseFloat(inv.amount) + expected)}</span>
-                            </div>
-                        </div>
-
-                        <!-- المدة والتواريخ -->
-                        <div class="detail-section budget">
-                            <div class="detail-header cyan">
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                                المدة والتواريخ
-                            </div>
-                            <div class="detail-row">
-                                <span class="detail-label">المدة:</span>
-                                <span class="detail-value" style="font-weight:600">${inv.days} يوم</span>
-                            </div>
-                            <div class="detail-row">
-                                <span class="detail-label">البداية:</span>
-                                <span class="detail-value">${fmtDate(inv.start_date)}</span>
-                            </div>
-                            <div class="detail-row">
-                                <span class="detail-label">الاستحقاق:</span>
-                                <span class="detail-value" style="font-weight:600">${fmtDate(inv.maturity_date)}</span>
-                            </div>
-                            <div class="detail-row">
-                                <span class="detail-label">${ms === 'مستحق' ? 'متأخرة:' : 'متبقٍ:'}</span>
-                                <span class="detail-value" style="color:${ms === 'مستحق' ? 'var(--accent-red)' : 'var(--text-primary)'};font-weight:600">
-                                    ${Math.abs(inv.days_remaining)} يوم
-                                </span>
-                            </div>
-                            ${isActive ? `
-                            <div style="margin-top:.75rem">
-                                <div style="font-size:.78rem;color:var(--text-muted);margin-bottom:.3rem">نسبة الاكتمال</div>
-                                <div style="height:8px;background:var(--bg-surface);border-radius:4px;overflow:hidden">
-                                    <div style="height:100%;width:${progress}%;background:${pColor};border-radius:4px;transition:width .5s"></div>
-                                </div>
-                                <div style="font-size:.78rem;color:var(--text-muted);margin-top:.2rem;text-align:left">${progress}%</div>
-                            </div>` : ''}
-                        </div>
-
-                        <!-- الحساب والمرجع -->
-                        <div class="detail-section payment">
-                            <div class="detail-header orange">
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
-                                الحساب والمرجع
-                            </div>
-                            <div class="detail-row">
-                                <span class="detail-label">البنك:</span>
-                                <span class="detail-value" style="font-weight:600">${inv.bank_name || '—'}</span>
-                            </div>
-                            <div class="detail-row">
-                                <span class="detail-label">الحساب:</span>
-                                <span class="detail-value">${inv.account_name || '—'}</span>
-                            </div>
-                            <div class="detail-row">
-                                <span class="detail-label">رقم الحساب:</span>
-                                <span class="detail-value" style="font-family:monospace;color:var(--accent-blue)">${inv.account_number || '—'}</span>
-                            </div>
-                            <div class="detail-row">
-                                <span class="detail-label">المرجع:</span>
-                                <span class="detail-value" style="font-family:monospace;color:var(--accent-orange)">${inv.reference_number}</span>
-                            </div>
-                            ${inv.notes ? `
-                            <div class="detail-row">
-                                <span class="detail-label">ملاحظات:</span>
-                                <span class="detail-value">${inv.notes}</span>
-                            </div>` : ''}
-                        </div>
-
-                        <!-- الحالة والإجراءات -->
-                        <div class="detail-section invoice">
-                            <div class="detail-header purple">
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                                الحالة والإجراءات
-                            </div>
-                            <div class="detail-row">
-                                <span class="detail-label">الحالة:</span>
-                                <span class="detail-value">${ms === 'مستحق' ? '<span style="color:var(--accent-red);font-weight:700">⏰ مستحقة الإغلاق</span>' :
-                    ms === 'قريب_الاستحقاق' ? '<span style="color:var(--accent-orange);font-weight:700">🔔 قريبة الاستحقاق</span>' :
-                        inv.status === 'نشط' ? '<span style="color:var(--accent-green);font-weight:700">✅ نشطة</span>' :
-                            inv.status === 'منتهي' ? '<span style="color:var(--accent-blue);font-weight:700">✔ منتهية</span>' :
-                                '<span style="color:var(--text-muted);font-weight:700">✖ ملغاة</span>'
-                }</span>
-                            </div>
-                            ${inv.status === 'منتهي' ? `
-                            <div class="detail-row">
-                                <span class="detail-label">الربح الفعلي:</span>
-                                <span class="detail-value" style="color:var(--accent-green);font-weight:700">+${fmtMoney(inv.actual_profit)}</span>
-                            </div>` : ''}
-                            ${inv.matured_at ? `
-                            <div class="detail-row">
-                                <span class="detail-label">تاريخ الإغلاق:</span>
-                                <span class="detail-value">${fmtDate(inv.matured_at)}</span>
-                            </div>` : ''}
-                            <div style="margin-top:1rem;display:flex;flex-direction:column;gap:.5rem">
-                                ${isActive && (ms === 'مستحق' || ms === 'قريب_الاستحقاق') ? `
-                                <button class="btn btn-sm" style="background:var(--accent-green);color:#fff;width:100%"
-                                    onclick="event.stopPropagation();openMatureInvestmentModal(${inv.id})">
-                                    🏁 إغلاق واسترداد الأصل + الربح
-                                </button>` : ''}
-                                ${isActive ? `
-                                <button class="btn btn-sm btn-secondary" style="width:100%"
-                                    onclick="event.stopPropagation();openCancelInvestmentModal(${inv.id})">
-                                    ⚠️ إلغاء مبكر
-                                </button>` : ''}
-                            </div>
-                        </div>
-
-                    </div>
+        // ── فاصل مجموعة ──────────────────────────────────
+        if (status !== lastStatus) {
+            const sepConfig = {
+                'نشط': { cls: 'spill-green', label: '● النشطة' },
+                'منتهي': { cls: 'spill-blue', label: '✔ المنتهية' },
+                'ملغي': { cls: 'spill-muted', label: '✖ الملغاة' },
+            };
+            const sc = sepConfig[status] || { cls: 'spill-muted', label: status };
+            html += `<tr class="grp-sep">
+                <td colspan="7">
+                    <span class="spill ${sc.cls}">${sc.label}</span>
                 </td>
             </tr>`;
+            lastStatus = status;
         }
+
+        // ── تحديد class الصف ──────────────────────────────
+        let rowCls = '';
+        if (status === 'منتهي') rowCls = 'inv-done';
+        else if (status === 'ملغي') rowCls = 'inv-cancelled';
+        else if (ms === 'مستحق') rowCls = 'inv-overdue';
+        else if (ms === 'قريب_الاستحقاق') rowCls = 'inv-expiring';
+        else rowCls = 'inv-active';
+
+        if (expandedInvestment == inv.id) rowCls += ' row-selected';
+
+        // ── badge الحالة ──────────────────────────────────
+        const badge =
+            ms === 'مستحق' ? '<span class="spill spill-red">⏰ مستحقة</span>' :
+                ms === 'قريب_الاستحقاق' ? '<span class="spill spill-orange">🔔 قريبة</span>' :
+                    status === 'نشط' ? '<span class="spill spill-green">نشطة</span>' :
+                        status === 'منتهي' ? '<span class="spill spill-blue">منتهية</span>' :
+                            '<span class="spill spill-muted">ملغاة</span>';
+
+        // ── المتبقي / المنقضي ─────────────────────────────
+        const sub =
+            status === 'نشط' && ms === 'مستحق'
+                ? `<br><span style="color:#ff6b6b;font-size:.7rem">متأخر ${Math.abs(inv.days_remaining)} يوم</span>`
+                : status === 'نشط'
+                    ? `<br><span style="color:var(--text-muted);font-size:.7rem">بعد ${inv.days_remaining} يوم</span>`
+                    : '';
+
+        // ── الربح المعروض ─────────────────────────────────
+        const profitVal = status === 'منتهي' && inv.actual_profit != null
+            ? fmtMoney(inv.actual_profit)
+            : fmtMoney(inv.expected_profit);
+
+        html += `<tr class="${rowCls}" data-inv-id="${inv.id}" onclick="toggleInvestment(${inv.id})">
+            <td>
+                <div style="font-weight:600;overflow:hidden;text-overflow:ellipsis">${inv.deposit_name || inv.reference_number}</div>
+                <div style="font-size:.71rem;color:var(--text-muted);font-family:monospace">${inv.reference_number}</div>
+            </td>
+            <td>
+                <div style="font-size:.83rem;font-weight:500;overflow:hidden;text-overflow:ellipsis">${inv.bank_name || '—'}</div>
+                <div style="font-size:.71rem;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis">${inv.account_name || ''}</div>
+            </td>
+            <td style="font-weight:700;color:var(--accent-blue);font-variant-numeric:tabular-nums;direction:ltr;text-align:left">${fmtMoney(inv.amount)}</td>
+            <td style="font-weight:600;color:var(--accent-green);text-align:center">${parseFloat(inv.interest_rate)}%</td>
+            <td>
+                <div style="font-size:.83rem">${fmtDate(inv.maturity_date)}</div>${sub}
+            </td>
+            <td style="color:var(--accent-green);font-weight:600;font-variant-numeric:tabular-nums;direction:ltr;text-align:left">+${profitVal}</td>
+            <td style="text-align:center">${badge}</td>
+        </tr>`;
     });
 
     return html;
 }
 
-// ─── تبديل الصف ─────────────────────────────────────────────
 
 function toggleInvestment(id) {
-    expandedInvestment = (expandedInvestment == id) ? null : id;
-    const tbody = document.getElementById('inv-tbody');
-    if (tbody) {
-        const filter = document.getElementById('inv-status-filter')?.value || '';
-        const search = (document.getElementById('inv-search')?.value || '').toLowerCase();
-        const filtered = applyInvFilter(investments, filter, search);
-        tbody.innerHTML = renderInvestmentRows(filtered);
-    }
+    // إزالة تمييز الصف السابق
+    document.querySelectorAll('#inv-tbody tr.row-selected').forEach(r => r.classList.remove('row-selected'));
+
+    const inv = investments.find(i => i.id == id);
+    if (!inv) return;
+
+    // تمييز الصف المختار
+    const row = document.querySelector(`#inv-tbody tr[data-inv-id="${id}"]`);
+    if (row) row.classList.add('row-selected');
+
+    // افتح الـ modal
+    openInvDetailModal(inv);
 }
 
-function filterInvestmentRows() {
-    const filter = document.getElementById('inv-status-filter')?.value || '';
-    const search = (document.getElementById('inv-search')?.value || '').toLowerCase();
-    const filtered = applyInvFilter(investments, filter, search);
-    const tbody = document.getElementById('inv-tbody');
-    if (tbody) tbody.innerHTML = renderInvestmentRows(filtered);
+function openInvDetailModal(inv) {
+    // أزل modal قديم إن وُجد
+    document.getElementById('inv-detail-modal')?.remove();
+
+    const ms = inv.maturity_status;
+    const isActive = inv.status === 'نشط';
+    const expected = parseFloat(inv.expected_profit || 0);
+    const accrued = parseFloat(inv.accrued_profit || 0);
+    const actual = inv.actual_profit != null ? parseFloat(inv.actual_profit) : null;
+    const progress = Math.min(100, Math.max(0, parseFloat(inv.completion_pct || 0)));
+    const pColor = ms === 'مستحق' ? '#ff6b6b' : ms === 'قريب_الاستحقاق' ? '#ffa94d' : '#40c057';
+
+    const statusPill =
+        ms === 'مستحق' ? '<span class="idm-pill idm-pill-red">⏰ مستحقة الإغلاق</span>' :
+            ms === 'قريب_الاستحقاق' ? '<span class="idm-pill idm-pill-orange">🔔 قريبة الاستحقاق</span>' :
+                inv.status === 'نشط' ? '<span class="idm-pill idm-pill-green">● نشطة</span>' :
+                    inv.status === 'منتهي' ? '<span class="idm-pill idm-pill-blue">✔ منتهية</span>' :
+                        '<span class="idm-pill idm-pill-muted">✖ ملغاة</span>';
+
+    const overlay = document.createElement('div');
+    overlay.id = 'inv-detail-modal';
+    overlay.className = 'idm-overlay';
+    overlay.onclick = e => { if (e.target === overlay) closeInvDetailModal(); };
+
+    overlay.innerHTML = `
+        <div class="idm-box">
+
+            <!-- Header -->
+            <div class="idm-header">
+                <div class="idm-header-left">
+                    ${statusPill}
+                    <div class="idm-amount">ر.س ${fmtMoney(inv.amount)}</div>
+                    <div class="idm-dep-name">${inv.deposit_name || inv.reference_number}</div>
+                </div>
+                <button class="idm-close" onclick="closeInvDetailModal()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Progress bar (للنشطة فقط) -->
+            ${isActive ? `
+            <div class="idm-progress-wrap">
+                <div class="idm-progress-meta">
+                    <span>${fmtDate(inv.start_date)}</span>
+                    <span style="font-weight:700;color:${pColor}">${progress}% مكتمل</span>
+                    <span>${fmtDate(inv.maturity_date)}</span>
+                </div>
+                <div class="idm-progress-track">
+                    <div class="idm-progress-fill" style="width:${progress}%;background:${pColor}"></div>
+                </div>
+                <div style="text-align:center;font-size:.75rem;color:${ms === 'مستحق' ? '#ff6b6b' : 'var(--text-muted)'};margin-top:.3rem">
+                    ${ms === 'مستحق' ? `متأخرة ${Math.abs(inv.days_remaining)} يوم` : `متبقٍ ${inv.days_remaining} يوم`}
+                </div>
+            </div>` : ''}
+
+            <!-- Grid التفاصيل -->
+            <div class="idm-body">
+
+                <div class="idm-section">
+                    <div class="idm-section-title">التواريخ</div>
+                    <div class="idm-row"><span>البداية</span><strong>${fmtDate(inv.start_date)}</strong></div>
+                    <div class="idm-row"><span>الاستحقاق</span><strong>${fmtDate(inv.maturity_date)}</strong></div>
+                    <div class="idm-row"><span>المدة</span><strong>${inv.days} يوم</strong></div>
+                    ${inv.matured_at ? `<div class="idm-row"><span>تاريخ الإغلاق</span><strong>${fmtDate(inv.matured_at)}</strong></div>` : ''}
+                </div>
+
+                <div class="idm-section">
+                    <div class="idm-section-title">الحساب</div>
+                    <div class="idm-row"><span>البنك</span><strong>${inv.bank_name || '—'}</strong></div>
+                    <div class="idm-row"><span>الحساب</span><strong>${inv.account_name || '—'}</strong></div>
+                    <div class="idm-row"><span>الرقم</span><strong style="font-family:monospace;color:var(--accent-blue);font-size:.8rem">${inv.account_number || '—'}</strong></div>
+                    <div class="idm-row"><span>المرجع</span><strong style="font-family:monospace;color:#ffa94d;font-size:.8rem">${inv.reference_number}</strong></div>
+                    ${inv.return_account_name && inv.return_account_name !== inv.account_name
+            ? `<div class="idm-row"><span>إعادة لـ</span><strong>${inv.return_account_name}</strong></div>` : ''}
+                </div>
+
+                <div class="idm-section idm-section-full">
+                    <div class="idm-section-title">المبالغ والربح</div>
+                    <div class="idm-amounts-grid">
+                        <div class="idm-amount-card">
+                            <div class="idm-amount-label">المبلغ الأصلي</div>
+                            <div class="idm-amount-val" style="color:var(--accent-blue)">${fmtMoney(inv.amount)}</div>
+                        </div>
+                        <div class="idm-amount-card">
+                            <div class="idm-amount-label">معدل الفائدة</div>
+                            <div class="idm-amount-val" style="color:var(--accent-green)">${parseFloat(inv.interest_rate)}%</div>
+                        </div>
+                        <div class="idm-amount-card">
+                            <div class="idm-amount-label">الربح المتوقع</div>
+                            <div class="idm-amount-val" style="color:var(--accent-green)">+${fmtMoney(expected)}</div>
+                        </div>
+                        ${isActive ? `<div class="idm-amount-card">
+                            <div class="idm-amount-label">الربح المتراكم</div>
+                            <div class="idm-amount-val" style="color:var(--accent-blue)">+${fmtMoney(accrued)}</div>
+                        </div>` : ''}
+                        ${actual !== null ? `<div class="idm-amount-card">
+                            <div class="idm-amount-label">الربح الفعلي</div>
+                            <div class="idm-amount-val" style="color:#40c057;font-size:1.1rem">+${fmtMoney(actual)}</div>
+                        </div>` : ''}
+                        <div class="idm-amount-card idm-amount-total">
+                            <div class="idm-amount-label">الإجمالي</div>
+                            <div class="idm-amount-val">${fmtMoney(parseFloat(inv.amount) + (actual !== null ? actual : expected))}</div>
+                        </div>
+                    </div>
+                </div>
+
+                ${inv.notes ? `<div class="idm-section idm-section-full">
+                    <div class="idm-section-title">ملاحظات</div>
+                    <p class="idm-notes">${inv.notes}</p>
+                </div>` : ''}
+
+            </div>
+
+            <!-- Footer الأزرار -->
+            ${isActive ? `<div class="idm-footer">
+                ${(ms === 'مستحق' || ms === 'قريب_الاستحقاق') ? `
+                <button class="idm-btn idm-btn-green" onclick="closeInvDetailModal();openMatureInvestmentModal(${inv.id})">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                    إغلاق واسترداد
+                </button>` : ''}
+                <button class="idm-btn idm-btn-blue" onclick="closeInvDetailModal();openEditInvestmentModal(${inv.id})">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                    تعديل
+                </button>
+                <button class="idm-btn idm-btn-danger" onclick="closeInvDetailModal();openCancelInvestmentModal(${inv.id})">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+                    إلغاء مبكر
+                </button>
+            </div>` : `<div class="idm-footer">
+                <button class="idm-btn idm-btn-muted" onclick="closeInvDetailModal()">إغلاق</button>
+            </div>`}
+
+        </div>
+    `;
+
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => overlay.classList.add('idm-visible'));
+
+    // إغلاق بـ Escape
+    const onKey = e => { if (e.key === 'Escape') { closeInvDetailModal(); document.removeEventListener('keydown', onKey); } };
+    document.addEventListener('keydown', onKey);
 }
 
-function applyInvFilter(list, filter, search) {
-    return list.filter(inv => {
-        const matchFilter =
-            !filter ? true :
-                filter === 'مستحق' ? inv.maturity_status === 'مستحق' :
-                    filter === 'قريب_الاستحقاق' ? inv.maturity_status === 'قريب_الاستحقاق' :
-                        inv.status === filter;
-        const matchSearch = !search ||
-            (inv.reference_number || '').toLowerCase().includes(search) ||
-            (inv.deposit_name || '').toLowerCase().includes(search) ||
-            (inv.bank_name || '').toLowerCase().includes(search) ||
-            (inv.account_name || '').toLowerCase().includes(search);
-        return matchFilter && matchSearch;
-    });
+function closeInvDetailModal() {
+    const overlay = document.getElementById('inv-detail-modal');
+    if (!overlay) return;
+    overlay.classList.remove('idm-visible');
+    overlay.classList.add('idm-closing');
+    setTimeout(() => overlay.remove(), 220);
+    document.querySelectorAll('#inv-tbody tr.row-selected').forEach(r => r.classList.remove('row-selected'));
 }
 
 
@@ -2212,259 +2203,191 @@ function applyInvFilter(list, filter, search) {
 function openAddInvestmentModal() {
     const opts = bankAccounts
         .filter(a => a.is_active == 1)
-        .map(a => `<option value="${a.id}" data-balance="${a.current_balance}">
-            ${a.bank_name} — ${a.account_name} (${fmtMoney(a.current_balance)})
-        </option>`).join('');
+        .map(a => `<option value="${a.id}">${a.bank_name} — ${a.account_name} (${fmtMoney(a.current_balance)})</option>`)
+        .join('');
 
-    DOM.modalTitle.textContent = '🏦 ربط وديعة استثمارية جديدة';
+    if (!opts) { showToast('لا توجد حسابات بنكية نشطة', 'error'); return; }
+
+    DOM.modalTitle.textContent = '💰 ربط وديعة استثمارية جديدة';
     DOM.modalBody.innerHTML = `
-        <div class="modal-form-grid">
-
-            <div class="form-group full-span">
-                <label class="form-label">اسم الوديعة *</label>
-                <input type="text" id="inv-name" class="form-input"
-                    placeholder="مثال: وديعة الجزيرة Q1 2026" required>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+            <div class="form-group" style="grid-column:1/-1">
+                <label class="form-label">اسم الوديعة</label>
+                <input id="ni-name" class="form-input" type="text" placeholder="مثال: وديعة الرواتب Q1">
             </div>
-
-            <div class="form-group">
-                <label class="form-label">حساب التشغيل (المصدر) *</label>
-                <select id="inv-account" class="form-input" onchange="onInvAccChange(this)">
-                    <option value="">-- اختر --</option>${opts}
-                </select>
-                <div id="inv-bal-hint" style="margin-top:4px;font-size:.82rem;color:var(--accent-green)"></div>
+            <div class="form-group" style="grid-column:1/-1">
+                <label class="form-label">الحساب المصدر <span style="color:var(--accent-red)">*</span></label>
+                <select id="ni-account" class="form-input">${opts}</select>
             </div>
-
             <div class="form-group">
-                <label class="form-label">حساب الاسترداد</label>
-                <select id="inv-return" class="form-input">
-                    <option value="">-- نفس حساب المصدر --</option>${opts}
-                </select>
+                <label class="form-label">المبلغ (ر.س) <span style="color:var(--accent-red)">*</span></label>
+                <input id="ni-amount" class="form-input" type="number" min="1" step="0.01" placeholder="0.00" oninput="calcNewInvProfit()">
             </div>
-
             <div class="form-group">
-                <label class="form-label">المبلغ (ريال) *</label>
-                <input type="number" id="inv-amount" class="form-input"
-                    placeholder="1000000" min="1" step="0.01" oninput="calcInvSummary()">
+                <label class="form-label">معدل الفائدة (%) <span style="color:var(--accent-red)">*</span></label>
+                <input id="ni-rate" class="form-input" type="number" min="0" step="0.001" placeholder="0.000" oninput="calcNewInvProfit()">
             </div>
-
             <div class="form-group">
-                <label class="form-label">نسبة الفائدة السنوية (%) *</label>
-                <input type="number" id="inv-rate" class="form-input"
-                    placeholder="5.00" min="0.001" step="0.001" oninput="calcInvSummary()">
+                <label class="form-label">المدة (أيام) <span style="color:var(--accent-red)">*</span></label>
+                <input id="ni-days" class="form-input" type="number" min="1" placeholder="90" oninput="calcNewInvProfit();calcNewInvMaturity()">
             </div>
-
             <div class="form-group">
-                <label class="form-label">المدة *</label>
-                <div style="display:flex;gap:8px">
-                    <input type="number" id="inv-days" class="form-input"
-                        placeholder="90" min="1" step="1"
-                        oninput="calcInvSummary();calcInvMaturity()">
-                    <select class="form-input" style="max-width:140px" onchange="setInvDays(this.value)">
-                        <option value="">اختر مدة</option>
-                        <option value="30">شهر — 30</option>
-                        <option value="60">شهرين — 60</option>
-                        <option value="90">3 أشهر — 90</option>
-                        <option value="180">6 أشهر — 180</option>
-                        <option value="365">سنة — 365</option>
-                    </select>
-                </div>
+                <label class="form-label">تاريخ البداية <span style="color:var(--accent-red)">*</span></label>
+                <input id="ni-start" class="form-input" type="date" value="${new Date().toISOString().split('T')[0]}" oninput="calcNewInvMaturity()">
             </div>
-
-            <div class="form-group">
-                <label class="form-label">تاريخ الربط *</label>
-                <input type="date" id="inv-start" class="form-input"
-                    value="${new Date().toISOString().split('T')[0]}"
-                    oninput="calcInvMaturity()">
-            </div>
-
-            <div class="form-group">
+            <div class="form-group" style="grid-column:1/-1">
                 <label class="form-label">تاريخ الاستحقاق</label>
-                <input type="text" id="inv-maturity" class="form-input" readonly
-                    style="background:var(--bg-surface);color:var(--accent-blue)">
+                <input id="ni-maturity" class="form-input" type="date" readonly style="opacity:.7">
             </div>
-
-            <div class="form-group">
-                <label class="form-label">رقم المرجع</label>
-                <input type="text" id="inv-ref" class="form-input"
-                    placeholder="يُولَّد تلقائياً">
+            <div class="form-group" style="grid-column:1/-1">
+                <label class="form-label">حساب الإعادة (اختياري — الافتراضي نفس الحساب)</label>
+                <select id="ni-return" class="form-input">
+                    <option value="">— نفس حساب الوديعة —</option>
+                    ${opts}
+                </select>
             </div>
-
-            <div class="form-group">
+            <div class="form-group" style="grid-column:1/-1">
+                <label class="form-label">الرقم المرجعي (اختياري — يُولَّد تلقائياً)</label>
+                <input id="ni-ref" class="form-input" type="text" placeholder="INV-YYYYMMDD-XXXX">
+            </div>
+            <div class="form-group" style="grid-column:1/-1">
                 <label class="form-label">ملاحظات</label>
-                <input type="text" id="inv-notes" class="form-input" placeholder="اختياري">
+                <textarea id="ni-notes" class="form-input" rows="2"></textarea>
             </div>
-
-            <div class="form-group full-span" id="inv-summary-box" style="display:none">
-                <div style="background:var(--bg-surface);border:1px solid var(--border-color);border-radius:12px;padding:1rem;display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;text-align:center">
-                    <div>
-                        <div style="font-size:.78rem;color:var(--text-muted)">الربح المتوقع</div>
-                        <div id="inv-s-profit" style="font-size:1.3rem;font-weight:700;color:var(--accent-green)">—</div>
-                    </div>
-                    <div>
-                        <div style="font-size:.78rem;color:var(--text-muted)">إجمالي العائد</div>
-                        <div id="inv-s-total" style="font-size:1.3rem;font-weight:700;color:var(--accent-blue)">—</div>
-                    </div>
-                    <div>
-                        <div style="font-size:.78rem;color:var(--text-muted)">عائد يومي</div>
-                        <div id="inv-s-daily" style="font-size:1rem;font-weight:600">—</div>
-                    </div>
-                </div>
+            <div id="ni-profit-preview" style="grid-column:1/-1;background:rgba(74,171,247,.07);border:1px solid rgba(74,171,247,.2);border-radius:10px;padding:.75rem 1rem;font-size:.85rem;color:var(--text-primary)">
+                الربح المتوقع: <strong style="color:var(--accent-green)" id="ni-profit-val">—</strong>
             </div>
-
         </div>
-        <div style="display:flex;gap:12px;margin-top:20px;justify-content:flex-end">
-            <button type="button" class="btn btn-secondary" onclick="closeModal()">إلغاء</button>
-            <button type="button" class="btn btn-primary" onclick="submitNewInvestment()">
-                🏦 ربط الوديعة
+        <div style="display:flex;gap:.75rem;margin-top:1.25rem;justify-content:flex-end">
+            <button class="btn btn-secondary" onclick="closeModal()">إلغاء</button>
+            <button class="btn btn-primary" onclick="submitNewInvestment()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+                ربط الوديعة
             </button>
         </div>`;
+
+    calcNewInvMaturity();
     openModal();
-    calcInvMaturity();
 }
 
-function onInvAccChange(sel) {
-    const bal = parseFloat(sel.options[sel.selectedIndex]?.dataset.balance || 0);
-    const hint = document.getElementById('inv-bal-hint');
-    if (hint) hint.textContent = bal > 0 ? `الرصيد الحالي: ${fmtMoney(bal)}` : '';
+function calcNewInvProfit() {
+    const amount = parseFloat(document.getElementById('ni-amount')?.value) || 0;
+    const rate = parseFloat(document.getElementById('ni-rate')?.value) || 0;
+    const days = parseInt(document.getElementById('ni-days')?.value) || 0;
+    const profit = Math.round(amount * rate / 100 * days / 360 * 100) / 100;
+    const el = document.getElementById('ni-profit-val');
+    if (el) el.textContent = profit > 0 ? '+' + fmtMoney(profit) : '—';
 }
 
-function setInvDays(v) {
-    if (!v) return;
-    const el = document.getElementById('inv-days');
-    if (el) { el.value = v; calcInvSummary(); calcInvMaturity(); }
-}
-
-function calcInvSummary() {
-    const amount = parseFloat(document.getElementById('inv-amount')?.value || 0);
-    const rate = parseFloat(document.getElementById('inv-rate')?.value || 0);
-    const days = parseInt(document.getElementById('inv-days')?.value || 0);
-    const box = document.getElementById('inv-summary-box');
-    if (!amount || !rate || !days) { if (box) box.style.display = 'none'; return; }
-    const profit = amount * rate / 100 * days / 360;
-    if (box) {
-        box.style.display = 'block';
-        document.getElementById('inv-s-profit').textContent = fmtMoney(profit);
-        document.getElementById('inv-s-total').textContent = fmtMoney(amount + profit);
-        document.getElementById('inv-s-daily').textContent = fmtMoney(amount * rate / 100 / 360) + ' / يوم';
-    }
-}
-
-function calcInvMaturity() {
-    const s = document.getElementById('inv-start')?.value;
-    const d = parseInt(document.getElementById('inv-days')?.value || 0);
-    const out = document.getElementById('inv-maturity');
-    if (!out) return;
-    if (!s || !d) { out.value = ''; return; }
-    const dt = new Date(s);
-    dt.setDate(dt.getDate() + d);
-    out.value = dt.toLocaleDateString('ar-SA', { year: 'numeric', month: 'long', day: 'numeric' });
-    out.dataset.iso = dt.toISOString().split('T')[0];
+function calcNewInvMaturity() {
+    const startEl = document.getElementById('ni-start');
+    const daysEl = document.getElementById('ni-days');
+    const maturityEl = document.getElementById('ni-maturity');
+    if (!startEl || !daysEl || !maturityEl) return;
+    const start = new Date(startEl.value);
+    const days = parseInt(daysEl.value) || 0;
+    if (isNaN(start.getTime()) || days <= 0) return;
+    start.setDate(start.getDate() + days);
+    maturityEl.value = start.toISOString().split('T')[0];
 }
 
 async function submitNewInvestment() {
-    const p = {
-        account_id: document.getElementById('inv-account')?.value,
-        return_account_id: document.getElementById('inv-return')?.value || null,
-        deposit_name: document.getElementById('inv-name')?.value,
-        amount: document.getElementById('inv-amount')?.value,
-        interest_rate: document.getElementById('inv-rate')?.value,
-        days: document.getElementById('inv-days')?.value,
-        start_date: document.getElementById('inv-start')?.value,
-        reference_number: document.getElementById('inv-ref')?.value,
-        notes: document.getElementById('inv-notes')?.value,
+    const payload = {
+        deposit_name: document.getElementById('ni-name')?.value?.trim() || '',
+        account_id: parseInt(document.getElementById('ni-account')?.value) || 0,
+        amount: parseFloat(document.getElementById('ni-amount')?.value) || 0,
+        interest_rate: parseFloat(document.getElementById('ni-rate')?.value) || 0,
+        days: parseInt(document.getElementById('ni-days')?.value) || 0,
+        start_date: document.getElementById('ni-start')?.value || '',
+        maturity_date: document.getElementById('ni-maturity')?.value || '',
+        return_account_id: document.getElementById('ni-return')?.value || '',
+        reference_number: document.getElementById('ni-ref')?.value?.trim() || '',
+        notes: document.getElementById('ni-notes')?.value || '',
     };
-    if (!p.account_id) return showToast('يرجى اختيار الحساب', 'error');
-    if (!p.deposit_name) return showToast('يرجى إدخال اسم الوديعة', 'error');
-    if (!p.amount || p.amount <= 0) return showToast('يرجى إدخال المبلغ', 'error');
-    if (!p.interest_rate) return showToast('يرجى إدخال نسبة الفائدة', 'error');
-    if (!p.days) return showToast('يرجى إدخال المدة', 'error');
+
+    if (!payload.account_id || payload.amount <= 0 || payload.interest_rate <= 0 || payload.days <= 0) {
+        showToast('يرجى تعبئة جميع الحقول المطلوبة', 'error');
+        return;
+    }
 
     try {
         const res = await fetch('api/?action=create_investment', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(p)
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
         });
         const data = await res.json();
         if (data.success) {
-            showToast(data.message || 'تم ربط الوديعة بنجاح', 'success');
+            showToast('تم ربط الوديعة بنجاح ✅', 'success');
             closeModal();
             await Promise.all([loadInvestments(), loadBankAccounts()]);
             renderInvestmentsTab();
         } else {
-            showToast(data.message || 'فشل', 'error');
+            showToast(data.message || 'فشل ربط الوديعة', 'error');
         }
-    } catch { showToast('خطأ في الاتصال', 'error'); }
+    } catch (e) {
+        showToast('خطأ في الاتصال', 'error');
+    }
 }
 
-
 // ════════════════════════════════════════════════════════════
-//  مودال: إغلاق الوديعة
+//  مودال: إغلاق الوديعة (استحقاق)
 // ════════════════════════════════════════════════════════════
 
 function openMatureInvestmentModal(id) {
     const inv = investments.find(i => i.id == id);
     if (!inv) return;
-    const exp = parseFloat(inv.expected_profit || 0);
+
+    const expected = parseFloat(inv.expected_profit || 0);
 
     DOM.modalTitle.textContent = '🏁 إغلاق الوديعة واسترداد المبلغ';
     DOM.modalBody.innerHTML = `
-        <div style="background:var(--bg-surface);border-radius:12px;padding:1.25rem;margin-bottom:1rem">
-            <div style="display:flex;justify-content:space-between;padding:.5rem 0;border-bottom:1px solid var(--border-color)">
-                <span style="color:var(--text-muted)">الوديعة</span>
-                <strong>${inv.deposit_name || inv.reference_number}</strong>
-            </div>
-            <div style="display:flex;justify-content:space-between;padding:.5rem 0;border-bottom:1px solid var(--border-color)">
-                <span style="color:var(--text-muted)">المبلغ الأصلي</span>
-                <strong style="color:var(--accent-blue)">${fmtMoney(inv.amount)}</strong>
-            </div>
-            <div style="display:flex;justify-content:space-between;padding:.5rem 0;border-bottom:1px solid var(--border-color)">
-                <span style="color:var(--text-muted)">الربح المتوقع</span>
-                <strong style="color:var(--accent-green)">+${fmtMoney(exp)}</strong>
-            </div>
-            <div style="display:flex;justify-content:space-between;padding:.75rem 0;font-size:1.1rem">
-                <span style="color:var(--text-muted)">إجمالي الاسترداد</span>
-                <strong>${fmtMoney(parseFloat(inv.amount) + exp)}</strong>
-            </div>
-            <div style="display:flex;justify-content:space-between;padding:.5rem 0">
-                <span style="color:var(--text-muted)">يُضاف إلى</span>
-                <strong>🏦 ${inv.return_account_name || inv.account_name}</strong>
+        <div style="background:rgba(105,219,124,.08);border:1px solid rgba(105,219,124,.25);border-radius:10px;padding:1rem;margin-bottom:1rem">
+            <div style="font-size:.9rem;color:var(--text-primary);line-height:1.7">
+                <strong>${inv.deposit_name || inv.reference_number}</strong><br>
+                الأصل: <strong style="color:var(--accent-blue)">${fmtMoney(inv.amount)}</strong> |
+                الربح المتوقع: <strong style="color:var(--accent-green)">+${fmtMoney(expected)}</strong>
             </div>
         </div>
         <div class="form-group">
-            <label class="form-label">الربح الفعلي (ريال)</label>
-            <input type="number" id="mat-profit" class="form-input"
-                value="${exp.toFixed(2)}" step="0.01">
-            <div style="font-size:.8rem;color:var(--text-muted);margin-top:4px">عدّل إذا كان الربح الفعلي مختلفاً</div>
+            <label class="form-label">الربح الفعلي (ر.س)</label>
+            <input id="mature-profit" class="form-input" type="number" min="0" step="0.01"
+                value="${expected}" placeholder="${expected}">
+            <small style="color:var(--text-muted);font-size:.78rem">اتركه كما هو إذا مطابق للمتوقع</small>
         </div>
-        <div style="display:flex;gap:12px;margin-top:20px;justify-content:flex-end">
-            <button type="button" class="btn btn-secondary" onclick="closeModal()">إلغاء</button>
-            <button type="button" class="btn" style="background:var(--accent-green);color:#fff"
-                onclick="submitMatureInv(${id})">
-                ✅ تأكيد الإغلاق والاسترداد
+        <div style="display:flex;gap:.75rem;margin-top:1.25rem;justify-content:flex-end">
+            <button class="btn btn-secondary" onclick="closeModal()">إلغاء</button>
+            <button class="btn" style="background:var(--accent-green);color:#fff" onclick="submitMatureInv(${id})">
+                🏁 تأكيد الإغلاق والاسترداد
             </button>
         </div>`;
     openModal();
 }
 
 async function submitMatureInv(id) {
-    const profit = document.getElementById('mat-profit')?.value;
+    const actualProfit = parseFloat(document.getElementById('mature-profit')?.value);
     try {
         const res = await fetch('api/?action=mature_investment', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id, actual_profit: profit })
+            body: JSON.stringify({ id, actual_profit: isNaN(actualProfit) ? null : actualProfit })
         });
         const data = await res.json();
         if (data.success) {
-            showToast(data.message, 'success');
+            showToast(data.message || 'تم إغلاق الوديعة بنجاح', 'success');
             closeModal();
+            expandedInvestment = null;
+            document.getElementById('inv-root')?.classList.remove('has-panel');
             await Promise.all([loadInvestments(), loadBankAccounts()]);
             renderInvestmentsTab();
-        } else { showToast(data.message || 'فشل', 'error'); }
-    } catch { showToast('خطأ في الاتصال', 'error'); }
+        } else {
+            showToast(data.message || 'فشل الإغلاق', 'error');
+        }
+    } catch (e) {
+        showToast('خطأ في الاتصال', 'error');
+    }
 }
 
-
 // ════════════════════════════════════════════════════════════
-//  مودال: إلغاء مبكر
+//  مودال: إلغاء الوديعة مبكراً
 // ════════════════════════════════════════════════════════════
 
 function openCancelInvestmentModal(id) {
@@ -2476,15 +2399,27 @@ function openCancelInvestmentModal(id) {
         <div style="display:flex;gap:1rem;align-items:flex-start;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);border-radius:10px;padding:1rem;margin-bottom:1rem">
             <span style="font-size:1.75rem">⚠️</span>
             <div style="color:var(--text-primary);font-size:.95rem;line-height:1.6">
-                <strong>تحذير:</strong> الإلغاء المبكر يعيد المبلغ الأصلي فقط
+                <strong>تحذير:</strong> الإلغاء المبكر — المبلغ الأصلي
                 (<strong style="color:var(--accent-blue)">${fmtMoney(inv.amount)}</strong>)
-                بدون أي ربح.
+                سيُعاد للحساب. يمكنك إضافة ربح جزئي إن وُجد.
+            </div>
+        </div>
+        <div class="form-group">
+            <label class="form-label">الربح الجزئي الفعلي (اختياري)</label>
+            <div style="position:relative">
+                <input type="number" id="cancel-partial-profit" class="form-input"
+                    min="0" step="0.01" placeholder="0.00"
+                    style="padding-left:2.5rem"
+                    oninput="updateCancelTotal(${inv.amount})">
+                <span style="position:absolute;left:.75rem;top:50%;transform:translateY(-50%);color:var(--text-muted);font-size:.85rem;pointer-events:none">ر.س</span>
+            </div>
+            <div id="cancel-total-preview" style="margin-top:.5rem;font-size:.82rem;color:var(--text-muted)">
+                إجمالي المُعاد: <strong style="color:var(--accent-blue)">${fmtMoney(inv.amount)}</strong>
             </div>
         </div>
         <div class="form-group">
             <label class="form-label">سبب الإلغاء</label>
-            <textarea id="cancel-notes" class="form-input" rows="3"
-                placeholder="يرجى ذكر السبب..."></textarea>
+            <textarea id="cancel-notes" class="form-input" rows="3" placeholder="يرجى ذكر السبب..."></textarea>
         </div>
         <div style="display:flex;gap:12px;margin-top:20px;justify-content:flex-end">
             <button type="button" class="btn btn-secondary" onclick="closeModal()">تراجع</button>
@@ -2496,26 +2431,179 @@ function openCancelInvestmentModal(id) {
     openModal();
 }
 
+function updateCancelTotal(principal) {
+    const profit = parseFloat(document.getElementById('cancel-partial-profit')?.value) || 0;
+    const total = principal + profit;
+    const preview = document.getElementById('cancel-total-preview');
+    if (!preview) return;
+    if (profit > 0) {
+        preview.innerHTML =
+            'إجمالي المُعاد: أصل <strong style="color:var(--accent-blue)">' + fmtMoney(principal) + '</strong>' +
+            ' + ربح جزئي <strong style="color:var(--accent-green)">' + fmtMoney(profit) + '</strong>' +
+            ' = <strong style="color:var(--text-primary)">' + fmtMoney(total) + '</strong>';
+    } else {
+        preview.innerHTML = 'إجمالي المُعاد: <strong style="color:var(--accent-blue)">' + fmtMoney(principal) + '</strong>';
+    }
+}
+
 async function submitCancelInv(id) {
     const notes = document.getElementById('cancel-notes')?.value || '';
+    const partialProfit = parseFloat(document.getElementById('cancel-partial-profit')?.value) || 0;
     try {
         const res = await fetch('api/?action=cancel_investment', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id, notes })
+            body: JSON.stringify({ id, notes, partial_profit: partialProfit })
         });
         const data = await res.json();
         if (data.success) {
             showToast(data.message, 'success');
             closeModal();
+            expandedInvestment = null;
+            document.getElementById('inv-root')?.classList.remove('has-panel');
             await Promise.all([loadInvestments(), loadBankAccounts()]);
             renderInvestmentsTab();
         } else { showToast(data.message || 'فشل', 'error'); }
     } catch { showToast('خطأ في الاتصال', 'error'); }
 }
 
+// ════════════════════════════════════════════════════════════
+//  مودال: تعديل الوديعة
+// ════════════════════════════════════════════════════════════
 
-// ─── دوال مساعدة ────────────────────────────────────────────
-// fmtMoney مُعرَّفة في app-common.js وتُستخدم مباشرة هنا
+async function openEditInvestmentModal(id) {
+    const inv = investments.find(i => i.id == id);
+    if (!inv) return;
+
+    let accounts = [];
+    try {
+        const res = await fetch('api/?action=bank_accounts');
+        const d = await res.json();
+        if (d.success) accounts = d.data;
+    } catch (e) { }
+
+    const accOptions = accounts.map(a =>
+        `<option value="${a.id}" ${a.id == inv.account_id ? 'selected' : ''}>${a.bank_name} — ${a.account_name}</option>`
+    ).join('');
+
+    const retOptions = '<option value="">— نفس حساب الوديعة —</option>' +
+        accounts.map(a =>
+            `<option value="${a.id}" ${a.id == inv.return_account_id ? 'selected' : ''}>${a.bank_name} — ${a.account_name}</option>`
+        ).join('');
+
+    DOM.modalTitle.textContent = '✏️ تعديل الوديعة';
+    DOM.modalBody.innerHTML = `
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+            <div class="form-group" style="grid-column:1/-1">
+                <label class="form-label">اسم الوديعة</label>
+                <input id="ei-name" class="form-input" type="text" value="${inv.deposit_name || ''}" placeholder="اسم أو وصف الوديعة">
+            </div>
+            <div class="form-group">
+                <label class="form-label">الرقم المرجعي</label>
+                <input id="ei-ref" class="form-input" type="text" value="${inv.reference_number || ''}">
+            </div>
+            <div class="form-group">
+                <label class="form-label">المبلغ (ر.س)</label>
+                <input id="ei-amount" class="form-input" type="number" min="1" step="0.01"
+                    value="${inv.amount}" oninput="calcEditProfit()">
+            </div>
+            <div class="form-group">
+                <label class="form-label">معدل الفائدة (%)</label>
+                <input id="ei-rate" class="form-input" type="number" min="0" step="0.001"
+                    value="${parseFloat(inv.interest_rate)}" oninput="calcEditProfit()">
+            </div>
+            <div class="form-group">
+                <label class="form-label">المدة (يوم)</label>
+                <input id="ei-days" class="form-input" type="number" min="1"
+                    value="${inv.days}" oninput="calcEditProfit()">
+            </div>
+            <div class="form-group">
+                <label class="form-label">تاريخ البداية</label>
+                <input id="ei-start" class="form-input" type="date" value="${inv.start_date}"
+                    oninput="calcEditMaturity()">
+            </div>
+            <div class="form-group">
+                <label class="form-label">تاريخ الاستحقاق</label>
+                <input id="ei-maturity" class="form-input" type="date" value="${inv.maturity_date}">
+            </div>
+            <div class="form-group" style="grid-column:1/-1">
+                <label class="form-label">حساب الإعادة (عند الاستحقاق)</label>
+                <select id="ei-return" class="form-input">${retOptions}</select>
+            </div>
+            <div class="form-group" style="grid-column:1/-1">
+                <label class="form-label">ملاحظات</label>
+                <textarea id="ei-notes" class="form-input" rows="2">${inv.notes || ''}</textarea>
+            </div>
+            <div id="ei-profit-preview" style="grid-column:1/-1;background:rgba(74,171,247,.07);border:1px solid rgba(74,171,247,.2);border-radius:10px;padding:.75rem 1rem;font-size:.85rem;color:var(--text-primary)">
+                الربح المتوقع: <strong style="color:var(--accent-green)" id="ei-profit-val">+${fmtMoney(inv.expected_profit)}</strong>
+            </div>
+        </div>
+        <div style="display:flex;gap:.75rem;margin-top:1.25rem;justify-content:flex-end">
+            <button class="btn btn-secondary" onclick="closeModal()">إلغاء</button>
+            <button class="btn btn-primary" onclick="submitEditInvestment(${id})">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                حفظ التعديلات
+            </button>
+        </div>`;
+    openModal();
+}
+
+function calcEditProfit() {
+    const amount = parseFloat(document.getElementById('ei-amount')?.value) || 0;
+    const rate = parseFloat(document.getElementById('ei-rate')?.value) || 0;
+    const days = parseInt(document.getElementById('ei-days')?.value) || 0;
+    const profit = Math.round(amount * rate / 100 * days / 360 * 100) / 100;
+    const el = document.getElementById('ei-profit-val');
+    if (el) el.textContent = '+' + fmtMoney(profit);
+}
+
+function calcEditMaturity() {
+    const startEl = document.getElementById('ei-start');
+    const daysEl = document.getElementById('ei-days');
+    const maturityEl = document.getElementById('ei-maturity');
+    if (!startEl || !daysEl || !maturityEl) return;
+    const start = new Date(startEl.value);
+    const days = parseInt(daysEl.value) || 0;
+    if (isNaN(start.getTime()) || days <= 0) return;
+    start.setDate(start.getDate() + days);
+    maturityEl.value = start.toISOString().split('T')[0];
+}
+
+async function submitEditInvestment(id) {
+    const payload = {
+        id,
+        deposit_name: document.getElementById('ei-name')?.value?.trim() || '',
+        reference_number: document.getElementById('ei-ref')?.value?.trim() || '',
+        amount: parseFloat(document.getElementById('ei-amount')?.value) || 0,
+        interest_rate: parseFloat(document.getElementById('ei-rate')?.value) || 0,
+        days: parseInt(document.getElementById('ei-days')?.value) || 0,
+        start_date: document.getElementById('ei-start')?.value || '',
+        maturity_date: document.getElementById('ei-maturity')?.value || '',
+        return_account_id: document.getElementById('ei-return')?.value || '',
+        notes: document.getElementById('ei-notes')?.value || '',
+    };
+
+    if (payload.amount <= 0) { showToast('المبلغ غير صالح', 'error'); return; }
+
+    try {
+        const res = await fetch('api/?action=update_investment', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast('تم تحديث الوديعة بنجاح', 'success');
+            closeModal();
+            await loadInvestments();
+            renderInvestmentsTab();
+        } else {
+            showToast(data.message || 'فشل التحديث', 'error');
+        }
+    } catch (e) {
+        showToast('خطأ في الاتصال', 'error');
+    }
+}
+
+// ─── دوال مساعدة ──────────────────────────────────────────────────────────────
 function fmtDate(d) {
     if (!d) return '—';
     return new Date(d).toLocaleDateString('ar-SA', { year: 'numeric', month: 'short', day: 'numeric' });

@@ -34,6 +34,8 @@ $userRole = $_SESSION['user_role'] ?? '';
     <link rel="stylesheet" href="css/correspondence.css">
     <link rel="stylesheet" href="css/dashboard-redesign.css">
     <link rel="stylesheet" href="css/bank-rows.css">
+    <link rel="stylesheet" href="css/daily-payments.css">
+
     <link rel="icon"
         href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
 </head>
@@ -123,30 +125,69 @@ $userRole = $_SESSION['user_role'] ?? '';
             </button>
 
 
-            <button class="nav-tab" data-tab="reservations" data-tooltip="الحجوزات">
-                <span class="nav-icon">
 
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                        <polyline points="14 2 14 8 20 8" />
-                        <line x1="16" y1="13" x2="8" y2="13" />
-                        <line x1="16" y1="17" x2="8" y2="17" />
-                        <line x1="10" y1="9" x2="8" y2="9" />
-                    </svg>
-                </span>
+            <!-- ══ التخطيط المالي والموازنة (قابل للطي) ══ -->
+            <div class="nav-parent" id="nav-parent-budget">
+                <button class="nav-tab nav-parent-btn" onclick="toggleNavGroup('budget')" data-tooltip="التخطيط المالي">
+                    <span class="nav-icon">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <line x1="18" y1="20" x2="18" y2="10" />
+                            <line x1="12" y1="20" x2="12" y2="4" />
+                            <line x1="6" y1="20" x2="6" y2="14" />
+                            <line x1="2" y1="20" x2="22" y2="20" />
+                        </svg>
+                    </span>
+                    <span class="nav-label">التخطيط والموازنة</span>
+                    <span class="nav-chevron" id="nav-chevron-budget">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2.5">
+                            <polyline points="6 9 12 15 18 9" />
+                        </svg>
+                    </span>
+                </button>
+                <div class="nav-children" id="nav-children-budget">
+                    <button class="nav-tab nav-child-btn" data-tab="reservations" data-tooltip="الحجوزات"
+                        onclick="openTab('reservations','budget')">
+                        <span class="nav-child-dot"></span>
+                        <span class="nav-label">الحجوزات</span>
+                    </button>
+                </div>
+            </div>
 
-                <span class="nav-label">الحجوزات</span>
-            </button>
-
-            <button class="nav-tab" data-tab="bank-deposits" data-tooltip="الودائع البنكية">
-                <span class="nav-icon">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <rect x="2" y="7" width="20" height="14" rx="2"></rect>
-                        <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
-                    </svg>
-                </span>
-                <span class="nav-label">الودائع البنكية</span>
-            </button>
+            <!-- ══ الخزينة (قابل للطي) ══ -->
+            <div class="nav-parent" id="nav-parent-treasury">
+                <button class="nav-tab nav-parent-btn" onclick="toggleNavGroup('treasury')" data-tooltip="الخزينة">
+                    <span class="nav-icon">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <rect x="2" y="7" width="20" height="14" rx="2" />
+                            <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2" />
+                            <line x1="12" y1="12" x2="12" y2="16" />
+                            <circle cx="12" cy="17" r="1" fill="currentColor" />
+                        </svg>
+                    </span>
+                    <span class="nav-label">الخزينة</span>
+                    <span class="nav-chevron" id="nav-chevron-treasury">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2.5">
+                            <polyline points="6 9 12 15 18 9" />
+                        </svg>
+                    </span>
+                </button>
+                <div class="nav-children" id="nav-children-treasury">
+                    <button class="nav-tab nav-child-btn" data-tab="bank-deposits" data-tooltip="الودائع البنكية"
+                        onclick="openTab('bank-deposits','treasury')">
+                        <span class="nav-child-dot"></span>
+                        <span class="nav-label">الودائع البنكية</span>
+                    </button>
+                    <button class="nav-tab nav-child-btn" data-tab="daily-payments" data-tooltip="المدفوعات اليومية"
+                        onclick="openTab('daily-payments','treasury')">
+                        <span class="nav-child-dot"></span>
+                        <span class="nav-label">المدفوعات اليومية</span>
+                    </button>
+                </div>
+            </div>
 
             <button class="nav-tab" data-tab="correspondence" data-tooltip="الخطابات">
                 <span class="nav-icon">
@@ -199,7 +240,7 @@ $userRole = $_SESSION['user_role'] ?? '';
         <!-- فوتر: المستخدم + الإجراءات -->
         <div class="sidebar-footer">
             <!-- بطاقة المستخدم -->
-            <div class="sidebar-user">
+            <div class="sidebar-user" onclick="loadProfilePage()" style="cursor:pointer" title="ملفي الشخصي">
                 <div class="user-avatar"><?= htmlspecialchars($_SESSION['employee_number']) ?></div>
                 <div class="user-details">
                     <div class="user-top-row">
@@ -290,6 +331,7 @@ $userRole = $_SESSION['user_role'] ?? '';
     <!-- رسالة التنبيه -->
     <div class="toast" id="toast"></div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <script src="js/app-common.js"></script>
     <script src="js/app-notifications.js"></script>
     <script src="js/app-dashboard.js"></script>
@@ -297,6 +339,8 @@ $userRole = $_SESSION['user_role'] ?? '';
     <script src="js/app-sla.js"></script>
     <script src="js/app-budget.js"></script>
     <script src="js/app-bank.js"></script>
+    <script src="js/app-daily-payments.js"></script>
+
     <script src="js/correspondence.js"></script>
     <script src="js/excel-import-ui.js"></script>
 
@@ -485,6 +529,7 @@ if (isset($_SESSION['user_id'])) {
         }
     });
     </script>
+    <script src="js/app-profile.js"></script>
 </body>
 
 </html>

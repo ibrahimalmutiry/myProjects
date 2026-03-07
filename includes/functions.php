@@ -466,6 +466,52 @@ function getTransactionTypes() {
     return $types;
 }
 
+
+/**
+ * جلب قيمة إعداد من system_settings
+ */
+function getSetting(string $key, string $default = ''): string {
+    $conn = db();
+    $conn->query(<<<'SQL'
+        CREATE TABLE IF NOT EXISTS system_settings (
+            id            INT          NOT NULL AUTO_INCREMENT,
+            setting_key   VARCHAR(100) NOT NULL,
+            setting_value VARCHAR(255) NOT NULL DEFAULT '',
+            setting_label VARCHAR(200) DEFAULT NULL,
+            setting_group VARCHAR(100) DEFAULT 'general',
+            updated_by    INT          DEFAULT NULL,
+            updated_at    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            UNIQUE KEY uq_key (setting_key)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+SQL);
+    $val = $default;
+    $stmt = $conn->prepare('SELECT setting_value FROM system_settings WHERE setting_key=? LIMIT 1');
+    if ($stmt) {
+        $stmt->bind_param('s', $key);
+        $stmt->execute();
+        $stmt->bind_result($val);
+        if (!$stmt->fetch()) { $val = $default; }
+        $stmt->close();
+    }
+    return (string)$val;
+}
+
+/**
+ * حفظ قيمة إعداد
+ */
+function saveSetting(string $key, string $value, ?int $updatedBy = null): bool {
+    $conn = db();
+    $by   = $updatedBy ?? (int)($_SESSION['user_id'] ?? 0);
+    $stmt = $conn->prepare('INSERT INTO system_settings (setting_key, setting_value, updated_by) VALUES (?,?,?) ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value), updated_by=VALUES(updated_by)');
+    if (!$stmt) return false;
+    $stmt->bind_param('ssi', $key, $value, $by);
+    $ok = $stmt->execute();
+    $stmt->close();
+    return (bool)$ok;
+}
+
+
 /**
  * إنشاء رقم معاملة جديد
  */
@@ -477,7 +523,8 @@ function generateTransactionNumber() {
     $row = $result->fetch_assoc();
     $nextId = ($row['max_id'] ?? 0) + 1;
     
-    return 'TR-' . str_pad($nextId, 4, '0', STR_PAD_LEFT);
+    $prefix = getSetting('prefix_transaction', 'TR');
+    return $prefix . '-' . str_pad($nextId, 4, '0', STR_PAD_LEFT);
 }
 
 /**
@@ -1254,17 +1301,14 @@ function getTransactionEvents($transactionId, $stage = null) {
 /**
  * الحصول على جميع الأحداث
  */
-function getAllEvents($limit = 50, $stage = null, $employeeId = null, $dateFrom = null, $dateTo = null) {
-        $conn = db();
+function getAllEvents($limit = 50, $stage = null, $employeeId = null) {
+    $conn = db();
     ensureEventsTable();
     
     $limit = (int)$limit;
     
     $sql = "
-        SELECT te.*, 
-            e.name as employee_name, 
-            t.transaction_number,
-            t.description as transaction_description
+        SELECT te.*, e.name as employee_name, t.transaction_number
         FROM transaction_events te
         LEFT JOIN employees e ON te.employee_id = e.id
         LEFT JOIN transactions t ON te.transaction_id = t.id
@@ -1280,14 +1324,7 @@ function getAllEvents($limit = 50, $stage = null, $employeeId = null, $dateFrom 
         $employeeId = (int)$employeeId;
         $sql .= " AND te.employee_id = $employeeId";
     }
-    if ($dateFrom) {
-    $dateFrom = $conn->real_escape_string($dateFrom);
-    $sql .= " AND DATE(te.event_time) >= '$dateFrom'";
-}
-if ($dateTo) {
-    $dateTo = $conn->real_escape_string($dateTo);
-    $sql .= " AND DATE(te.event_time) <= '$dateTo'";
-}
+    
     $sql .= " ORDER BY te.event_time DESC LIMIT $limit";
     
     $result = $conn->query($sql);

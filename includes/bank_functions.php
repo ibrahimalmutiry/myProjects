@@ -232,7 +232,7 @@ function confirmDeposit($id) {
  */
 function generateDepositNumber() {
     $conn   = db();
-    $prefix = 'DEP-';
+    $prefix = getSetting('prefix_deposit', 'DEP') . '-';
     $date   = date('Ymd');
 
     $result = $conn->query("SELECT COUNT(*) AS count FROM bank_deposits WHERE deposit_number LIKE '$prefix$date%'");

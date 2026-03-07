@@ -132,23 +132,18 @@ function getSlaNotificationsForUser($userId, $limit = 50) {
 
     $res = $conn->query("
         SELECT
-            sn.id,
-            sn.type,
-            sn.category,
-            sn.title,
-            sn.message,
-            sn.is_read,
-            sn.created_at,
-            sn.transaction_id,
+            sn.id, sn.type, sn.category, sn.severity,
+            sn.title, sn.message, sn.is_read, sn.created_at,
+            sn.transaction_id, sn.recipient_id, sn.ref_number, sn.stage,
             t.transaction_number,
             tt.name         AS transaction_type,
             e.name          AS employee_name,
             sn.created_at   AS update_time
         FROM system_notifications sn
-        LEFT JOIN transactions t ON sn.transaction_id = t.id
-        LEFT JOIN transaction_types tt ON t.type_id = tt.id
-        LEFT JOIN employees e ON sn.employee_id = e.id
-        WHERE (sn.employee_id = $uid OR sn.employee_id IS NULL)
+        LEFT JOIN transactions t     ON sn.transaction_id = t.id
+        LEFT JOIN transaction_types tt ON t.type_id       = tt.id
+        LEFT JOIN employees e        ON sn.employee_id    = e.id
+        WHERE (sn.employee_id = $uid OR sn.employee_id IS NULL OR sn.recipient_id = $uid)
         ORDER BY sn.created_at DESC
         LIMIT " . (int)$limit
     );

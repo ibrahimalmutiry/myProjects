@@ -41,12 +41,10 @@ let readNotifications = new Set();
  * تحميل حالة القراءة من localStorage عند بدء الصفحة
  */
 function loadReadNotifications() {
-    try {
-        const saved = localStorage.getItem('readNotifications');
-        if (saved) readNotifications = new Set(JSON.parse(saved));
-    } catch (e) {
-        console.error('Error loading read notifications:', e);
-    }
+    // لا نستخدم localStorage للقراءة — الحالة تأتي من قاعدة البيانات فقط
+    // امسح أي بيانات localStorage قديمة قد تسبب مشاكل
+    try { localStorage.removeItem('readNotifications'); } catch (e) { }
+    readNotifications = new Set();
 }
 
 /**
@@ -75,7 +73,7 @@ async function loadInitialNotificationCount() {
         if (result.success && result.data) {
             notificationsData = result.data.map(n => ({
                 ...n,
-                is_read: readNotifications.has(n.id) || n.is_read
+                is_read: !!n.is_read  // الحالة من قاعدة البيانات فقط
             }));
 
             unreadNotificationsCount = notificationsData.filter(n => !n.is_read).length;
@@ -141,7 +139,7 @@ async function loadNotifications(dropdown) {
         if (result.success && result.data) {
             notificationsData = result.data.map(n => ({
                 ...n,
-                is_read: readNotifications.has(n.id) || n.is_read
+                is_read: !!n.is_read  // الحالة من قاعدة البيانات فقط
             }));
 
             unreadNotificationsCount = notificationsData.filter(n => !n.is_read).length;
@@ -452,7 +450,7 @@ async function loadNotificationsPage() {
         if (result.success && result.data) {
             notificationsData = result.data.map(n => ({
                 ...n,
-                is_read: readNotifications.has(n.id) || n.is_read
+                is_read: !!n.is_read  // الحالة من قاعدة البيانات فقط
             }));
             unreadNotificationsCount = notificationsData.filter(n => !n.is_read).length;
             updateNotificationBadge();
@@ -472,142 +470,221 @@ function renderNotificationsPage() {
     const unread = notificationsData.filter(n => !n.is_read).length;
     const read = total - unread;
 
-    const stageNames = { receiving: 'الاستلام', budget: 'الموازنة', payment: 'الدفع', invoice: 'الفوترة' };
-    const stageBorderColor = {
-        receiving: 'var(--accent-green)',
-        budget: 'var(--accent-cyan)',
-        payment: 'var(--accent-orange)',
-        invoice: 'var(--accent-purple)'
+    // ── تصنيف التنبيهات ──
+    // تنبيهات خاصة: SLA/OLA + recipient_id محدد + التصعيدات
+    const PERSONAL_CATS = ['sla_warning', 'sla_breach', 'ola_breach', 'escalation', 'manual_escalation', 'direct'];
+    const isPersonal = n =>
+        PERSONAL_CATS.includes(n.category) ||
+        (n.recipient_id && String(n.recipient_id) !== '0');
+
+    const personalAll = notificationsData.filter(isPersonal);
+    const generalAll = notificationsData.filter(n => !isPersonal(n));
+
+    const applyFilter = arr => {
+        if (notifPageFilter === 'unread') return arr.filter(n => !n.is_read);
+        if (notifPageFilter === 'read') return arr.filter(n => n.is_read);
+        return arr;
     };
 
-    const filtered = notificationsData.filter(n => {
-        if (notifPageFilter === 'unread') return !n.is_read;
-        if (notifPageFilter === 'read') return n.is_read;
-        return true;
-    });
+    const personal = applyFilter(personalAll);
+    const general = applyFilter(generalAll);
 
-    // بناء صفوف التنبيهات
-    let rowsHtml = '';
-    if (filtered.length === 0) {
-        rowsHtml = `
-        <div style="text-align:center;padding:4rem 2rem;color:var(--text-muted)">
-            <div style="font-size:3rem;margin-bottom:1rem">
-                ${notifPageFilter === 'unread' ? '✅' : '🔔'}
-            </div>
-            <div style="font-size:1rem;font-weight:600;margin-bottom:.5rem;color:var(--text-primary)">
-                ${notifPageFilter === 'unread' ? 'لا توجد إشعارات غير مقروءة' : 'لا توجد إشعارات'}
-            </div>
-            <div style="font-size:.85rem">جميع الإشعارات تمت قراءتها</div>
-        </div>`;
-    } else {
-        filtered.forEach(n => {
-            const stage = n.stage || 'receiving';
-            const stageName = stageNames[stage] || stage;
-            const border = stageBorderColor[stage] || 'var(--border-color)';
-            const timeAgo = formatTimeAgo(n.update_time);
-            const isUnread = !n.is_read;
-
-            rowsHtml += `
-            <div class="notif-page-row ${isUnread ? 'unread' : 'read'}"
-                 data-notif-id="${n.id}"
-                 style="border-right-color:${border}"
-                 onclick="handleNotifPageClick(${n.id})">
-
-                <div class="notif-page-icon ${stage}">
-                    <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-                        ${getStageIconSVG(stage)}
-                    </svg>
-                </div>
-
-                <div class="notif-page-body">
-                    <div class="notif-page-top">
-                        <span class="notif-page-txnum">${n.transaction_number || 'TX-0000'}</span>
-                        <span class="notif-page-type">${n.transaction_type || 'معاملة'}</span>
-                        ${isUnread ? '<span class="notif-page-dot"></span>' : ''}
-                    </div>
-                    <div class="notif-page-desc">
-                        ${n.status || 'تحديث حالة'}
-                        ${n.employee_name ? ` — <span style="color:var(--text-muted)">👤 ${n.employee_name}</span>` : ''}
-                    </div>
-                    <div class="notif-page-meta">
-                        <span class="stage-badge ${stage}">${stageName}</span>
-                        <span class="notif-page-time">${timeAgo}</span>
-                    </div>
-                </div>
-
-                <div class="notif-page-actions">
-                    ${isUnread ? `<button class="notif-action-btn" onclick="event.stopPropagation();markNotifRead(${n.id})" title="تعيين كمقروء">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                            <polyline points="20 6 9 17 4 12"></polyline>
-                        </svg>
-                    </button>` : ''}
-                    <button class="notif-action-btn goto-btn" onclick="event.stopPropagation();goToTransaction(${n.transaction_id || n.id})" title="فتح المعاملة">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                            <polyline points="9 18 15 12 9 6"></polyline>
-                        </svg>
-                    </button>
-                </div>
-            </div>`;
-        });
+    // ── badge الخاص بالنوع ──
+    function getSourceBadge(n) {
+        const cat = n.category || '';
+        const map = {
+            'sla_warning': { label: 'SLA تحذير', color: 'rgba(255,169,77,.18)', text: 'var(--accent-orange)', icon: '⚠️' },
+            'sla_breach': { label: 'SLA تجاوز', color: 'rgba(255,107,107,.18)', text: 'var(--accent-red)', icon: '🚨' },
+            'ola_breach': { label: 'OLA تجاوز', color: 'rgba(255,107,107,.18)', text: 'var(--accent-red)', icon: '🔴' },
+            'escalation': { label: 'تصعيد', color: 'rgba(177,151,252,.18)', text: 'var(--accent-purple)', icon: '📤' },
+            'manual_escalation': { label: 'تصعيد يدوي', color: 'rgba(74,171,247,.18)', text: 'var(--accent-blue)', icon: '🔔' },
+            'direct': { label: 'مباشر', color: 'rgba(59,201,219,.18)', text: 'var(--accent-cyan)', icon: '📩' },
+            'status_change': { label: 'تحديث حالة', color: 'rgba(105,219,124,.18)', text: 'var(--accent-green)', icon: '🔄' },
+            'correspondence': { label: 'خطاب', color: 'rgba(74,171,247,.15)', text: 'var(--accent-blue)', icon: '📨' },
+            'bank': { label: 'بنك', color: 'rgba(255,169,77,.15)', text: 'var(--accent-orange)', icon: '🏦' },
+            'reservation': { label: 'حجز', color: 'rgba(177,151,252,.15)', text: 'var(--accent-purple)', icon: '📅' },
+        };
+        // تحديد المصدر من transaction_type أو category
+        let key = cat;
+        if (!map[key]) {
+            const tt = (n.transaction_type || '').toLowerCase();
+            if (tt.includes('خطاب') || tt.includes('مراسل') || cat.includes('corr')) key = 'correspondence';
+            else if (tt.includes('حجز') || cat.includes('reserv')) key = 'reservation';
+            else if (cat.includes('bank') || cat.includes('deposit')) key = 'bank';
+            else key = 'status_change';
+        }
+        const b = map[key] || map['status_change'];
+        return `<span class="notif-source-badge" style="background:${b.color};color:${b.text}">${b.icon} ${b.label}</span>`;
     }
 
-    DOM.mainContent.innerHTML = `
-    <div class="notif-page-wrap">
+    // ── أيقونة التنبيه ──
+    function getNotifIcon(n) {
+        const cat = n.category || '';
+        if (cat.includes('sla') || cat.includes('ola') || cat.includes('escalat')) {
+            return `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                <line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line>
+            </svg>`;
+        }
+        if (cat === 'direct' || n.recipient_id) {
+            return `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                <polyline points="22,6 12,13 2,6"></polyline>
+            </svg>`;
+        }
+        const stage = n.stage || '';
+        const svgs = {
+            receiving: `<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>`,
+            budget: `<line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>`,
+            payment: `<rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect><line x1="1" y1="10" x2="23" y2="10"></line>`,
+            invoice: `<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline>`,
+        };
+        const inner = svgs[stage] || `<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path>`;
+        return `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${inner}</svg>`;
+    }
 
-        <!-- هيدر الصفحة -->
-        <div class="notif-page-header">
-            <div>
-                <h2 style="font-size:1.3rem;font-weight:700;color:var(--text-primary);margin:0">🔔 التنبيهات</h2>
-                <p style="font-size:.85rem;color:var(--text-muted);margin:.25rem 0 0">
-                    إشعارات المعاملات والتحديثات
-                </p>
+    // ── لون أيقونة التنبيه ──
+    function getIconStyle(n) {
+        const cat = n.category || '';
+        if (cat.includes('sla_breach') || cat.includes('ola')) return 'background:rgba(255,107,107,.14);color:var(--accent-red)';
+        if (cat.includes('sla_warning')) return 'background:rgba(255,169,77,.14);color:var(--accent-orange)';
+        if (cat.includes('escalat')) return 'background:rgba(177,151,252,.14);color:var(--accent-purple)';
+        if (cat === 'direct') return 'background:rgba(74,171,247,.14);color:var(--accent-blue)';
+        const stage = n.stage || '';
+        const map = {
+            receiving: 'background:rgba(105,219,124,.12);color:var(--accent-green)',
+            budget: 'background:rgba(59,201,219,.12);color:var(--accent-cyan)',
+            payment: 'background:rgba(255,169,77,.12);color:var(--accent-orange)',
+            invoice: 'background:rgba(177,151,252,.12);color:var(--accent-purple)',
+        };
+        return map[stage] || 'background:var(--bg-surface);color:var(--text-muted)';
+    }
+
+    // ── بناء صف تنبيه ──
+    function buildRow(n) {
+        const isUnread = !n.is_read;
+        const timeAgo = formatTimeAgo(n.created_at || n.update_time);
+        const title = n.title || n.transaction_number || 'إشعار';
+        const desc = n.message || n.status || '';
+
+        return `
+        <div class="np-row ${isUnread ? 'np-unread' : 'np-read'}"
+             data-notif-id="${n.id}"
+             onclick="handleNotifPageClick(${n.id})">
+            <div class="np-icon" style="${getIconStyle(n)}">${getNotifIcon(n)}</div>
+            <div class="np-body">
+                <div class="np-top">
+                    <span class="np-title">${title}</span>
+                    ${isUnread ? '<span class="np-dot"></span>' : ''}
+                </div>
+                <div class="np-desc">${desc.replace(/\n/g, '<br>').substring(0, 120)}${desc.length > 120 ? '…' : ''}</div>
+                <div class="np-meta">
+                    ${getSourceBadge(n)}
+                    ${n.ref_number || n.transaction_number ? `<span class="np-ref">${n.ref_number || n.transaction_number}</span>` : ''}
+                    ${n.employee_name ? `<span class="np-emp">👤 ${n.employee_name}</span>` : ''}
+                    <span class="np-time">${timeAgo}</span>
+                </div>
             </div>
-            <button class="btn btn-secondary" onclick="markAllAsRead()" style="font-size:.82rem">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                    <polyline points="20 6 9 17 4 12"></polyline>
-                </svg>
+            <div class="np-actions">
+                ${isUnread ? `<button class="np-btn" onclick="event.stopPropagation();markNotifRead(${n.id})" title="تعيين كمقروء">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                </button>` : ''}
+                ${n.transaction_id ? `<button class="np-btn np-btn-go" onclick="event.stopPropagation();goToTransaction(${n.transaction_id})" title="فتح">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                </button>` : ''}
+            </div>
+        </div>`;
+    }
+
+    // ── بناء قسم ──
+    function buildSection(items, emptyMsg) {
+        if (items.length === 0) return `
+            <div class="np-empty">
+                <div class="np-empty-icon">✅</div>
+                <div>${emptyMsg}</div>
+            </div>`;
+        return items.map(buildRow).join('');
+    }
+
+    const pUnread = personalAll.filter(n => !n.is_read).length;
+    const gUnread = generalAll.filter(n => !n.is_read).length;
+
+    DOM.mainContent.innerHTML = `
+    <div class="np-wrap">
+
+        <!-- هيدر -->
+        <div class="np-header">
+            <div>
+                <h2 class="np-main-title">🔔 التنبيهات</h2>
+                <p class="np-main-sub">إجمالي: ${total} تنبيه — ${unread} غير مقروء</p>
+            </div>
+            <button class="btn btn-secondary" onclick="markAllAsRead()" style="font-size:.82rem;gap:.4rem;display:flex;align-items:center">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
                 تعيين الكل كمقروء
             </button>
         </div>
 
-        <!-- بطاقات الإحصاء -->
-        <div class="notif-stats-row">
-            <div class="notif-stat-card">
-                <div class="notif-stat-num">${total}</div>
-                <div class="notif-stat-label">إجمالي التنبيهات</div>
+        <!-- إحصاءات -->
+        <div class="np-stats">
+            <div class="np-stat">
+                <div class="np-stat-n">${total}</div>
+                <div class="np-stat-l">الإجمالي</div>
             </div>
-            <div class="notif-stat-card unread">
-                <div class="notif-stat-num" style="color:var(--accent-orange)">${unread}</div>
-                <div class="notif-stat-label">غير مقروء</div>
+            <div class="np-stat np-stat--orange">
+                <div class="np-stat-n">${unread}</div>
+                <div class="np-stat-l">غير مقروء</div>
             </div>
-            <div class="notif-stat-card read">
-                <div class="notif-stat-num" style="color:var(--accent-green)">${read}</div>
-                <div class="notif-stat-label">مقروء</div>
+            <div class="np-stat np-stat--green">
+                <div class="np-stat-n">${read}</div>
+                <div class="np-stat-l">مقروء</div>
+            </div>
+            <div class="np-stat np-stat--purple">
+                <div class="np-stat-n">${personalAll.length}</div>
+                <div class="np-stat-l">خاصة بي</div>
             </div>
         </div>
 
-        <!-- فلاتر التبويبات -->
-        <div class="notif-filter-bar">
-            <button class="notif-filter-btn ${notifPageFilter === 'unread' ? 'active' : ''}"
-                    onclick="setNotifFilter('unread')">
-                غير مقروء
-                ${unread > 0 ? `<span class="notif-filter-count">${unread}</span>` : ''}
+        <!-- فلتر مقروء/غير مقروء -->
+        <div class="np-filter-bar">
+            <button class="np-filter-btn ${notifPageFilter === 'unread' ? 'active' : ''}" onclick="setNotifFilter('unread')">
+                غير مقروء ${unread > 0 ? `<span class="np-filter-count">${unread}</span>` : ''}
             </button>
-            <button class="notif-filter-btn ${notifPageFilter === 'all' ? 'active' : ''}"
-                    onclick="setNotifFilter('all')">
-                الكل
-                <span class="notif-filter-count">${total}</span>
+            <button class="np-filter-btn ${notifPageFilter === 'all' ? 'active' : ''}" onclick="setNotifFilter('all')">
+                الكل <span class="np-filter-count">${total}</span>
             </button>
-            <button class="notif-filter-btn ${notifPageFilter === 'read' ? 'active' : ''}"
-                    onclick="setNotifFilter('read')">
-                مقروء
-                ${read > 0 ? `<span class="notif-filter-count">${read}</span>` : ''}
+            <button class="np-filter-btn ${notifPageFilter === 'read' ? 'active' : ''}" onclick="setNotifFilter('read')">
+                مقروء ${read > 0 ? `<span class="np-filter-count">${read}</span>` : ''}
             </button>
         </div>
 
-        <!-- قائمة التنبيهات -->
-        <div class="notif-page-list card" id="notifPageList">
-            ${rowsHtml}
+        <!-- القسم الأول: التنبيهات الخاصة -->
+        <div class="np-section-card">
+            <div class="np-section-header np-section-header--personal">
+                <div class="np-section-icon">🎯</div>
+                <div>
+                    <div class="np-section-title">تنبيهاتي الشخصية</div>
+                    <div class="np-section-sub">التصعيدات، SLA/OLA، الرسائل المباشرة</div>
+                </div>
+                <div class="np-section-badge">${pUnread > 0 ? `<span class="np-badge-count">${pUnread}</span>` : ''}</div>
+            </div>
+            <div class="np-section-list" id="personalNotifList">
+                ${buildSection(personal, 'لا توجد تنبيهات شخصية')}
+            </div>
+        </div>
+
+        <!-- القسم الثاني: التنبيهات العامة -->
+        <div class="np-section-card">
+            <div class="np-section-header np-section-header--general">
+                <div class="np-section-icon">📋</div>
+                <div>
+                    <div class="np-section-title">التنبيهات العامة</div>
+                    <div class="np-section-sub">تحديثات المعاملات، الخطابات، الحجوزات، البنوك</div>
+                </div>
+                <div class="np-section-badge">${gUnread > 0 ? `<span class="np-badge-count">${gUnread}</span>` : ''}</div>
+            </div>
+            <div class="np-section-list" id="generalNotifList">
+                ${buildSection(general, 'لا توجد تنبيهات عامة')}
+            </div>
         </div>
 
     </div>`;
@@ -625,33 +702,53 @@ function setNotifFilter(filter) {
 function handleNotifPageClick(notifId) {
     markNotifRead(notifId);
     const n = notificationsData.find(x => x.id === notifId);
-    if (n) goToTransaction(n.transaction_id || n.id);
+    if (n && n.transaction_id) goToTransaction(n.transaction_id);
 }
 
 /** تعيين تنبيه كمقروء مع تحديث الصفحة */
 function markNotifRead(notifId) {
-    if (readNotifications.has(notifId)) return;
-    readNotifications.add(notifId);
+    // تأكد من النوع الصحيح — n.id من API قد يكون string أو number
+    const id = parseInt(notifId, 10);
+
+    // تحقق من القراءة المسبقة (تحقق بالنوعين)
+    if (readNotifications.has(id) || readNotifications.has(String(id))) return;
+
+    readNotifications.add(id);
     saveReadNotifications();
 
-    const n = notificationsData.find(x => x.id === notifId);
+    // تحديث البيانات المحلية (مطابقة بالنوعين)
+    const n = notificationsData.find(x => parseInt(x.id, 10) === id);
     if (n) n.is_read = true;
 
     unreadNotificationsCount = notificationsData.filter(x => !x.is_read).length;
     updateNotificationBadge();
 
+    // تحديد نوع التنبيه: system_notification (له id حقيقي) أم tx notification
+    const notifObj = notificationsData.find(x => parseInt(x.id, 10) === id);
+    const payload = notifObj && notifObj.notif_key
+        ? { transaction_id: id }          // تنبيه معاملة
+        : { notification_id: id };        // تنبيه system_notifications
+
     fetch('api/?action=mark_notification_read', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ notification_id: notifId })
+        body: JSON.stringify(payload)
     }).catch(() => { });
 
-    // تحديث السطر بدون إعادة رسم كاملة
-    const row = document.querySelector(`[data-notif-id="${notifId}"]`);
+    // تحديث الصفحة مباشرة
+    renderNotificationsPage();
+
+    // تحديث السطر في DOM
+    const row = document.querySelector(`[data-notif-id="${id}"]`);
     if (row) {
-        row.classList.remove('unread');
-        row.classList.add('read');
-        row.querySelector('.notif-page-dot')?.remove();
+        row.classList.remove('np-unread', 'unread');
+        row.classList.add('np-read', 'read');
+        // حذف النقطة البرتقالية
+        row.querySelector('.np-dot')?.remove();
+        // حذف زر "تعيين كمقروء" مع إبقاء زر الفتح
+        row.querySelectorAll('.np-btn').forEach(btn => {
+            if (!btn.classList.contains('np-btn-go')) btn.remove();
+        });
         row.querySelector('.notif-action-btn:not(.goto-btn)')?.remove();
     }
 }
@@ -662,219 +759,261 @@ function injectNotifPageStyles() {
     const s = document.createElement('style');
     s.id = 'notif-page-styles';
     s.textContent = `
-        /* ── Wrapper ── */
-        .notif-page-wrap {
-            display: flex;
-            flex-direction: column;
-            gap: 1.25rem;
-        }
 
-        /* ── Header ── */
-        .notif-page-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 1rem;
-            flex-wrap: wrap;
-        }
+    /* ════════════════════════════════
+       صفحة التنبيهات — تصميم محسّن
+    ════════════════════════════════ */
 
-        /* ── Stats row ── */
-        .notif-stats-row {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 1rem;
-        }
-        .notif-stat-card {
-            background: var(--bg-card);
-            border: 1px solid var(--border-color);
-            border-radius: 12px;
-            padding: 1.1rem 1.25rem;
-            text-align: center;
-        }
-        .notif-stat-num {
-            font-size: 1.8rem;
-            font-weight: 800;
-            color: var(--text-primary);
-            line-height: 1;
-        }
-        .notif-stat-label {
-            font-size: .78rem;
-            color: var(--text-muted);
-            margin-top: .35rem;
-        }
+    .np-wrap {
+        display: flex;
+        flex-direction: column;
+        gap: 1.25rem;
+        width: 100%;
+        max-width: 100%;
+    }
 
-        /* ── Filter bar ── */
-        .notif-filter-bar {
-            display: flex;
-            gap: 4px;
-            background: var(--bg-card);
-            border: 1px solid var(--border-color);
-            border-radius: 10px;
-            padding: 4px;
-        }
-        .notif-filter-btn {
-            flex: 1;
-            padding: .45rem 1rem;
-            border: none;
-            border-radius: 7px;
-            background: transparent;
-            color: var(--text-muted);
-            font-family: inherit;
-            font-size: .82rem;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all .2s;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: .4rem;
-        }
-        .notif-filter-btn:hover { color: var(--text-primary); background: var(--bg-surface); }
-        .notif-filter-btn.active {
-            background: var(--btn-primary-bg);
-            color: var(--btn-primary-text);
-            font-weight: 600;
-            box-shadow: 0 1px 6px rgba(0,0,0,.12);
-        }
-        .notif-filter-count {
-            background: rgba(255,255,255,.15);
-            border-radius: 10px;
-            padding: 1px 7px;
-            font-size: .72rem;
-            font-weight: 700;
-        }
-        .notif-filter-btn:not(.active) .notif-filter-count {
-            background: var(--bg-surface);
-            color: var(--text-muted);
-        }
+    /* هيدر */
+    .np-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 1rem;
+        flex-wrap: wrap;
+    }
+    .np-main-title { font-size:1.3rem;font-weight:800;color:var(--text-primary);margin:0; }
+    .np-main-sub   { font-size:.82rem;color:var(--text-muted);margin:.25rem 0 0; }
 
-        /* ── List ── */
-        .notif-page-list {
-            display: flex;
-            flex-direction: column;
-            gap: 0;
-            overflow: hidden;
-            padding: 0 !important;
-        }
+    /* إحصاءات */
+    .np-stats {
+        display: grid;
+        grid-template-columns: repeat(4,1fr);
+        gap: .75rem;
+    }
+    .np-stat {
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        padding: 1rem;
+        text-align: center;
+    }
+    .np-stat-n { font-size:1.7rem;font-weight:800;color:var(--text-primary);line-height:1; }
+    .np-stat-l { font-size:.74rem;color:var(--text-muted);margin-top:.3rem; }
+    .np-stat--orange .np-stat-n { color:var(--accent-orange); }
+    .np-stat--green  .np-stat-n { color:var(--accent-green);  }
+    .np-stat--purple .np-stat-n { color:var(--accent-purple); }
 
-        /* ── Row ── */
-        .notif-page-row {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-            padding: 1rem 1.25rem;
-            border-right: 3px solid transparent;
-            border-bottom: 1px solid var(--border-color);
-            cursor: pointer;
-            transition: background .15s;
-            position: relative;
-        }
-        .notif-page-row:last-child { border-bottom: none; }
-        .notif-page-row:hover { background: var(--bg-surface); }
-        .notif-page-row.unread { background: var(--bg-card); }
-        .notif-page-row.read   { opacity: .72; }
+    /* فلتر */
+    .np-filter-bar {
+        display: flex;
+        gap: 4px;
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: 10px;
+        padding: 4px;
+    }
+    .np-filter-btn {
+        flex: 1;
+        padding: .45rem 1rem;
+        border: none;
+        border-radius: 7px;
+        background: transparent;
+        color: var(--text-muted);
+        font-family: inherit;
+        font-size: .82rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all .2s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: .4rem;
+    }
+    .np-filter-btn:hover { color:var(--text-primary);background:var(--bg-surface); }
+    .np-filter-btn.active {
+        background: var(--btn-primary-bg);
+        color: var(--btn-primary-text);
+        font-weight: 700;
+        box-shadow: 0 1px 6px rgba(0,0,0,.12);
+    }
+    .np-filter-count {
+        background: rgba(255,255,255,.15);
+        border-radius: 10px;
+        padding: 1px 7px;
+        font-size: .72rem;
+        font-weight: 700;
+    }
+    .np-filter-btn:not(.active) .np-filter-count {
+        background: var(--bg-surface);
+        color: var(--text-muted);
+    }
 
-        /* ── Icon ── */
-        .notif-page-icon {
-            width: 42px;
-            height: 42px;
-            min-width: 42px;
-            border-radius: 10px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex-shrink: 0;
-        }
-        .notif-page-icon.receiving { background: rgba(105,219,124,.12); color: var(--accent-green); }
-        .notif-page-icon.budget    { background: rgba(59,201,219,.12);  color: var(--accent-cyan);  }
-        .notif-page-icon.payment   { background: rgba(255,169,77,.12);  color: var(--accent-orange);}
-        .notif-page-icon.invoice   { background: rgba(177,151,252,.12); color: var(--accent-purple);}
+    /* بطاقة القسم */
+    .np-section-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: 14px;
+        overflow: hidden;
+    }
 
-        /* ── Body ── */
-        .notif-page-body { flex: 1; min-width: 0; }
-        .notif-page-top {
-            display: flex;
-            align-items: center;
-            gap: .5rem;
-            margin-bottom: .2rem;
-        }
-        .notif-page-txnum {
-            font-size: .88rem;
-            font-weight: 700;
-            color: var(--text-primary);
-        }
-        .notif-page-type {
-            font-size: .78rem;
-            color: var(--text-muted);
-        }
-        .notif-page-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: var(--accent-orange);
-            flex-shrink: 0;
-            margin-right: auto;
-        }
-        .notif-page-desc {
-            font-size: .82rem;
-            color: var(--text-secondary);
-            margin-bottom: .35rem;
-        }
-        .notif-page-meta {
-            display: flex;
-            align-items: center;
-            gap: .6rem;
-        }
-        .notif-page-time {
-            font-size: .75rem;
-            color: var(--text-muted);
-        }
+    /* هيدر القسم */
+    .np-section-header {
+        display: flex;
+        align-items: center;
+        gap: .875rem;
+        padding: 1rem 1.25rem;
+        border-bottom: 1px solid var(--border-color);
+    }
+    .np-section-header--personal {
+        background: linear-gradient(135deg, rgba(177,151,252,.08) 0%, rgba(74,171,247,.05) 100%);
+        border-bottom-color: rgba(177,151,252,.25);
+    }
+    .np-section-header--general {
+        background: linear-gradient(135deg, rgba(105,219,124,.06) 0%, rgba(59,201,219,.04) 100%);
+        border-bottom-color: rgba(105,219,124,.2);
+    }
+    .np-section-icon {
+        font-size: 1.4rem;
+        width: 40px;
+        height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--bg-surface);
+        border-radius: 10px;
+        flex-shrink: 0;
+    }
+    .np-section-title { font-size:.95rem;font-weight:700;color:var(--text-primary); }
+    .np-section-sub   { font-size:.76rem;color:var(--text-muted);margin-top:.15rem; }
+    .np-section-badge { margin-right:auto; }
+    .np-badge-count {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 24px;
+        height: 24px;
+        padding: 0 .5rem;
+        background: var(--accent-red);
+        color: white;
+        border-radius: 12px;
+        font-size: .76rem;
+        font-weight: 700;
+    }
 
-        /* ── Actions ── */
-        .notif-page-actions {
-            display: flex;
-            gap: .375rem;
-            flex-shrink: 0;
-            opacity: 0;
-            pointer-events: none;
-            transition: opacity .15s;
-        }
-        .notif-page-row:hover .notif-page-actions,
-        .notif-page-row:focus-within .notif-page-actions {
-            opacity: 1;
-            pointer-events: auto;
-        }
-        /* موبايل: الأزرار دائماً ظاهرة */
-        @media (max-width: 768px) {
-            .notif-page-actions {
-                opacity: 1;
-                pointer-events: auto;
-            }
-        }
-        .notif-action-btn {
-            width: 30px;
-            height: 30px;
-            border-radius: 7px;
-            border: 1px solid var(--border-color);
-            background: var(--bg-surface);
-            color: var(--text-muted);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            transition: all .2s;
-        }
-        .notif-action-btn:hover {
-            background: var(--btn-primary-bg);
-            color: var(--btn-primary-text);
-            border-color: var(--btn-primary-bg);
-        }
+    /* قائمة التنبيهات */
+    .np-section-list { display:flex;flex-direction:column; }
 
-        @media (max-width: 600px) {
-            .notif-stats-row { grid-template-columns: repeat(3, 1fr); gap: .5rem; }
-            .notif-stat-num  { font-size: 1.4rem; }
-            .notif-page-row  { padding: .75rem 1rem; gap: .75rem; }
-        }
+    /* صف تنبيه */
+    .np-row {
+        display: flex;
+        align-items: flex-start;
+        gap: .875rem;
+        padding: .875rem 1.25rem;
+        border-bottom: 1px solid var(--border-color);
+        cursor: pointer;
+        transition: background .15s;
+        position: relative;
+    }
+    .np-row:last-child  { border-bottom: none; }
+    .np-row:hover       { background: var(--bg-surface); }
+    .np-row.np-unread   { background: var(--bg-card); }
+    .np-row.np-unread::before {
+        content: '';
+        position: absolute;
+        right: 0; top: 0; bottom: 0;
+        width: 3px;
+        background: var(--accent-blue);
+        border-radius: 0 3px 3px 0;
+    }
+    .np-row.np-read     { opacity: .75; }
+
+    /* أيقونة */
+    .np-icon {
+        width: 40px;
+        height: 40px;
+        min-width: 40px;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+
+    /* جسم */
+    .np-body   { flex:1;min-width:0; }
+    .np-top    { display:flex;align-items:center;gap:.5rem;margin-bottom:.2rem; }
+    .np-title  { font-size:.875rem;font-weight:700;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:300px; }
+    .np-dot    { width:8px;height:8px;border-radius:50%;background:var(--accent-orange);flex-shrink:0;margin-right:auto; }
+    .np-desc   { font-size:.8rem;color:var(--text-secondary);margin-bottom:.4rem;line-height:1.5; }
+    .np-meta   { display:flex;align-items:center;flex-wrap:wrap;gap:.4rem; }
+    .np-ref    { font-size:.75rem;font-weight:700;color:var(--accent-blue);font-family:monospace; }
+    .np-emp    { font-size:.75rem;color:var(--text-muted); }
+    .np-time   { font-size:.73rem;color:var(--text-muted);margin-right:auto; }
+
+    /* badge النوع والمصدر */
+    .notif-source-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: .25rem;
+        padding: .18rem .55rem;
+        border-radius: 20px;
+        font-size: .72rem;
+        font-weight: 700;
+        white-space: nowrap;
+    }
+
+    /* أزرار الإجراءات */
+    .np-actions {
+        display: flex;
+        gap: .3rem;
+        flex-shrink: 0;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity .15s;
+        align-items: flex-start;
+        padding-top: .1rem;
+    }
+    .np-row:hover .np-actions,
+    .np-row:focus-within .np-actions { opacity:1;pointer-events:auto; }
+    .np-btn {
+        width: 28px;
+        height: 28px;
+        border-radius: 7px;
+        border: 1px solid var(--border-color);
+        background: var(--bg-surface);
+        color: var(--text-muted);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all .18s;
+        flex-shrink: 0;
+    }
+    .np-btn:hover     { background:var(--accent-green);color:white;border-color:var(--accent-green); }
+    .np-btn-go:hover  { background:var(--accent-blue); color:white;border-color:var(--accent-blue);  }
+
+    /* فارغ */
+    .np-empty {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: .5rem;
+        padding: 2.5rem 1rem;
+        color: var(--text-muted);
+        font-size: .85rem;
+    }
+    .np-empty-icon { font-size:2rem; }
+
+    /* موبايل */
+    @media (max-width: 768px) {
+        .np-stats { grid-template-columns: repeat(2,1fr); }
+        .np-actions { opacity:1;pointer-events:auto; }
+        .np-title { max-width:180px; }
+    }
+    @media (max-width: 480px) {
+        .np-stats { grid-template-columns: repeat(2,1fr); gap:.5rem; }
+        .np-stat-n { font-size:1.4rem; }
+        .np-row { padding:.75rem 1rem;gap:.65rem; }
+    }
     `;
     document.head.appendChild(s);
 }

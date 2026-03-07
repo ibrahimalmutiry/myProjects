@@ -790,3 +790,93 @@ body.sidebar-collapsed .sidebar-toggle .toggle-icon-close {
         padding: 0 !important;
     }
 }
+
+/* ══════════════════════════════════════════
+   Nav Group — قابل للطي (الخزينة وغيرها)
+   ══════════════════════════════════════════ */
+
+.nav-parent {
+    position: relative;
+}
+
+.nav-parent-btn {
+    width: 100%;
+    display: flex !important;
+    align-items: center;
+    justify-content: flex-start;
+    gap: .55rem;
+    position: relative;
+}
+
+.nav-chevron {
+    margin-right: auto;
+    margin-left: 2px;
+    color: var(--text-muted, #94a3b8);
+    display: flex;
+    align-items: center;
+    transition: transform .22s ease;
+    flex-shrink: 0;
+}
+
+.nav-parent.open .nav-chevron {
+    transform: rotate(180deg);
+}
+
+.sidebar.collapsed .nav-chevron {
+    display: none;
+}
+
+/* الأبناء */
+.nav-children {
+    overflow: hidden;
+    max-height: 0;
+    transition: max-height .28s ease, opacity .22s ease;
+    opacity: 0;
+}
+
+.nav-parent.open .nav-children {
+    max-height: 200px;
+    opacity: 1;
+}
+
+.sidebar.collapsed .nav-children {
+    display: none;
+}
+
+.nav-child-btn {
+    width: 100%;
+    padding-right: 2.25rem !important;
+    font-size: .82rem !important;
+    color: var(--text-muted) !important;
+    position: relative;
+}
+
+.nav-child-btn:hover,
+.nav-child-btn.active {
+    color: var(--text-primary) !important;
+}
+
+.nav-child-btn.active {
+    background: rgba(74, 171, 247, .1) !important;
+    color: var(--accent-blue, #4dabf7) !important;
+}
+
+.nav-child-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--text-muted);
+    flex-shrink: 0;
+    transition: background .15s;
+    margin-left: .1rem;
+}
+
+.nav-child-btn.active .nav-child-dot,
+.nav-child-btn:hover .nav-child-dot {
+    background: var(--accent-blue, #4dabf7);
+}
+
+/* عندما تكون السايدبار مطوية — أيقونة الأب فقط */
+.sidebar.collapsed .nav-parent-btn {
+    justify-content: center;
+}

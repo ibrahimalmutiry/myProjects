@@ -177,6 +177,10 @@ function initDOM() {
 // تهيئة مستمعات الأحداث
 function initEventListeners() {
     DOM.navTabs.forEach(tab => {
+        // nav-parent-btn لها onclick خاص (toggleNavGroup) — لا نضيف لها listener
+        if (tab.classList.contains('nav-parent-btn')) return;
+        // nav-child-btn لها onclick خاص (openTab) — لا نضيف لها listener
+        if (tab.classList.contains('nav-child-btn')) return;
         tab.addEventListener('click', () => switchTab(tab.dataset.tab));
     });
 
@@ -723,6 +727,7 @@ function switchTab(tab) {
     DOM.navTabs.forEach(t => {
         t.classList.toggle('active', t.dataset.tab === tab);
     });
+    // فتح مجموعة الأب يتم عبر openTab() مباشرة
 
     if (tab === 'dashboard') {
         loadDashboard();
@@ -742,9 +747,50 @@ function switchTab(tab) {
         if (typeof loadBudgetReservationsPage === 'function') loadBudgetReservationsPage();
     } else if (tab === 'settings') {
         loadSettingsPage();
+    } else if (tab === 'profile') {
+        if (typeof loadProfilePage === 'function') loadProfilePage();
+    } else if (tab === 'daily-payments') {
+        if (typeof initDailyPayments === 'function') {
+            DOM.mainContent.innerHTML = '<div id="page-daily-payments"></div>';
+            initDailyPayments();
+        }
     }
 }
 
+
+
+// ──────────────────────────────────────────
+//  Nav Group — طي/فتح المجموعات
+// ──────────────────────────────────────────
+
+// خريطة: tab → groupId
+const NAV_GROUP_MAP = {
+    'reservations': 'budget',
+    'bank-deposits': 'treasury',
+    'daily-payments': 'treasury',
+};
+
+// يُستدعى من onclick زر الطي/الفتح
+function toggleNavGroup(id) {
+    const parent = document.getElementById('nav-parent-' + id);
+    if (!parent) return;
+    const willOpen = !parent.classList.contains('open');
+    // أغلق الكل
+    document.querySelectorAll('.nav-parent').forEach(p => p.classList.remove('open'));
+    // افتح المطلوب فقط
+    if (willOpen) parent.classList.add('open');
+}
+
+// يُستدعى من onclick أزرار الأبناء
+function openTab(tab, groupId) {
+    // أغلق كل المجموعات
+    document.querySelectorAll('.nav-parent').forEach(p => p.classList.remove('open'));
+    // افتح المجموعة الأب
+    const parent = document.getElementById('nav-parent-' + groupId);
+    if (parent) parent.classList.add('open');
+    // فعّل التبويب
+    switchTab(tab);
+}
 
 // تبديل الوضع الليلي/النهاري
 function toggleTheme() {
@@ -800,15 +846,15 @@ document.addEventListener('DOMContentLoaded', function () {
  *   أحمر: مرفوض / ملغاة
  */
 function getStatusBadge(status) {
-    if (!status) return '<span class="badge badge-slate">—</span>';
+    if (!status) return '<span class="status-badge status-pending">—</span>';
 
-    let color = 'slate';
-    if (['مستلم', 'تم الدفع', 'صدرت الفاتورة', 'معتمد'].includes(status)) color = 'green';
-    else if (['قيد المراجعة', 'بدون فاتورة'].includes(status)) color = 'amber';
-    else if (['قيد المعالجة', 'قيد الإصدار'].includes(status)) color = 'blue';
-    else if (['مرفوض', 'ملغاة'].includes(status)) color = 'red';
+    let cls = 'status-pending';
+    if (status === 'مستلم' || status === 'تم الدفع' || status === 'صدرت الفاتورة' || status === 'معتمد') cls = 'status-completed';
+    else if (status === 'قيد المراجعة' || status === 'بدون فاتورة' || status === 'معلق') cls = 'status-review';
+    else if (status === 'قيد المعالجة' || status === 'قيد الإصدار') cls = 'status-processing';
+    else if (status === 'مرفوض' || status === 'ملغاة') cls = 'status-cancelled';
 
-    return '<span class="badge badge-' + color + '">' + status + '</span>';
+    return '<span class="status-badge ' + cls + '">' + status + '</span>';
 }
 
 /**
@@ -817,7 +863,7 @@ function getStatusBadge(status) {
  * @returns {string} HTML للـ badge مع أيقونة مناسبة
  */
 function getAlertBadge(alert) {
-    if (!alert) return '<span class="badge badge-slate">—</span>';
+    if (!alert) return '<span class="badge badge-slate"></span>—</span>';
 
     let color = 'slate';
     let icon = '⏳';
@@ -827,4 +873,42 @@ function getAlertBadge(alert) {
     else if (alert === 'مكتمل') { color = 'green'; icon = '✅'; }
 
     return '<span class="badge badge-' + color + '">' + icon + ' ' + alert + '</span>';
+}
+
+// ════════════════════════════════════════════════════════════
+//  دالة موحدة لتحميل PDF مباشرة
+// ════════════════════════════════════════════════════════════
+/**
+ * downloadAsPDF(elementId, filename, extraCSS)
+ * تحمّل العنصر مباشرة كـ PDF بدون نافذة طباعة
+ */
+async function downloadAsPDF(elementId, filename, extraCSS) {
+    const el = document.getElementById(elementId);
+    if (!el) { console.error('downloadAsPDF: element not found:', elementId); return; }
+
+    // إذا html2pdf غير محملة نرجع للطباعة
+    if (typeof html2pdf === 'undefined') {
+        console.warn('html2pdf not loaded, falling back to print');
+        window.print();
+        return;
+    }
+
+    const opt = {
+        margin: [10, 10, 10, 10],
+        filename: filename || 'document.pdf',
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, letterRendering: true },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
+    };
+
+    // إخفاء عناصر no-print مؤقتاً
+    const noPrint = el.querySelectorAll('.no-print');
+    noPrint.forEach(e => e.style.setProperty('display', 'none', 'important'));
+
+    try {
+        await html2pdf().set(opt).from(el).save();
+    } finally {
+        noPrint.forEach(e => e.style.removeProperty('display'));
+    }
 }

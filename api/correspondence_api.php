@@ -4,12 +4,14 @@
  * Correspondence System API
  */
 
+ob_start(); // امنع أي output عرضي من يكسر JSON
+
 // بدء الجلسة
 session_start();
 
 // إيقاف عرض الأخطاء في الناتج (غيّر إلى 1 للتشخيص)
 error_reporting(E_ALL);
-ini_set('display_errors', 1); // ✅ تفعيل عرض الأخطاء مؤقتاً
+ini_set('display_errors', 0); // ✅ أوقف عرض الأخطاء لمنع HTML قبل JSON
 
 // تعيين Headers قبل أي output
 header('Content-Type: application/json; charset=utf-8');
@@ -29,10 +31,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 try {
     // البحث عن correspondence_functions.php في عدة مسارات
     $possiblePaths = [
+        __DIR__ . '/correspondence_functions.php',           // نفس المجلد
+        __DIR__ . '/../correspondence_functions.php',        // المجلد الأب (إذا كان في api/)
+        dirname(__DIR__) . '/correspondence_functions.php',  // الجد
         __DIR__ . '/../includes/correspondence_functions.php',
-        dirname(__DIR__) . '/includes/correspondence_functions.php',
-        __DIR__ . '/includes/correspondence_functions.php',
-        '/Applications/XAMPP/xamppfiles/htdocs/workflow-system/includes/correspondence_functions.php'
+        '/Applications/XAMPP/xamppfiles/htdocs/workflow-system/correspondence_functions.php',
+        '/Applications/XAMPP/xamppfiles/htdocs/workflow-system/api/../correspondence_functions.php',
     ];
     
     $functionsPath = null;
@@ -108,56 +112,49 @@ try {
             if ($id <= 0) {
                 jsonResponse(['success' => false, 'message' => 'معرف غير صالح'], 400);
             }
-            
             $correspondence = getCorrespondence($id);
             if ($correspondence) {
-                jsonResponse(['success' => true, 'data' => $correspondence]);
+                jsonResponse([
+                    'success'            => true,
+                    'data'               => $correspondence,
+                    'current_user_id'    => (int)$userId,
+                    'user_role'          => $_SESSION['permission_level'] ?? 'employee',
+                    'action_permissions' => $_SESSION['action_permissions'] ?? [],
+                ]);
             } else {
                 jsonResponse(['success' => false, 'message' => 'الخطاب غير موجود'], 404);
             }
             break;
-        
+
         // ===== مرحلة واحدة =====
         case 'stage':
             $id = (int)($_GET['id'] ?? 0);
             if ($id <= 0) {
                 jsonResponse(['success' => false, 'message' => 'معرف المرحلة غير صالح'], 400);
             }
-            
             $conn = db();
-            $result = $conn->query("SELECT cs.*, e.name AS employee_name 
-                                    FROM correspondence_stages cs
-                                    LEFT JOIN employees e ON cs.employee_id = e.id
-                                    WHERE cs.id = $id");
-            if ($result && $result->num_rows > 0) {
-                jsonResponse(['success' => true, 'data' => $result->fetch_assoc()]);
+            $stageResult = $conn->query(
+                "SELECT cs.*, e.name AS employee_name
+                 FROM correspondence_stages cs
+                 LEFT JOIN employees e ON cs.employee_id = e.id
+                 WHERE cs.id = $id"
+            );
+            if ($stageResult && $stageResult->num_rows > 0) {
+                jsonResponse(['success' => true, 'data' => $stageResult->fetch_assoc()]);
             } else {
                 jsonResponse(['success' => false, 'message' => 'المرحلة غير موجودة'], 404);
             }
             break;
-        
+
         // ===== قائمة الموظفين =====
         case 'employees':
-            if (!function_exists('getEmployees')) {
-                // تحميل دالة getEmployees من functions.php
-                $mainFunctions = __DIR__ . '/functions.php';
-                $mainFunctions2 = __DIR__ . '/../functions.php';
-                if (file_exists($mainFunctions)) require_once $mainFunctions;
-                elseif (file_exists($mainFunctions2)) require_once $mainFunctions2;
+            $conn = db();
+            $empResult = $conn->query("SELECT id, name, role FROM employees WHERE is_active = 1 ORDER BY name ASC");
+            $employees = [];
+            if ($empResult) {
+                while ($row = $empResult->fetch_assoc()) $employees[] = $row;
             }
-            if (function_exists('getEmployees')) {
-                $employees = getEmployees();
-                jsonResponse(['success' => true, 'data' => $employees]);
-            } else {
-                // fallback: query مباشر
-                $conn = db();
-                $result = $conn->query("SELECT id, name, role FROM employees WHERE is_active = 1 ORDER BY name ASC");
-                $employees = [];
-                if ($result) {
-                    while ($row = $result->fetch_assoc()) $employees[] = $row;
-                }
-                jsonResponse(['success' => true, 'data' => $employees]);
-            }
+            jsonResponse(['success' => true, 'data' => $employees]);
             break;
         
         // ===== الخطابات العاجلة =====
@@ -204,31 +201,47 @@ try {
             $result = addCorrespondence($input);
             
             if ($result['success']) {
+                $correspondenceId = $result['id'];
+                $attachmentErrors = [];
+
                 // رفع المرفقات إن وجدت
                 if (!empty($_FILES['attachments'])) {
-                    $correspondenceId = $result['id'];
                     $files = $_FILES['attachments'];
-                    
+
                     // معالجة رفع ملفات متعددة
                     if (is_array($files['name'])) {
                         for ($i = 0; $i < count($files['name']); $i++) {
                             if ($files['error'][$i] === UPLOAD_ERR_OK) {
                                 $file = [
-                                    'name' => $files['name'][$i],
-                                    'type' => $files['type'][$i],
+                                    'name'     => $files['name'][$i],
+                                    'type'     => $files['type'][$i],
                                     'tmp_name' => $files['tmp_name'][$i],
-                                    'error' => $files['error'][$i],
-                                    'size' => $files['size'][$i]
+                                    'error'    => $files['error'][$i],
+                                    'size'     => $files['size'][$i],
                                 ];
-                                uploadCorrespondenceAttachment($correspondenceId, $file, $userId);
+                                $upResult = uploadCorrespondenceAttachment($correspondenceId, $file, $userId);
+                                if (!$upResult['success']) {
+                                    $attachmentErrors[] = $upResult['message'];
+                                }
+                            } elseif ($files['error'][$i] !== UPLOAD_ERR_NO_FILE) {
+                                $attachmentErrors[] = 'خطأ في رفع الملف [' . $files['name'][$i] . ']: كود ' . $files['error'][$i];
                             }
                         }
                     } else {
-                        uploadCorrespondenceAttachment($correspondenceId, $files, $userId);
+                        if ($files['error'] === UPLOAD_ERR_OK) {
+                            $upResult = uploadCorrespondenceAttachment($correspondenceId, $files, $userId);
+                            if (!$upResult['success']) {
+                                $attachmentErrors[] = $upResult['message'];
+                            }
+                        }
                     }
                 }
-                
-                jsonResponse(['success' => true, 'data' => $result]);
+
+                jsonResponse([
+                    'success'           => true,
+                    'data'              => $result,
+                    'attachment_errors' => $attachmentErrors,
+                ]);
             } else {
                 jsonResponse($result, 400);
             }
@@ -239,32 +252,28 @@ try {
             if ($method !== 'POST') {
                 jsonResponse(['success' => false, 'message' => 'طريقة الطلب غير صحيحة'], 405);
             }
-            
             $input = json_decode(file_get_contents('php://input'), true);
-            
             if (!$input || empty($input['stage_id'])) {
                 jsonResponse(['success' => false, 'message' => 'معرف المرحلة مطلوب'], 400);
             }
-            
             $stageId = (int)$input['stage_id'];
             $conn = db();
-            
-            // بناء البيانات للتحديث
-            $updateData = [];
-            if (isset($input['status']))      $updateData['status']      = $input['status'];
-            if (isset($input['employee_id'])) $updateData['employee_id'] = $input['employee_id'];
-            if (isset($input['notes']))       $updateData['notes']       = $input['notes'];
-            if (isset($input['action_taken']))$updateData['action_taken']= $input['action_taken'];
-            if (isset($input['action_type'])) $updateData['action_taken']= $input['action_type']; // دعم كلا الحقلين
-            
+
             // تحديث stage_name مباشرة إن وُجد
             if (!empty($input['stage_name'])) {
-                $stageName = $conn->real_escape_string($input['stage_name']);
-                $conn->query("UPDATE correspondence_stages SET stage_name = '$stageName' WHERE id = $stageId");
+                $sn = $conn->real_escape_string($input['stage_name']);
+                $conn->query("UPDATE correspondence_stages SET stage_name = '$sn' WHERE id = $stageId");
             }
-            
+
+            // بناء بيانات التحديث
+            $updateData = [];
+            if (isset($input['status']))       $updateData['status']       = $input['status'];
+            if (isset($input['employee_id']))  $updateData['employee_id']  = $input['employee_id'];
+            if (isset($input['notes']))        $updateData['notes']        = $input['notes'];
+            if (isset($input['action_taken'])) $updateData['action_taken'] = $input['action_taken'];
+            if (isset($input['action_type']))  $updateData['action_taken'] = $input['action_type'];
+
             $result = updateCorrespondenceStage($stageId, $updateData);
-            
             if ($result['success']) {
                 jsonResponse(['success' => true, 'message' => 'تم تحديث المرحلة بنجاح']);
             } else {

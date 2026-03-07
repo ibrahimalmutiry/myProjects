@@ -28,7 +28,6 @@
     }
 }
 
-/* ─── رأس الصفحة ────────────────────────────────────── */
 .bank-page-header {
     display: flex;
     flex-direction: column;
@@ -67,7 +66,6 @@
     margin: 0;
 }
 
-/* ─── شريط التنبيهات ────────────────────────────────── */
 .deposit-alerts-bar {
     display: flex;
     flex-wrap: wrap;
@@ -119,7 +117,6 @@
     }
 }
 
-/* ─── الإحصاءات السريعة ─────────────────────────────── */
 .bank-quick-stats {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
@@ -127,46 +124,263 @@
 }
 
 .quick-stat-card {
-    background: var(--bg-secondary);
+    background: var(--bg-card);
     border: 1px solid var(--border-color);
-    border-radius: 14px;
-    padding: 1.1rem 1.25rem;
+    border-radius: 16px;
+    padding: 1.25rem 1.4rem;
     display: flex;
-    flex-direction: column;
-    gap: 0.4rem;
-    transition: transform 0.25s, box-shadow 0.25s;
+    align-items: center;
+    gap: 1rem;
+    transition: transform 0.22s, box-shadow 0.22s;
     position: relative;
     overflow: hidden;
 }
 
-.quick-stat-card::after {
+.quick-stat-card::before {
     content: '';
     position: absolute;
-    bottom: 0;
-    left: 0;
+    top: 0;
     right: 0;
-    height: 3px;
-}
-
-.qsc-blue::after {
-    background: linear-gradient(90deg, #0ea5e9, #38bdf8);
-}
-
-.qsc-green::after {
-    background: linear-gradient(90deg, #22c55e, #4ade80);
-}
-
-.qsc-orange::after {
-    background: linear-gradient(90deg, #f59e0b, #fbbf24);
-}
-
-.qsc-teal::after {
-    background: linear-gradient(90deg, #14b8a6, #2dd4bf);
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    opacity: 0.06;
+    transform: translate(20px, -20px);
 }
 
 .quick-stat-card:hover {
     transform: translateY(-3px);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.13);
+}
+
+.quick-stat-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 13px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 1.3rem;
+}
+
+.quick-stat-label {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    font-weight: 500;
+    margin-bottom: 0.2rem;
+}
+
+.quick-stat-value {
+    font-size: 1.25rem;
+    font-weight: 800;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+    direction: ltr;
+    text-align: right;
+    line-height: 1.2;
+}
+
+.quick-stat-change {
+    font-size: 0.73rem;
+    color: var(--text-muted);
+    margin-top: 0.15rem;
+}
+
+/* ── Stats للودائع الاستثمارية ── */
+.inv-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.inv-stat-card {
+    border-radius: 16px;
+    padding: 1.1rem 1.25rem;
+    border: 1px solid var(--border-color);
+    background: var(--bg-card);
+    transition: transform 0.22s, box-shadow 0.22s;
+    position: relative;
+    overflow: hidden;
+}
+
+.inv-stat-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.12);
+}
+
+.inv-stat-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.75rem;
+}
+
+.inv-stat-icon {
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.inv-stat-badge {
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 0.2rem 0.55rem;
+    border-radius: 20px;
+    background: var(--bg-surface, rgba(255, 255, 255, 0.06));
+    color: var(--text-muted);
+}
+
+.inv-badge-red {
+    background: rgba(255, 107, 107, 0.15) !important;
+    color: #ff6b6b !important;
+}
+
+.inv-badge-orange {
+    background: rgba(255, 169, 77, 0.15) !important;
+    color: var(--accent-orange) !important;
+}
+
+.inv-stat-value {
+    font-size: 1.3rem;
+    font-weight: 800;
+    color: var(--text-primary);
+    direction: ltr;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.2;
+    margin-bottom: 0.25rem;
+}
+
+.inv-stat-label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.inv-stat-blue {
+    border-top: 3px solid var(--accent-blue);
+}
+
+.inv-stat-blue .inv-stat-icon {
+    background: rgba(74, 171, 247, 0.12);
+    color: var(--accent-blue);
+}
+
+.inv-stat-green {
+    border-top: 3px solid var(--accent-green);
+}
+
+.inv-stat-green .inv-stat-icon {
+    background: rgba(105, 219, 124, 0.12);
+    color: var(--accent-green);
+}
+
+.inv-stat-red {
+    border-top: 3px solid #ff6b6b;
+}
+
+.inv-stat-red .inv-stat-icon {
+    background: rgba(255, 107, 107, 0.12);
+    color: #ff6b6b;
+}
+
+.inv-stat-orange {
+    border-top: 3px solid var(--accent-orange);
+}
+
+.inv-stat-orange .inv-stat-icon {
+    background: rgba(255, 169, 77, 0.12);
+    color: var(--accent-orange);
+}
+
+.inv-stat-teal {
+    border-top: 3px solid #2dd4bf;
+}
+
+.inv-stat-teal .inv-stat-icon {
+    background: rgba(20, 184, 166, 0.12);
+    color: #2dd4bf;
+}
+
+.inv-stat-muted {
+    border-top: 3px solid var(--border-color);
+}
+
+.inv-stat-muted .inv-stat-icon {
+    background: rgba(148, 163, 184, 0.1);
+    color: var(--text-muted);
+}
+
+.inv-section-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    overflow: hidden;
+}
+
+.inv-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.85rem 1.25rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.inv-header-active {
+    background: rgba(105, 219, 124, 0.05);
+}
+
+.inv-header-done {
+    background: rgba(74, 171, 247, 0.05);
+}
+
+.inv-header-cancelled {
+    background: rgba(255, 107, 107, 0.05);
+}
+
+.inv-section-title {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-weight: 700;
+    font-size: 0.9rem;
+    color: var(--text-primary);
+}
+
+.inv-section-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.dot-green {
+    background: var(--accent-green);
+    box-shadow: 0 0 0 3px rgba(105, 219, 124, 0.2);
+}
+
+.dot-blue {
+    background: var(--accent-blue);
+    box-shadow: 0 0 0 3px rgba(74, 171, 247, 0.2);
+}
+
+.dot-red {
+    background: #ff6b6b;
+    box-shadow: 0 0 0 3px rgba(255, 107, 107, 0.2);
+}
+
+.inv-section-count {
+    background: var(--bg-surface, rgba(255, 255, 255, 0.06));
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 0.2rem 0.6rem;
+    border-radius: 20px;
+    border: 1px solid var(--border-color);
 }
 
 .qsc-icon {
@@ -192,10 +406,7 @@
 .loading-pulse {
     min-height: 90px;
     animation: loadingShimmer 1.4s ease infinite;
-    background: linear-gradient(90deg,
-            var(--bg-secondary) 25%,
-            var(--border-color) 50%,
-            var(--bg-secondary) 75%);
+    background: linear-gradient(90deg, var(--bg-secondary) 25%, var(--border-color) 50%, var(--bg-secondary) 75%);
     background-size: 200%;
 }
 
@@ -209,67 +420,72 @@
     }
 }
 
-/* ════════════════════════════════════════════════════════
-   تبويبات البنوك
-   ════════════════════════════════════════════════════════ */
+/* ════ تبويبات البنوك ════ */
 .bank-tabs-nav {
     display: flex;
-    gap: 0.25rem;
-    background: var(--bg-secondary);
+    gap: 0.2rem;
+    background: var(--bg-card);
     border: 1px solid var(--border-color);
-    border-radius: 14px;
-    padding: 0.35rem;
+    border-radius: 16px;
+    padding: 0.3rem;
     width: fit-content;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 }
 
 .bank-tab-btn {
-    padding: 0.55rem 1.1rem;
+    padding: 0.6rem 1.2rem;
     border: none;
-    border-radius: 10px;
+    border-radius: 12px;
     background: transparent;
-    color: var(--text-secondary);
-    font-size: 0.875rem;
+    color: var(--text-muted);
+    font-size: 0.83rem;
     font-weight: 600;
     cursor: pointer;
     display: flex;
     align-items: center;
-    gap: 0.45rem;
-    transition: all 0.22s ease;
+    gap: 0.5rem;
+    transition: all 0.2s;
     white-space: nowrap;
+    position: relative;
 }
 
 .bank-tab-btn:hover {
-    background: var(--bg-tertiary, rgba(255, 255, 255, 0.05));
+    background: var(--bg-surface, rgba(255, 255, 255, 0.05));
     color: var(--text-primary);
 }
 
 .bank-tab-btn.active {
-    background: var(--accent-blue, #0ea5e9);
+    background: linear-gradient(135deg, var(--accent-blue), #60a5fa);
     color: #fff;
-    box-shadow: 0 2px 10px rgba(14, 165, 233, 0.35);
+    box-shadow: 0 3px 12px rgba(74, 171, 247, 0.35);
+}
+
+.bank-tab-btn.active .bank-tab-icon {
+    filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.2));
 }
 
 .bank-tab-icon {
     font-size: 1rem;
+    line-height: 1;
 }
 
 .tab-badge {
     background: rgba(255, 255, 255, 0.25);
     color: #fff;
-    font-size: 0.7rem;
+    font-size: 0.68rem;
     font-weight: 700;
     padding: 0.1rem 0.45rem;
-    border-radius: 10px;
+    border-radius: 20px;
     min-width: 18px;
     text-align: center;
+    line-height: 1.6;
 }
 
 .bank-tab-btn:not(.active) .tab-badge {
-    background: rgba(239, 68, 68, 0.15);
+    background: rgba(239, 68, 68, 0.13);
     color: #ef4444;
 }
 
-/* ─── لوحات التبويب ─────────────────────────────────── */
 .bank-tab-panels {
     width: 100%;
 }
@@ -295,11 +511,8 @@
     }
 }
 
-/* ════════════════════════════════════════════════════════
-   كتلة القسم
-   ════════════════════════════════════════════════════════ */
+/* ════ كتلة القسم ════ */
 .section-block {
-    /* background: var(--bg-secondary); */
     border: 1px solid var(--border-color);
     border-radius: 16px;
     padding: 1.5rem;
@@ -339,9 +552,7 @@
     box-shadow: 0 4px 12px rgba(14, 165, 233, 0.3);
 }
 
-/* ════════════════════════════════════════════════════════
-   بطاقات الحسابات (نظرة عامة)
-   ════════════════════════════════════════════════════════ */
+/* ════ بطاقات الحسابات ════ */
 .accounts-overview-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
@@ -463,9 +674,7 @@
     border: 1px solid var(--border-color);
 }
 
-/* ════════════════════════════════════════════════════════
-   قائمة الودائع الأخيرة
-   ════════════════════════════════════════════════════════ */
+/* ════ قائمة الودائع ════ */
 .deposits-list {
     display: flex;
     flex-direction: column;
@@ -524,9 +733,7 @@
     margin-top: 0.2rem;
 }
 
-/* ════════════════════════════════════════════════════════
-   التايم لاين
-   ════════════════════════════════════════════════════════ */
+/* ════ التايم لاين ════ */
 .deposit-timeline {
     display: flex;
     flex-direction: column;
@@ -535,7 +742,6 @@
 
 .timeline-item {
     display: flex;
-    grid-template-columns: 52px 28px 1fr auto;
     gap: 0;
     align-items: start;
     padding: 0.75rem 0;
@@ -679,9 +885,7 @@
     color: #fff;
 }
 
-/* ════════════════════════════════════════════════════════
-   جدول الودائع
-   ════════════════════════════════════════════════════════ */
+/* ════ جدول الودائع ════ */
 .deposits-filters {
     display: flex;
     gap: 0.75rem;
@@ -829,9 +1033,6 @@
     border-color: #22c55e;
 }
 
-/* ─── حالات الصفوف ──────────────────────────────────── */
-.row-pending {}
-
 .row-confirmed {
     opacity: 0.7;
 }
@@ -843,7 +1044,7 @@
     font-style: italic;
 }
 
-/* ─── شارات الحالة ──────────────────────────────────── */
+/* ─── شارات الحالة ── */
 .status-badge {
     padding: 0.25rem 0.7rem;
     border-radius: 20px;
@@ -883,9 +1084,7 @@
     border: 1px solid var(--border-color);
 }
 
-/* ════════════════════════════════════════════════════════
-   ودائع الشهر
-   ════════════════════════════════════════════════════════ */
+/* ════ ودائع الشهر ════ */
 .monthly-header {
     display: flex;
     justify-content: space-between;
@@ -935,7 +1134,6 @@
     color: #0ea5e9;
 }
 
-/* ─── شريط التقدم ───────────────────────────────────── */
 .progress-section {
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
@@ -976,7 +1174,7 @@
     min-width: 2px;
 }
 
-/* ─── تقويم الودائع ─────────────────────────────────── */
+/* ─── التقويم ── */
 .deposit-calendar {
     -webkit-user-select: none;
     user-select: none;
@@ -1071,7 +1269,6 @@
     font-size: 0.82rem;
 }
 
-/* ─── بطاقات الودائع المجدولة ───────────────────────── */
 .monthly-deposits-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
@@ -1248,9 +1445,7 @@
     padding: 0.4rem 0.75rem;
 }
 
-/* ════════════════════════════════════════════════════════
-   المودالات — النماذج
-   ════════════════════════════════════════════════════════ */
+/* ════ المودالات ════ */
 .modal-form-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -1259,7 +1454,7 @@
 }
 
 .modal-form-grid .full-span {
-    grid-column: 1 / -1;
+    grid-column: 1/-1;
 }
 
 .form-group {
@@ -1296,7 +1491,6 @@ textarea.form-input {
     min-height: 70px;
 }
 
-/* ─── صندوق التنبيه الذكي ───────────────────────────── */
 .smart-alert-box {
     display: flex;
     gap: 0.75rem;
@@ -1327,7 +1521,6 @@ textarea.form-input {
     line-height: 1.5;
 }
 
-/* ─── تفاصيل الإيداع ────────────────────────────────── */
 .deposit-details-view {
     display: flex;
     flex-direction: column;
@@ -1374,7 +1567,6 @@ textarea.form-input {
     line-height: 1.5;
 }
 
-/* ─── ودائع اليوم في المودال ────────────────────────── */
 .day-deposits-list {
     display: flex;
     flex-direction: column;
@@ -1397,7 +1589,6 @@ textarea.form-input {
     color: var(--text-muted);
 }
 
-/* ─── حالة فارغة ────────────────────────────────────── */
 .empty-state-sm {
     text-align: center;
     padding: 2rem;
@@ -1407,7 +1598,7 @@ textarea.form-input {
 }
 
 .empty-card {
-    grid-column: 1 / -1;
+    grid-column: 1/-1;
     text-align: center;
     padding: 2rem;
     color: var(--text-muted);
@@ -1417,9 +1608,7 @@ textarea.form-input {
     border: 1px dashed var(--border-color);
 }
 
-/* ════════════════════════════════════════════════════════
-   Responsive
-   ════════════════════════════════════════════════════════ */
+/* ════ Responsive ════ */
 @media (max-width: 1100px) {
     .bank-quick-stats {
         grid-template-columns: repeat(2, 1fr);
@@ -1435,10 +1624,7 @@ textarea.form-input {
         padding: 1rem;
     }
 
-    .bank-quick-stats {
-        grid-template-columns: 1fr 1fr;
-    }
-
+    .bank-quick-stats,
     .monthly-stats-row {
         grid-template-columns: 1fr 1fr;
     }
@@ -1452,10 +1638,7 @@ textarea.form-input {
         width: 100%;
     }
 
-    .accounts-overview-grid {
-        grid-template-columns: 1fr;
-    }
-
+    .accounts-overview-grid,
     .monthly-deposits-grid {
         grid-template-columns: 1fr;
     }
@@ -1466,10 +1649,6 @@ textarea.form-input {
 
     .filter-input {
         min-width: unset;
-    }
-
-    .timeline-item {
-        grid-template-columns: 44px 22px 1fr auto;
     }
 }
 
@@ -1484,5 +1663,762 @@ textarea.form-input {
 
     .qsc-value {
         font-size: 1.05rem;
+    }
+}
+
+/* ════════════════════════════════════════════════════════
+   Investments Tab — Layout + Table + Side Panel
+   ════════════════════════════════════════════════════════ */
+
+/* Toolbar */
+.inv-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+    gap: 1rem;
+}
+
+/* Main layout wrapper */
+.inv-root {
+    display: flex;
+    gap: 1rem;
+    align-items: flex-start;
+}
+
+/* Table column — takes full width by default */
+.inv-table-col {
+    flex: 1 1 0;
+    min-width: 0;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    overflow: hidden;
+}
+
+/* Panel column — hidden, appears on row click */
+.inv-panel-col {
+    flex: 0 0 300px;
+    width: 300px;
+    display: none;
+    flex-direction: column;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    overflow: hidden;
+    position: sticky;
+    top: 1rem;
+    max-height: calc(100vh - 180px);
+    animation: ipIn .2s ease;
+}
+
+.inv-root.has-panel .inv-panel-col {
+    display: flex;
+}
+
+@keyframes ipIn {
+    from {
+        opacity: 0;
+        transform: translateX(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+/* ─── Table inside .inv-table-col ─── */
+.inv-table-col .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+
+.inv-table-col .data-table col:nth-child(1) {
+    width: 25%;
+}
+
+.inv-table-col .data-table col:nth-child(2) {
+    width: 20%;
+}
+
+.inv-table-col .data-table col:nth-child(3) {
+    width: 13%;
+}
+
+.inv-table-col .data-table col:nth-child(4) {
+    width: 7%;
+}
+
+.inv-table-col .data-table col:nth-child(5) {
+    width: 16%;
+}
+
+.inv-table-col .data-table col:nth-child(6) {
+    width: 12%;
+}
+
+.inv-table-col .data-table col:nth-child(7) {
+    width: 7%;
+}
+
+.inv-table-col .data-table th {
+    padding: .7rem 1rem;
+    text-align: right;
+    font-size: .74rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    background: var(--bg-surface, rgba(255, 255, 255, .03));
+    border-bottom: 1px solid var(--border-color);
+    white-space: nowrap;
+}
+
+.inv-table-col .data-table td {
+    padding: .75rem 1rem;
+    border-bottom: 1px solid var(--border-color);
+    vertical-align: middle;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.inv-table-col .data-table tbody tr {
+    cursor: pointer;
+    transition: background .12s;
+    border-right: 3px solid transparent;
+}
+
+.inv-table-col .data-table tbody tr:hover {
+    background: var(--bg-surface, rgba(255, 255, 255, .03)) !important;
+}
+
+.inv-table-col .data-table tbody tr.row-selected {
+    background: rgba(74, 171, 247, .06) !important;
+    border-right-color: var(--accent-blue) !important;
+}
+
+/* Group separator row */
+.inv-table-col .data-table tbody tr.grp-sep {
+    cursor: default;
+    pointer-events: none;
+}
+
+.inv-table-col .data-table tbody tr.grp-sep td {
+    padding: .32rem 1rem;
+    font-size: .68rem;
+    font-weight: 800;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    overflow: visible;
+    white-space: nowrap;
+    background: transparent;
+}
+
+/* Row color accents */
+tr.inv-active {
+    border-right-color: #69db7c;
+}
+
+tr.inv-done {
+    border-right-color: #4dabf7;
+    opacity: .85;
+}
+
+tr.inv-cancelled {
+    border-right-color: #94a3b8;
+    opacity: .65;
+}
+
+tr.inv-overdue {
+    border-right-color: #ff6b6b;
+    background: rgba(255, 107, 107, .025);
+}
+
+tr.inv-expiring {
+    border-right-color: #ffa94d;
+    background: rgba(255, 169, 77, .025);
+}
+
+/* Status pills */
+.spill {
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+    padding: .18rem .6rem;
+    border-radius: 20px;
+    font-size: .71rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.spill-green {
+    background: rgba(105, 219, 124, .13);
+    color: #69db7c;
+}
+
+.spill-blue {
+    background: rgba(74, 171, 247, .13);
+    color: #4dabf7;
+}
+
+.spill-red {
+    background: rgba(255, 107, 107, .13);
+    color: #ff6b6b;
+}
+
+.spill-orange {
+    background: rgba(255, 169, 77, .13);
+    color: #ffa94d;
+}
+
+.spill-muted {
+    background: rgba(148, 163, 184, .1);
+    color: #94a3b8;
+}
+
+/* ─── Side Panel content ─── */
+.ip-header {
+    padding: 1rem 1.1rem .85rem;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-shrink: 0;
+}
+
+.ip-title-area {
+    flex: 1;
+    min-width: 0;
+}
+
+.ip-label {
+    font-size: .68rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    margin-bottom: .3rem;
+}
+
+.ip-amount {
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: var(--text-primary);
+    direction: ltr;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.2;
+}
+
+.ip-name {
+    font-size: .78rem;
+    color: var(--text-muted);
+    margin-top: .15rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ip-close {
+    background: none;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    width: 28px;
+    height: 28px;
+    cursor: pointer;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-right: .5rem;
+    transition: all .15s;
+}
+
+.ip-close:hover {
+    background: rgba(255, 107, 107, .1);
+    color: #ff6b6b;
+    border-color: rgba(255, 107, 107, .3);
+}
+
+.ip-body {
+    flex: 1;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-color) transparent;
+}
+
+.ip-body::-webkit-scrollbar {
+    width: 3px;
+}
+
+.ip-body::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 3px;
+}
+
+.ip-section {
+    padding: .75rem 1.1rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.ip-section:last-child {
+    border-bottom: none;
+}
+
+.ip-section-title {
+    font-size: .65rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .1em;
+    color: var(--text-muted);
+    margin-bottom: .55rem;
+}
+
+.ip-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: .25rem 0;
+    font-size: .82rem;
+    gap: .5rem;
+}
+
+.ip-row .ip-key {
+    color: var(--text-muted);
+    font-size: .77rem;
+    flex-shrink: 0;
+}
+
+.ip-row .ip-val {
+    color: var(--text-primary);
+    font-weight: 500;
+    text-align: left;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ip-progress-bar {
+    height: 5px;
+    background: var(--bg-surface, rgba(255, 255, 255, .06));
+    border-radius: 3px;
+    overflow: hidden;
+    margin: .4rem 0 .15rem;
+}
+
+.ip-progress-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width .5s ease;
+}
+
+.ip-actions {
+    padding: .75rem .9rem;
+    border-top: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    gap: .4rem;
+    flex-shrink: 0;
+}
+
+.ip-btn {
+    width: 100%;
+    padding: .55rem 1rem;
+    border-radius: 9px;
+    font-size: .81rem;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: .4rem;
+    border: none;
+    transition: opacity .15s;
+}
+
+.ip-btn:hover {
+    opacity: .85;
+}
+
+.ip-btn-green {
+    background: #40c057;
+    color: #fff;
+}
+
+.ip-btn-blue {
+    background: rgba(74, 171, 247, .12);
+    color: #4dabf7;
+    border: 1px solid rgba(74, 171, 247, .25) !important;
+}
+
+.ip-btn-danger {
+    background: rgba(255, 107, 107, .08);
+    color: #ff6b6b;
+    border: 1px solid rgba(255, 107, 107, .2) !important;
+}
+
+/* ─── Responsive ─── */
+@media (max-width: 1100px) {
+    .inv-root {
+        flex-direction: column;
+    }
+
+    .inv-panel-col {
+        flex: 1 1 auto;
+        width: 100%;
+        position: static;
+        max-height: none;
+    }
+}
+
+/* ════════════════════════════════════════════════════════
+   Investment Detail Modal — idm-*
+   ════════════════════════════════════════════════════════ */
+
+.idm-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, .55);
+    backdrop-filter: blur(3px);
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    opacity: 0;
+    transition: opacity .22s ease;
+}
+
+.idm-overlay.idm-visible {
+    opacity: 1;
+}
+
+.idm-overlay.idm-closing {
+    opacity: 0;
+}
+
+.idm-box {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 18px;
+    width: 100%;
+    max-width: 620px;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, .35);
+    transform: translateY(12px) scale(.98);
+    transition: transform .22s ease;
+}
+
+.idm-overlay.idm-visible .idm-box {
+    transform: translateY(0) scale(1);
+}
+
+/* Header */
+.idm-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 1.25rem 1.5rem 1rem;
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
+}
+
+.idm-header-left {
+    display: flex;
+    flex-direction: column;
+    gap: .3rem;
+}
+
+.idm-amount {
+    font-size: 1.75rem;
+    font-weight: 800;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+    line-height: 1.1;
+    direction: ltr;
+}
+
+.idm-dep-name {
+    font-size: .85rem;
+    color: var(--text-muted);
+}
+
+.idm-close {
+    background: none;
+    border: 1px solid var(--border-color);
+    border-radius: 9px;
+    width: 34px;
+    height: 34px;
+    cursor: pointer;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: all .15s;
+}
+
+.idm-close:hover {
+    background: rgba(255, 107, 107, .1);
+    color: #ff6b6b;
+    border-color: rgba(255, 107, 107, .3);
+}
+
+/* Status pills */
+.idm-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    padding: .22rem .7rem;
+    border-radius: 20px;
+    font-size: .72rem;
+    font-weight: 700;
+    width: fit-content;
+}
+
+.idm-pill-green {
+    background: rgba(105, 219, 124, .13);
+    color: #69db7c;
+}
+
+.idm-pill-blue {
+    background: rgba(74, 171, 247, .13);
+    color: #4dabf7;
+}
+
+.idm-pill-red {
+    background: rgba(255, 107, 107, .13);
+    color: #ff6b6b;
+}
+
+.idm-pill-orange {
+    background: rgba(255, 169, 77, .13);
+    color: #ffa94d;
+}
+
+.idm-pill-muted {
+    background: rgba(148, 163, 184, .1);
+    color: #94a3b8;
+}
+
+/* Progress */
+.idm-progress-wrap {
+    padding: .85rem 1.5rem;
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
+}
+
+.idm-progress-meta {
+    display: flex;
+    justify-content: space-between;
+    font-size: .73rem;
+    color: var(--text-muted);
+    margin-bottom: .4rem;
+}
+
+.idm-progress-track {
+    height: 6px;
+    background: var(--bg-surface, rgba(255, 255, 255, .06));
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.idm-progress-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width .6s ease;
+}
+
+/* Body */
+.idm-body {
+    flex: 1;
+    overflow-y: auto;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-color) transparent;
+}
+
+.idm-body::-webkit-scrollbar {
+    width: 4px;
+}
+
+.idm-body::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 4px;
+}
+
+.idm-section {
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid var(--border-color);
+    border-left: 1px solid var(--border-color);
+}
+
+.idm-section:nth-child(odd) {
+    border-left: none;
+}
+
+.idm-section-full {
+    grid-column: 1 / -1;
+    border-left: none;
+}
+
+.idm-section-title {
+    font-size: .65rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .1em;
+    color: var(--text-muted);
+    margin-bottom: .6rem;
+}
+
+.idm-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: .22rem 0;
+    font-size: .83rem;
+    gap: .5rem;
+}
+
+.idm-row span {
+    color: var(--text-muted);
+    font-size: .78rem;
+    flex-shrink: 0;
+}
+
+.idm-row strong {
+    color: var(--text-primary);
+    font-weight: 600;
+    text-align: left;
+}
+
+/* Amounts grid */
+.idm-amounts-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: .6rem;
+}
+
+.idm-amount-card {
+    background: var(--bg-surface, rgba(255, 255, 255, .04));
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: .65rem .75rem;
+    text-align: center;
+}
+
+.idm-amount-label {
+    font-size: .68rem;
+    color: var(--text-muted);
+    margin-bottom: .25rem;
+}
+
+.idm-amount-val {
+    font-size: .95rem;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    direction: ltr;
+}
+
+.idm-amount-total {
+    grid-column: 1 / -1;
+    background: rgba(74, 171, 247, .06);
+    border-color: rgba(74, 171, 247, .2);
+}
+
+.idm-amount-total .idm-amount-val {
+    font-size: 1.1rem;
+    color: var(--text-primary);
+}
+
+.idm-notes {
+    font-size: .83rem;
+    color: var(--text-muted);
+    margin: 0;
+    line-height: 1.65;
+}
+
+/* Footer */
+.idm-footer {
+    display: flex;
+    gap: .6rem;
+    padding: 1rem 1.25rem;
+    border-top: 1px solid var(--border-color);
+    flex-shrink: 0;
+    background: var(--bg-surface, rgba(255, 255, 255, .02));
+}
+
+.idm-btn {
+    flex: 1;
+    padding: .65rem 1rem;
+    border-radius: 10px;
+    font-size: .82rem;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: .4rem;
+    border: none;
+    transition: all .15s;
+}
+
+.idm-btn:hover {
+    filter: brightness(1.1);
+    transform: translateY(-1px);
+}
+
+.idm-btn:active {
+    transform: translateY(0);
+}
+
+.idm-btn-green {
+    background: #40c057;
+    color: #fff;
+}
+
+.idm-btn-blue {
+    background: rgba(74, 171, 247, .12);
+    color: #4dabf7;
+    border: 1px solid rgba(74, 171, 247, .25) !important;
+}
+
+.idm-btn-danger {
+    background: rgba(255, 107, 107, .08);
+    color: #ff6b6b;
+    border: 1px solid rgba(255, 107, 107, .2) !important;
+}
+
+.idm-btn-muted {
+    background: var(--bg-surface);
+    color: var(--text-muted);
+    border: 1px solid var(--border-color) !important;
+}
+
+@media (max-width: 600px) {
+    .idm-body {
+        grid-template-columns: 1fr;
+    }
+
+    .idm-section {
+        border-left: none;
+    }
+
+    .idm-amounts-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .idm-footer {
+        flex-wrap: wrap;
+    }
+
+    .idm-btn {
+        flex: 1 1 calc(50% - .3rem);
     }
 }

@@ -348,8 +348,9 @@ function createWorkflowStages($correspondenceId, $type) {
         while ($row = $result->fetch_assoc()) {
             $stageName  = $conn->real_escape_string($row['stage_name']);
             $stageOrder = (int)$row['stage_order'];
-            $conn->query("INSERT INTO correspondence_stages (correspondence_id, stage_name, stage_order, status)
-                          VALUES ($correspondenceId, '$stageName', $stageOrder, 'pending')");
+            $stageKey   = 'stage_' . $stageOrder;
+            $conn->query("INSERT INTO correspondence_stages (correspondence_id, stage, stage_name, stage_order, status)
+                          VALUES ($correspondenceId, '$stageKey', '$stageName', $stageOrder, 'pending')");
         }
     }
 }
@@ -445,7 +446,7 @@ function updateCorrespondenceStage($stageId, $data) {
     }
 
     if (isset($data['action_taken'])) {
-        $updates[] = "action_taken = '" . $conn->real_escape_string($data['action_taken']) . "'";
+        $updates[] = "action_type = '" . $conn->real_escape_string($data['action_taken']) . "'";
     }
 
     if (empty($updates)) return ['success' => false, 'message' => 'لا توجد بيانات للتحديث'];
@@ -559,45 +560,50 @@ function getUrgentCorrespondence() {
 function uploadCorrespondenceAttachment($correspondenceId, $file, $uploadedBy) {
     $conn = db();
 
-    $uploadPaths = [
-        __DIR__ . '/uploads/correspondence/',
-        __DIR__ . '/../uploads/correspondence/',
-    ];
+    // المسار الصحيح بالنسبة لجذر المشروع
+    $uploadDir = rtrim($_SERVER['DOCUMENT_ROOT'], '/') . '/workflow-system/uploads/correspondence/';
 
-    $uploadDir = null;
-    foreach ($uploadPaths as $path) {
-        if (is_dir($path)) { $uploadDir = $path; break; }
+    // إنشاء المجلد لو غير موجود
+    if (!is_dir($uploadDir)) {
+        mkdir($uploadDir, 0755, true);
     }
 
-    if (!$uploadDir) {
-        $uploadDir = __DIR__ . '/uploads/correspondence/';
+    if (!is_writable($uploadDir)) {
+        // محاولة أخيرة: مجلد بجانب correspondence_functions.php
+        $uploadDir = dirname(__DIR__) . '/uploads/correspondence/';
         if (!is_dir($uploadDir)) mkdir($uploadDir, 0755, true);
     }
 
+    if (!is_writable($uploadDir)) {
+        return ['success' => false, 'message' => 'مجلد الرفع غير قابل للكتابة: ' . $uploadDir];
+    }
+
     $originalName = basename($file['name']);
-    $extension    = pathinfo($originalName, PATHINFO_EXTENSION);
+    $extension    = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
     $fileName     = uniqid('corr_' . $correspondenceId . '_') . '.' . $extension;
     $filePath     = $uploadDir . $fileName;
 
-    if (move_uploaded_file($file['tmp_name'], $filePath)) {
-        $sql = "INSERT INTO correspondence_attachments
-                    (correspondence_id, file_name, original_name, file_path, file_type, file_size, uploaded_by)
-                VALUES (
-                    $correspondenceId,
-                    '" . $conn->real_escape_string($fileName)       . "',
-                    '" . $conn->real_escape_string($originalName)   . "',
-                    '" . $conn->real_escape_string($filePath)       . "',
-                    '" . $conn->real_escape_string($file['type'])   . "',
-                    " . (int)$file['size'] . ",
-                    $uploadedBy
-                )";
-
-        if ($conn->query($sql)) {
-            return ['success' => true, 'id' => $conn->insert_id, 'file_name' => $fileName, 'original_name' => $originalName];
-        }
+    if (!move_uploaded_file($file['tmp_name'], $filePath)) {
+        return ['success' => false, 'message' => 'فشل نقل الملف — tmp: ' . $file['tmp_name'] . ' → ' . $filePath . ' | error: ' . $file['error']];
     }
 
-    return ['success' => false, 'message' => 'فشل رفع الملف'];
+    $sql = "INSERT INTO correspondence_attachments
+                (correspondence_id, file_name, original_name, file_path, file_type, file_size, uploaded_by)
+            VALUES (
+                $correspondenceId,
+                '" . $conn->real_escape_string($fileName)       . "',
+                '" . $conn->real_escape_string($originalName)   . "',
+                '" . $conn->real_escape_string($filePath)       . "',
+                '" . $conn->real_escape_string($file['type'])   . "',
+                " . (int)$file['size'] . ",
+                $uploadedBy
+            )";
+
+    if ($conn->query($sql)) {
+        return ['success' => true, 'id' => $conn->insert_id, 'file_name' => $fileName, 'original_name' => $originalName];
+    }
+
+    return ['success' => false, 'message' => 'فشل حفظ المرفق في قاعدة البيانات: ' . $conn->error];
 }
 
 

@@ -45,6 +45,7 @@ $action = $_GET['action'] ?? '';
 
 // معالجة الطلبات
 try {
+    $conn = db();
     switch ($action) {
 
         // ─── الإحصائيات ───────────────────────────────────────
@@ -365,14 +366,12 @@ try {
             break;
 
         // ─── جميع الأحداث ──────────────────────────────────────
-       case 'all_events':
-            $limit      = (int)($_GET['limit']       ?? 50);
-            $stage      = $_GET['stage']             ?? null;
-            $employeeId = $_GET['employee_id']       ?? null;
-            $dateFrom   = $_GET['date_from']         ?? null;
-            $dateTo     = $_GET['date_to']           ?? null;
-            $data = getAllEvents($limit, $stage, $employeeId, $dateFrom, $dateTo);
-            jsonResponse(['success' => true, 'data' => $data]);
+        case 'all_events':
+            $limit      = isset($_GET['limit'])       ? (int)$_GET['limit'] : 50;
+            $stage      = $_GET['stage']              ?? null;
+            $employeeId = isset($_GET['employee_id']) ? (int)$_GET['employee_id'] : null;
+            $events     = getAllEvents($limit, $stage, $employeeId);
+            jsonResponse(['success' => true, 'data' => $events]);
             break;
         
             /* ── نهاية الـ PATCH ── أضف هذا قبل default: في الـ switch ── */
@@ -665,13 +664,28 @@ try {
             jsonResponse(matureInvestment($id, $input['actual_profit'] ?? null));
             break;
 
+
+
+
+        case 'update_investment':
+            if ($method !== 'POST') jsonResponse(['success' => false, 'message' => 'طريقة غير صحيحة'], 405);
+            require_once __DIR__ . '/../includes/bank_investment_functions.php';
+            $input = json_decode(file_get_contents('php://input'), true);
+            $id    = (int)($input['id'] ?? 0);
+            if ($id <= 0) jsonResponse(['success' => false, 'message' => 'معرف غير صالح'], 400);
+            jsonResponse(updateInvestment($id, $input));
+            break;
+
+
+
         case 'cancel_investment':
             if ($method !== 'POST') jsonResponse(['success' => false, 'message' => 'طريقة غير صحيحة'], 405);
             require_once __DIR__ . '/../includes/bank_investment_functions.php';
             $input  = json_decode(file_get_contents('php://input'), true);
             $id     = (int)($input['id'] ?? 0);
             if ($id <= 0) jsonResponse(['success' => false, 'message' => 'معرف غير صالح'], 400);
-            jsonResponse(cancelInvestment($id, $input['notes'] ?? ''));
+            $partialProfit = (float)($input['partial_profit'] ?? 0);
+            jsonResponse(cancelInvestment($id, $input['notes'] ?? '', $partialProfit));
             break;
 
 
@@ -823,17 +837,145 @@ try {
             break;
         
         // ─── الإشعارات (SLA/OLA مخصصة لكل موظف) ──────────────────
+
+        // ─── الملف الشخصي للموظف ──────────────────────────────────
+        case 'employee_profile':
+            $uid = (int)($_SESSION['user_id'] ?? 0);
+            if (!$uid) jsonResponse(['success'=>false,'message'=>'غير مسجل'],401);
+            $conn = db();
+            $r = $conn->query("
+                SELECT e.*, d.name AS department_name,
+                       sup.name AS supervisor_name
+                FROM employees e
+                LEFT JOIN departments d ON e.department_id = d.id
+                LEFT JOIN employees sup ON e.supervisor_id = sup.id
+                WHERE e.id = $uid LIMIT 1");
+            if ($r && $r->num_rows > 0) {
+                $row = $r->fetch_assoc();
+                unset($row['password']);
+                jsonResponse(['success'=>true,'data'=>$row]);
+            } else {
+                jsonResponse(['success'=>false,'message'=>'الموظف غير موجود'],404);
+            }
+            break;
+
+        // ─── إحصاءات الموظف ──────────────────────────────────────
+        case 'employee_stats':
+            $uid = (int)($_SESSION['user_id'] ?? 0);
+            if (!$uid) jsonResponse(['success'=>false],401);
+            $conn = db();
+
+            // إجمالي المعاملات ذات الصلة
+            $totalRes = $conn->query("
+                SELECT COUNT(DISTINCT t.id) AS cnt
+                FROM transactions t
+                LEFT JOIN receiving_data r ON t.id = r.transaction_id
+                LEFT JOIN budget_data    b ON t.id = b.transaction_id
+                LEFT JOIN payment_data   p ON t.id = p.transaction_id
+                LEFT JOIN invoice_data   i ON t.id = i.transaction_id
+                WHERE r.employee_id = $uid OR b.employee_id = $uid
+                   OR p.employee_id = $uid OR i.employee_id = $uid
+                   OR t.created_by  = $uid");
+            $total = $totalRes ? (int)$totalRes->fetch_assoc()['cnt'] : 0;
+
+            // مكتملة
+            $doneRes = $conn->query("
+                SELECT COUNT(DISTINCT t.id) AS cnt FROM transactions t
+                LEFT JOIN invoice_data i ON t.id = i.transaction_id
+                WHERE i.status IN ('صدرت الفاتورة','مكتملة','تمت الفوترة')
+                  AND (i.employee_id = $uid OR t.created_by = $uid)");
+            $done = $doneRes ? (int)$doneRes->fetch_assoc()['cnt'] : 0;
+
+            // تصعيدات
+            $escRes = $conn->query("
+                SELECT COUNT(*) AS cnt FROM system_notifications
+                WHERE category IN ('ola_breach','sla_breach','escalation','manual_escalation')
+                  AND (employee_id = $uid OR recipient_id = $uid)");
+            $esc = $escRes ? (int)$escRes->fetch_assoc()['cnt'] : 0;
+
+            jsonResponse(['success'=>true,'data'=>[
+                'total_transactions'     => $total,
+                'completed_transactions' => $done,
+                'pending_transactions'   => max(0, $total - $done),
+                'escalations'            => $esc,
+            ]]);
+            break;
+
+        // ─── معاملات الموظف ──────────────────────────────────────
+        case 'employee_transactions':
+            $uid   = (int)($_SESSION['user_id'] ?? 0);
+            $limit = (int)($_GET['limit'] ?? 10);
+            if (!$uid) jsonResponse(['success'=>false],401);
+            $conn  = db();
+            $res   = $conn->query("
+                SELECT DISTINCT t.id, t.transaction_number, tt.name AS transaction_type,
+                       t.amount, t.created_at,
+                       COALESCE(r.updated_at, b.updated_at, p.updated_at, i.updated_at) AS update_time,
+                       CASE
+                           WHEN i.employee_id = $uid THEN 'invoice'
+                           WHEN p.employee_id = $uid THEN 'payment'
+                           WHEN b.employee_id = $uid THEN 'budget'
+                           WHEN r.employee_id = $uid THEN 'receiving'
+                           ELSE 'receiving'
+                       END AS stage,
+                       COALESCE(i.status, p.status, b.budget_status, r.status) AS status
+                FROM transactions t
+                LEFT JOIN transaction_types tt ON t.type_id = tt.id
+                LEFT JOIN receiving_data r ON t.id = r.transaction_id
+                LEFT JOIN budget_data    b ON t.id = b.transaction_id
+                LEFT JOIN payment_data   p ON t.id = p.transaction_id
+                LEFT JOIN invoice_data   i ON t.id = i.transaction_id
+                WHERE r.employee_id = $uid OR b.employee_id = $uid
+                   OR p.employee_id = $uid OR i.employee_id = $uid
+                   OR t.created_by  = $uid
+                ORDER BY update_time DESC, t.created_at DESC
+                LIMIT $limit");
+            $rows = [];
+            if ($res) while ($row = $res->fetch_assoc()) $rows[] = $row;
+            jsonResponse(['success'=>true,'data'=>$rows]);
+            break;
+
         case 'notifications':
             require_once __DIR__ . '/../includes/notification_functions.php';
             $limit  = (int)($_GET['limit'] ?? 50);
             $userId = (int)($_SESSION['user_id'] ?? 0);
 
+            // جلب تنبيهات SLA/OLA (لها is_read من system_notifications)
             $slaNotifs = $userId ? getSlaNotificationsForUser($userId, $limit) : [];
-            $txNotifs  = getRecentNotifications(10);
+
+            // جلب تنبيهات المعاملات (ليس لها is_read — نجلبها من system_notifications)
+            $txNotifs = getRecentNotifications(30);
+
+            // جلب حالة القراءة لتنبيهات المعاملات من system_notifications
+            if (!empty($txNotifs) && $userId > 0) {
+                $conn = db();
+                // جلب كل transaction_ids التي قرأها هذا المستخدم
+                $readRes = $conn->query("
+                    SELECT DISTINCT transaction_id
+                    FROM system_notifications
+                    WHERE is_read = 1
+                      AND (employee_id = $userId OR employee_id IS NULL OR recipient_id = $userId)
+                      AND transaction_id IS NOT NULL
+                ");
+                $readTxIds = [];
+                if ($readRes) {
+                    while ($r = $readRes->fetch_assoc()) {
+                        $readTxIds[(int)$r['transaction_id']] = true;
+                    }
+                }
+                // تطبيق is_read على كل تنبيه معاملة
+                foreach ($txNotifs as &$tx) {
+                    $txId = (int)($tx['id'] ?? 0);
+                    $tx['is_read'] = isset($readTxIds[$txId]) ? 1 : 0;
+                    // ضمان وجود حقل id فريد للتنبيه
+                    $tx['notif_key'] = 'tx_' . $txId . '_' . ($tx['stage'] ?? '');
+                }
+                unset($tx);
+            }
 
             $all = array_merge($slaNotifs, $txNotifs);
-            usort($all, fn($a,$b) => strtotime($b['update_time'] ?? $b['created_at'] ?? 0)
-                                   - strtotime($a['update_time'] ?? $a['created_at'] ?? 0));
+            usort($all, fn($a,$b) => strtotime($b['update_time'] ?? $b['created_at'] ?? '0')
+                                   - strtotime($a['update_time'] ?? $a['created_at'] ?? '0'));
 
             $unread = count(array_filter($all, fn($n) => !($n['is_read'] ?? false)));
             jsonResponse([
@@ -864,11 +1006,28 @@ try {
         case 'mark_notification_read':
             if ($method !== 'POST') jsonResponse(['success' => false, 'message' => 'طريقة غير صحيحة'], 405);
             require_once __DIR__ . '/../includes/notification_functions.php';
-            $input   = json_decode(file_get_contents('php://input'), true);
-            $userId  = (int)($_SESSION['user_id'] ?? 0);
-            $notifId = (int)($input['notification_id'] ?? $input['id'] ?? 0);
-            if ($notifId <= 0) jsonResponse(['success' => false, 'message' => 'معرف غير صالح'], 400);
-            jsonResponse(markNotificationRead($notifId, $userId));
+            $input         = json_decode(file_get_contents('php://input'), true);
+            $userId        = (int)($_SESSION['user_id'] ?? 0);
+            $notifId       = (int)($input['notification_id'] ?? $input['id'] ?? 0);
+            $transactionId = (int)($input['transaction_id'] ?? 0);
+
+            if ($notifId > 0) {
+                // تعليم تنبيه system_notifications كمقروء
+                jsonResponse(markNotificationRead($notifId, $userId));
+            } elseif ($transactionId > 0) {
+                // تنبيه معاملة — أنشئ سجل قراءة في system_notifications
+                $conn = db();
+                $conn->query("
+                    INSERT INTO system_notifications
+                        (type, category, title, message, transaction_id, employee_id, is_read, read_at, created_at)
+                    VALUES
+                        ('info','tx_read','قراءة معاملة','',{$transactionId},{$userId},1,NOW(),NOW())
+                    ON DUPLICATE KEY UPDATE is_read=1, read_at=NOW()
+                ");
+                jsonResponse(['success' => true]);
+            } else {
+                jsonResponse(['success' => false, 'message' => 'معرف غير صالح'], 400);
+            }
             break;
 
         // ─── تعليم كل الإشعارات كمقروءة ─────────────────────────
@@ -956,8 +1115,207 @@ try {
         
         
         
-            // ─── غير معروف ─────────────────────────────────────────
-        default:
+
+        // ════════════════════════════════════════════════════════
+        //  المدفوعات اليومية
+        // ════════════════════════════════════════════════════════
+        case 'get_pending_payments':
+            $conn = db();
+            $typeFilter = isset($_GET['type']) ? (int)$_GET['type'] : 0;
+
+            $sql = "
+                SELECT
+                    t.id, t.transaction_number, t.transaction_date,
+                    t.description, t.amount, t.priority,
+                    tt.name  AS transaction_type,
+                    ts.name  AS sub_type,
+                    ec.name  AS created_by_name,
+                    r.status AS receive_status,
+                    b.budget_status AS budget_status,
+                    b.budget_code,
+                    d.status AS dispatch_status,
+                    p.status AS payment_status,
+                    p.payment_method, p.payment_date,
+                    p.reference_number AS payment_ref,
+                    ep.name AS payment_employee,
+                    TIMESTAMPDIFF(MINUTE, t.created_at, NOW()) AS total_elapsed_min,
+                    COALESCE(sp.total_hours, 3) * 60 AS sla_allowed_min,
+                    ROUND(
+                        TIMESTAMPDIFF(MINUTE, t.created_at, NOW()) /
+                        (COALESCE(sp.total_hours, 3) * 60) * 100
+                    , 1) AS sla_pct
+                FROM transactions t
+                LEFT JOIN transaction_types tt  ON t.type_id     = tt.id
+                LEFT JOIN transaction_types ts  ON t.sub_type_id = ts.id
+                LEFT JOIN employees ec          ON t.created_by  = ec.id
+                LEFT JOIN receiving_data r      ON t.id = r.transaction_id
+                LEFT JOIN budget_data b         ON t.id = b.transaction_id
+                LEFT JOIN dispatch_data d       ON t.id = d.transaction_id
+                LEFT JOIN payment_data p        ON t.id = p.transaction_id
+                LEFT JOIN employees ep          ON p.employee_id = ep.id
+                LEFT JOIN sla_policies sp       ON (sp.transaction_type_id = t.type_id
+                                                    OR sp.transaction_type_id IS NULL)
+                                               AND sp.is_active = 1
+                                               AND sp.scope IN ('transaction','all')
+                WHERE p.status = 'معلق'
+                  AND b.budget_status IS NOT NULL
+            ";
+            if ($typeFilter) $sql .= " AND t.type_id = $typeFilter";
+            $sql .= " ORDER BY FIELD(t.priority,'urgent','high','normal'), sla_pct DESC, t.created_at ASC";
+
+            $rows = [];
+            $res  = $conn->query($sql);
+            if ($res) while ($row = $res->fetch_assoc()) $rows[] = $row;
+
+            $olaRes = $conn->query("SELECT allowed_hours*60 AS m FROM ola_rules WHERE stage='payment' LIMIT 1");
+            $olaMin = $olaRes ? (float)($olaRes->fetch_assoc()['m'] ?? 18) : 18;
+
+            foreach ($rows as &$r2) {
+                $tid = (int)$r2['id'];
+                $ev  = $conn->query("SELECT TIMESTAMPDIFF(MINUTE, MAX(created_at), NOW()) AS elapsed FROM transaction_events WHERE transaction_id=$tid AND stage IN ('budget','dispatch') HAVING elapsed IS NOT NULL");
+                $evRow = $ev ? $ev->fetch_assoc() : null;
+                $r2['ola_elapsed_min'] = $evRow['elapsed'] ?? 0;
+                $r2['ola_allowed_min'] = $olaMin;
+                $r2['ola_pct'] = $olaMin > 0 ? round((float)$r2['ola_elapsed_min'] / $olaMin * 100, 1) : 0;
+            }
+            jsonResponse(['success' => true, 'data' => $rows, 'count' => count($rows)]);
+            break;
+
+        case 'issue_payment_order':
+            $input     = json_decode(file_get_contents('php://input'), true) ?? [];
+            $ids       = array_map('intval', $input['ids']    ?? []);
+            $payMethod = trim($input['method'] ?? 'تحويل بنكي');
+            $notes    = trim($input['notes']  ?? '');
+            $poPrefix  = getSetting('prefix_payment_order', 'PO');
+            $today     = date('Ymd');
+            $seqRes    = $conn->query("SELECT COUNT(*) AS cnt FROM payment_data WHERE reference_number LIKE '{$poPrefix}-{$today}-%'");
+            $seqNum    = $seqRes ? (int)$seqRes->fetch_assoc()['cnt'] + 1 : 1;
+            $orderRef  = $poPrefix . '-' . $today . '-' . str_pad($seqNum, 4, '0', STR_PAD_LEFT);
+
+            if (empty($ids)) { jsonResponse(['success' => false, 'message' => 'لم يتم تحديد أي معاملات']); break; }
+
+            $now = date('Y-m-d H:i:s');
+            $updated = []; $failed = [];
+
+            foreach ($ids as $tid) {
+                $ok = updatePaymentData($tid, [
+                    'status'    => 'تم الدفع',
+                    'method'    => $payMethod,
+                    'reference' => $orderRef,
+                    'notes'     => $notes ?: "أمر دفع يومي: $orderRef",
+                ]);
+                $ok ? $updated[] = $tid : $failed[] = $tid;
+            }
+
+            $details = [];
+            if (!empty($updated)) {
+                $in = implode(',', $updated);
+                $r2 = $conn->query("SELECT t.id, t.transaction_number, t.description, t.amount, tt.name AS transaction_type, ec.name AS created_by_name, b.budget_code FROM transactions t LEFT JOIN transaction_types tt ON t.type_id=tt.id LEFT JOIN employees ec ON t.created_by=ec.id LEFT JOIN budget_data b ON t.id=b.transaction_id WHERE t.id IN ($in) ORDER BY t.transaction_number");
+                if ($r2) while ($row = $r2->fetch_assoc()) {
+                    $row['payment_date'] = $now; $row['payment_method'] = $payMethod; $row['order_ref'] = $orderRef;
+                    $details[] = $row;
+                }
+            }
+
+            jsonResponse([
+                'success'      => true,
+                'order_ref'    => $orderRef,
+                'updated'      => count($updated),
+                'failed'       => count($failed),
+                'details'      => $details,
+                'total_amount' => array_sum(array_column($details, 'amount')),
+                'issued_by'    => $_SESSION['user_name'] ?? 'النظام',
+                'issued_at'    => $now,
+                'method'       => $payMethod,
+            ]);
+            break;
+
+ 
+        // ══ إعدادات النظام ══════════════════════════════════════
+        case 'get_system_settings':
+            $rows = [];
+            $r = $conn->query('SELECT * FROM system_settings ORDER BY setting_group, id');
+            if ($r) while ($row = $r->fetch_assoc()) $rows[] = $row;
+            jsonResponse(['success' => true, 'data' => $rows]);
+            break;
+
+        case 'save_system_setting':
+            $input = json_decode(file_get_contents('php://input'), true) ?? [];
+            $sKey  = trim($input['key']   ?? '');
+            $sVal  = strtoupper(trim($input['value'] ?? ''));
+            $sBy   = (int)($_SESSION['user_id'] ?? 0);
+            if (!$sKey || !$sVal) {
+                jsonResponse(['success' => false, 'message' => 'بيانات ناقصة']);
+                return;
+            }
+            if (!preg_match('/^[A-Z0-9]{1,10}$/', $sVal)) {
+                jsonResponse(['success' => false, 'message' => 'أحرف إنجليزية كبيرة أو أرقام فقط (1-10)']);
+                return;
+            }
+            $stmt = $conn->prepare('INSERT INTO system_settings (setting_key,setting_value,updated_by) VALUES (?,?,?) ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value),updated_by=VALUES(updated_by)');
+            if (!$stmt) { jsonResponse(['success' => false, 'message' => $conn->error]); return; }
+            $stmt->bind_param('ssi', $sKey, $sVal, $sBy);
+            $ok = $stmt->execute();
+            $stmt->close();
+            jsonResponse(['success' => (bool)$ok]);
+            break;
+
+        // ══ سجل أوامر الدفع ═════════════════════════════════════
+        case 'get_payment_orders_history':
+            $dateFrom = $conn->real_escape_string($_GET['date_from'] ?? date('Y-m-01'));
+            $dateTo   = $conn->real_escape_string($_GET['date_to']   ?? date('Y-m-d'));
+            $refQ     = $conn->real_escape_string($_GET['order_ref'] ?? '');
+            $where    = "p.status = 'تم الدفع' AND DATE(p.payment_date) BETWEEN '$dateFrom' AND '$dateTo'";
+            if ($refQ) $where .= " AND p.reference_number LIKE '%$refQ%'";
+            $sql = "
+                SELECT
+                    p.reference_number AS order_ref,
+                    p.payment_date,
+                    p.payment_method,
+                    ep.name            AS issued_by,
+                    COUNT(t.id)        AS txn_count,
+                    SUM(t.amount)      AS total_amount,
+                    GROUP_CONCAT(t.transaction_number ORDER BY t.transaction_number SEPARATOR ', ') AS txn_numbers
+                FROM payment_data p
+                JOIN transactions t ON t.id = p.transaction_id
+                LEFT JOIN employees ep ON p.employee_id = ep.id
+                WHERE $where
+                GROUP BY p.reference_number, p.payment_date, p.payment_method, ep.name
+                ORDER BY p.payment_date DESC
+            ";
+            $orders = [];
+            $r = $conn->query($sql);
+            if ($r) while ($row = $r->fetch_assoc()) $orders[] = $row;
+            jsonResponse(['success' => true, 'data' => $orders]);
+            break;
+
+        case 'get_payment_order_details':
+            $ref = $conn->real_escape_string($_GET['ref'] ?? '');
+            if (!$ref) { jsonResponse(['success' => false, 'message' => 'رقم الأمر مطلوب']); return; }
+            $r = $conn->query("
+                SELECT t.id, t.transaction_number, t.description, t.amount,
+                       tt.name AS transaction_type, ec.name AS created_by_name,
+                       b.budget_code, p.payment_date, p.payment_method,
+                       p.reference_number AS order_ref, ep.name AS issued_by
+                FROM payment_data p
+                JOIN transactions t ON t.id = p.transaction_id
+                LEFT JOIN transaction_types tt ON t.type_id = tt.id
+                LEFT JOIN employees ec ON t.created_by = ec.id
+                LEFT JOIN budget_data b ON t.id = b.transaction_id
+                LEFT JOIN employees ep ON p.employee_id = ep.id
+                WHERE p.reference_number = '$ref'
+                ORDER BY t.transaction_number
+            ");
+            $rows = [];
+            if ($r) while ($row = $r->fetch_assoc()) $rows[] = $row;
+            jsonResponse([
+                'success'      => true,
+                'data'         => $rows,
+                'total_amount' => array_sum(array_column($rows, 'amount')),
+            ]);
+            break;
+
+            default:
             jsonResponse(['success' => false, 'message' => 'إجراء غير معروف: ' . $action], 400);
     }
     

@@ -115,6 +115,7 @@ function clean($data) {
  * دالة للرد بـ JSON
  */
 function jsonResponse($data, $status = 200) {
+    if (ob_get_level()) ob_end_clean(); // امسح أي output عرضي
     http_response_code($status);
     header('Content-Type: application/json; charset=utf-8');
     echo json_encode($data, JSON_UNESCAPED_UNICODE);

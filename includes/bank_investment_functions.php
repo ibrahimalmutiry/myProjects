@@ -184,7 +184,10 @@ function createInvestment($data) {
     $rawReturn       = $data['return_account_id']      ?? null;
     $returnAccountId = (!empty($rawReturn) && (int)$rawReturn > 0) ? (int)$rawReturn : $accountId;
     $depositName     = $conn->real_escape_string(trim($data['deposit_name']     ?? ''));
-    $referenceNumber = $conn->real_escape_string(trim($data['reference_number'] ?? generateInvestmentNumber()));
+    $rawRef          = trim($data['reference_number'] ?? '');
+    $referenceNumber = $conn->real_escape_string(
+        $rawRef !== '' ? $rawRef : generateInvestmentNumber()
+    );
     $amount          = (float)($data['amount']       ?? 0);
     $interestRate    = (float)($data['interest_rate'] ?? 0);
     $days            = (int)($data['days']           ?? 0);
@@ -208,18 +211,17 @@ function createInvestment($data) {
                 'message' => "رصيد الحساب غير كافٍ. المتاح: " . number_format($account['current_balance'], 2)];
     }
 
-  // بعد التعديل ✅
-$expectedProfit = round($amount * $interestRate / 100 * $days / 360, 2);
+    $expectedProfit = round($amount * $interestRate / 100 * $days / 360, 2);
 
-// إدراج الوديعة — بدون expected_profit لأنه GENERATED COLUMN (MySQL يحسبه تلقائياً)
-$conn->query("INSERT INTO bank_deposits_investment
-                (account_id, return_account_id, deposit_name, reference_number,
-                 amount, interest_rate, days, start_date, maturity_date,
-                 notes, status, created_by)
-              VALUES
-                ($accountId, $returnAccountId, '$depositName', '$referenceNumber',
-                 $amount, $interestRate, $days, '$startDate', '$maturityDate',
-                 '$notes', 'نشط', $createdBy)");
+    // إدراج الوديعة (expected_profit محسوبة تلقائياً - generated column)
+    $conn->query("INSERT INTO bank_deposits_investment
+                    (account_id, return_account_id, deposit_name, reference_number,
+                     amount, interest_rate, days, start_date, maturity_date,
+                     notes, status, created_by)
+                  VALUES
+                    ($accountId, $returnAccountId, '$depositName', '$referenceNumber',
+                     $amount, $interestRate, $days, '$startDate', '$maturityDate',
+                     '$notes', 'نشط', $createdBy)");
 
     $investmentId = $conn->insert_id;
 
@@ -331,12 +333,13 @@ function matureInvestment($id, $actualProfit = null) {
 /**
  * إلغاء وديعة مبكراً (يُعاد الأصل فقط بدون ربح)
  */
-function cancelInvestment($id, $notes = '') {
-    $conn       = db();
-    $id         = (int)$id;
-    $canceledBy = (int)($_SESSION['user_id'] ?? 0);
-    $now        = date('Y-m-d H:i:s');
-    $notesEsc   = $conn->real_escape_string($notes);
+function cancelInvestment($id, $notes = '', $partialProfit = 0.0) {
+    $conn         = db();
+    $id           = (int)$id;
+    $canceledBy   = (int)($_SESSION['user_id'] ?? 0);
+    $now          = date('Y-m-d H:i:s');
+    $notesEsc     = $conn->real_escape_string($notes);
+    $partialProfit = max(0.0, (float)$partialProfit);
 
     $inv = getInvestment($id);
     if (!$inv) return ['success' => false, 'message' => 'الوديعة غير موجودة'];
@@ -355,31 +358,51 @@ function cancelInvestment($id, $notes = '') {
         return ['success' => false, 'message' => "الحساب البنكي المرتبط (id={$returnAccountId}) غير موجود في النظام"];
     }
     $returnAccount = $accResult->fetch_assoc();
+    $accName       = $conn->real_escape_string($returnAccount['account_name']);
 
-    // إعادة الأصل فقط
-    $newBalance = (float)$returnAccount['current_balance'] + $principal;
+    // إعادة الأصل + الربح الجزئي (إن وُجد)
+    $totalReturn = $principal + $partialProfit;
+    $newBalance  = (float)$returnAccount['current_balance'] + $totalReturn;
     $conn->query("UPDATE bank_accounts SET current_balance = $newBalance WHERE id = $returnAccountId");
 
     // تحديث الوديعة
     $conn->query("UPDATE bank_deposits_investment
                   SET status        = 'ملغي',
-                      actual_profit = 0,
+                      actual_profit = $partialProfit,
                       matured_at    = '$now',
                       matured_by    = $canceledBy
                   WHERE id = $id");
 
-    // تسجيل الحركة
-    $accName = $conn->real_escape_string($returnAccount['account_name']);
+    // تسجيل حركة الأصل
+    $profitNote = $partialProfit > 0 ? " + ربح جزئي " . number_format($partialProfit, 2) . " ريال" : " بدون ربح";
     $conn->query("INSERT INTO investment_transactions
                     (investment_id, transaction_type, account_id, amount, notes, created_by)
                   VALUES
                     ($id, 'إلغاء', $returnAccountId, $principal,
-                     'إلغاء مبكر — إعادة الأصل فقط لحساب $accName. $notesEsc', $canceledBy)");
+                     'إلغاء مبكر — إعادة الأصل لحساب $accName$profitNote. $notesEsc', $canceledBy)");
+
+    // تسجيل حركة الربح الجزئي منفصلة إن وُجد
+    if ($partialProfit > 0) {
+        $conn->query("INSERT INTO investment_transactions
+                        (investment_id, transaction_type, account_id, amount, notes, created_by)
+                      VALUES
+                        ($id, 'إضافة_ربح', $returnAccountId, $partialProfit,
+                         'ربح جزئي عند الإلغاء المبكر لحساب $accName', $canceledBy)");
+    }
+
+    $msg = "تم إلغاء الوديعة. أُعيد " . number_format($principal, 2) . " ريال";
+    if ($partialProfit > 0) {
+        $msg .= " + ربح جزئي " . number_format($partialProfit, 2) . " ريال";
+        $msg .= " (إجمالي: " . number_format($totalReturn, 2) . " ريال)";
+    }
+    $msg .= " لحساب {$returnAccount['account_name']}";
 
     return [
-        'success'   => true,
-        'principal' => $principal,
-        'message'   => "تم إلغاء الوديعة. أُعيد " . number_format($principal, 2) . " ريال لحساب {$returnAccount['account_name']}",
+        'success'        => true,
+        'principal'      => $principal,
+        'partial_profit' => $partialProfit,
+        'total_returned' => $totalReturn,
+        'message'        => $msg,
     ];
 }
 
@@ -419,8 +442,90 @@ function getInvestmentTransactions($investmentId) {
  */
 function generateInvestmentNumber() {
     $conn   = db();
-    $prefix = 'INV-' . date('Ymd') . '-';
-    $result = $conn->query("SELECT COUNT(*) AS c FROM bank_deposits_investment WHERE reference_number LIKE '$prefix%'");
-    $count  = ($result ? (int)$result->fetch_assoc()['c'] : 0) + 1;
-    return $prefix . str_pad($count, 4, '0', STR_PAD_LEFT);
+    $prefix = getSetting('prefix_investment', 'INV') . '-' . date('Ymd') . '-';
+    // نأخذ أعلى رقم تسلسلي موجود اليوم لتفادي التكرار
+    $result = $conn->query("SELECT reference_number FROM bank_deposits_investment
+                            WHERE reference_number LIKE '$prefix%'
+                            ORDER BY id DESC LIMIT 1");
+    if ($result && $result->num_rows > 0) {
+        $last  = $result->fetch_assoc()['reference_number'];
+        $parts = explode('-', $last);
+        $count = (int)end($parts) + 1;
+    } else {
+        $count = 1;
+    }
+    // تأكيد الفرادة في حال وجود تزامن
+    $candidate = $prefix . str_pad($count, 4, '0', STR_PAD_LEFT);
+    while (true) {
+        $check = $conn->query("SELECT id FROM bank_deposits_investment
+                               WHERE reference_number = '$candidate' LIMIT 1");
+        if (!$check || $check->num_rows === 0) break;
+        $count++;
+        $candidate = $prefix . str_pad($count, 4, '0', STR_PAD_LEFT);
+    }
+    return $candidate;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ⑦ تعديل الوديعة الاستثمارية
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * تعديل بيانات وديعة استثمارية نشطة
+ * يُعيد حساب الرصيد البنكي إذا تغيّر المبلغ
+ */
+function updateInvestment($id, $data) {
+    $conn      = db();
+    $id        = (int)$id;
+    $updatedBy = (int)($_SESSION['user_id'] ?? 0);
+
+    $inv = getInvestment($id);
+    if (!$inv) return ['success' => false, 'message' => 'الوديعة غير موجودة'];
+    if ($inv['status'] !== 'نشط') return ['success' => false, 'message' => 'لا يمكن تعديل وديعة غير نشطة'];
+
+    // الحقول المسموح بتعديلها
+    $depositName    = $conn->real_escape_string(trim($data['deposit_name']    ?? $inv['deposit_name']));
+    $refNumber      = $conn->real_escape_string(trim($data['reference_number'] ?? $inv['reference_number']));
+    $newAmount      = (float)($data['amount']           ?? $inv['amount']);
+    $interestRate   = (float)($data['interest_rate']    ?? $inv['interest_rate']);
+    $days           = (int)($data['days']               ?? $inv['days']);
+    $startDate      = $conn->real_escape_string($data['start_date']   ?? $inv['start_date']);
+    $maturityDate   = $conn->real_escape_string($data['maturity_date'] ?? $inv['maturity_date']);
+    $returnAccId    = isset($data['return_account_id']) && $data['return_account_id'] !== ''
+                        ? (int)$data['return_account_id']
+                        : (int)$inv['return_account_id'];
+    $notes          = $conn->real_escape_string(trim($data['notes'] ?? $inv['notes'] ?? ''));
+
+    // تعديل الرصيد البنكي إذا تغيّر المبلغ
+    $oldAmount = (float)$inv['amount'];
+    $accountId = (int)$inv['account_id'];
+    if ($newAmount != $oldAmount && $accountId > 0) {
+        $diff = $newAmount - $oldAmount;  // موجب = خصم إضافي، سالب = إعادة فرق
+        $conn->query("UPDATE bank_accounts SET current_balance = current_balance - ($diff) WHERE id = $accountId");
+
+        // تسجيل حركة التعديل
+        $conn->query("INSERT INTO investment_transactions
+                        (investment_id, transaction_type, account_id, amount, notes, created_by)
+                      VALUES
+                        ($id, 'إعادة_أصل', $accountId, " . abs($diff) . ",
+                         'تعديل مبلغ الوديعة: من $oldAmount إلى $newAmount', $updatedBy)");
+    }
+
+    // تحديث بيانات الوديعة
+    $sql = "UPDATE bank_deposits_investment SET
+                deposit_name      = '$depositName',
+                reference_number  = '$refNumber',
+                amount            = $newAmount,
+                interest_rate     = $interestRate,
+                days              = $days,
+                start_date        = '$startDate',
+                maturity_date     = '$maturityDate',
+                return_account_id = " . ($returnAccId > 0 ? $returnAccId : 'NULL') . ",
+                notes             = '$notes'
+            WHERE id = $id AND status = 'نشط'";
+
+    if ($conn->query($sql)) {
+        return ['success' => true, 'message' => 'تم تحديث الوديعة بنجاح'];
+    }
+    return ['success' => false, 'message' => 'فشل التحديث: ' . $conn->error];
 }
