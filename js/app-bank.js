@@ -191,7 +191,7 @@ function renderOverviewTab() {
                     <div class="bov2-kpi-icon" style="background:rgba(77,171,247,.12);color:#4dabf7">🏦</div>
                     <span class="bov2-kpi-tag">${bankAccounts.length} حساب</span>
                 </div>
-                <div class="bov2-kpi-val">${fmtMoney(totalBalance)}</div>
+                <div class="bov2-kpi-val">${formatMoneyWithSAR(totalBalance)}</div>
                 <div class="bov2-kpi-lbl">إجمالي أرصدة الحسابات</div>
             </div>
             <div class="bov2-kpi" style="--kpi-accent:#a78bfa">
@@ -199,7 +199,7 @@ function renderOverviewTab() {
                     <div class="bov2-kpi-icon" style="background:rgba(167,139,250,.12);color:#a78bfa">📈</div>
                     <span class="bov2-kpi-tag">${activeInv.length} نشطة</span>
                 </div>
-                <div class="bov2-kpi-val">${fmtMoney(totalInvested)}</div>
+                <div class="bov2-kpi-val">${formatMoneyWithSAR(totalInvested)}</div>
                 <div class="bov2-kpi-lbl">إجمالي الاستثمارات النشطة</div>
             </div>
             <div class="bov2-kpi" style="--kpi-accent:#22c55e">
@@ -207,7 +207,7 @@ function renderOverviewTab() {
                     <div class="bov2-kpi-icon" style="background:rgba(34,197,94,.12);color:#22c55e">💰</div>
                     <span class="bov2-kpi-tag">${doneInv.length} منتهية</span>
                 </div>
-                <div class="bov2-kpi-val">${fmtMoney(totalProfit)}</div>
+                <div class="bov2-kpi-val">${formatMoneyWithSAR(totalProfit)}</div>
                 <div class="bov2-kpi-lbl">إجمالي الأرباح المحققة</div>
             </div>
             <div class="bov2-kpi" style="--kpi-accent:#f59e0b">
@@ -217,7 +217,7 @@ function renderOverviewTab() {
                         ${upcoming[0] ? urgencyLabel(daysLeft(upcoming[0].maturity_date)) : '—'}
                     </span>
                 </div>
-                <div class="bov2-kpi-val">${upcoming[0] ? fmtMoney(upcoming[0].amount) : '—'}</div>
+                <div class="bov2-kpi-val">${upcoming[0] ? formatMoneyWithSAR(upcoming[0].amount) : '—'}</div>
                 <div class="bov2-kpi-lbl">أقرب استحقاق</div>
             </div>
         </div>
@@ -230,7 +230,7 @@ function renderOverviewTab() {
                 <div class="bov2-card-hdr">
                     <div>
                         <div class="bov2-card-title">نشاط الودائع الاستثمارية</div>
-                        <div class="bov2-card-sub">آخر 6 أشهر · إجمالي ${fmtMoney(monthlyData.reduce((s, m) => s + m.amount, 0))}</div>
+                        <div class="bov2-card-sub">آخر 6 أشهر · إجمالي ${formatMoneyWithSAR(monthlyData.reduce((s, m) => s + m.amount, 0))}</div>
                     </div>
                     <div class="bov2-legend">
                         <span class="bov2-legend-dot" style="background:#4dabf7"></span>
@@ -253,7 +253,7 @@ function renderOverviewTab() {
         return `
                                 <div class="bov2-bar-col">
                                     <div class="bov2-bar-hover">
-                                        <div class="bov2-tooltip">${m.label}<br><strong>${fmtMoney(m.amount)}</strong></div>
+                                        <div class="bov2-tooltip">${m.label}<br><strong>${formatMoneyWithSAR(m.amount)}</strong></div>
                                         <div class="bov2-bar-fill ${m.isCurrent ? 'bov2-bar-current' : ''}"
                                              style="height:${h}%"></div>
                                     </div>
@@ -297,7 +297,7 @@ function renderOverviewTab() {
                                     <div class="bov2-up-bar" style="width:${progress}%;background:${col}"></div>
                                 </div>
                                 <div class="bov2-up-footer">
-                                    <span>${fmtMoney(inv.amount)}</span>
+                                    <span>${formatMoneyWithSAR(inv.amount)}</span>
                                     <span>${progress}% منقضي</span>
                                 </div>
                             </div>
@@ -319,7 +319,7 @@ function renderOverviewTab() {
                 <div class="bov2-card-hdr">
                     <div>
                         <div class="bov2-card-title">الحسابات البنكية</div>
-                        <div class="bov2-card-sub">${bankAccounts.length} حساب · ${fmtMoney(totalBalance)} إجمالي</div>
+                        <div class="bov2-card-sub">${bankAccounts.length} حساب · ${formatMoneyWithSAR(totalBalance)} إجمالي</div>
                     </div>
                     <button class="bov2-link" onclick="switchBankTab('accounts')">إدارة ←</button>
                 </div>
@@ -335,7 +335,7 @@ function renderOverviewTab() {
                             <div class="bov2-acc-inner">
                                 <div class="bov2-acc-bank">${acc.bank_name || ''}</div>
                                 <div class="bov2-acc-name">${acc.account_name}</div>
-                                <div class="bov2-acc-bal">${fmtMoney(bal)}</div>
+                                <div class="bov2-acc-bal">${formatMoneyWithSAR(bal)}</div>
                                 <div class="bov2-acc-bottom">
                                     <div class="bov2-acc-track">
                                         <div class="bov2-acc-fill" style="width:${pct}%;background:${up ? '#22c55e' : '#ef4444'}"></div>
@@ -353,7 +353,7 @@ function renderOverviewTab() {
                 <div class="bov2-card-hdr">
                     <div>
                         <div class="bov2-card-title">آخر الودائع</div>
-                        <div class="bov2-card-sub">ودائع الشهر الحالي: ${fmtMoney(thisMonth)}</div>
+                        <div class="bov2-card-sub">ودائع الشهر الحالي: ${formatMoneyWithSAR(thisMonth)}</div>
                     </div>
                 </div>
                 <div class="bov2-deps-list">
@@ -367,7 +367,7 @@ function renderOverviewTab() {
                                 <div class="bov2-dep-meta">${dep.account_name} · ${fmtDate(dep.deposit_date)}</div>
                             </div>
                             <div class="bov2-dep-right">
-                                <div class="bov2-dep-amt">+${fmtMoney(dep.amount)}</div>
+                                <div class="bov2-dep-amt">+${formatMoneyWithSAR(dep.amount)}</div>
                                 <div class="bov2-dep-badge" style="color:${ok ? '#22c55e' : '#f59e0b'};background:${ok ? 'rgba(34,197,94,.1)' : 'rgba(245,158,11,.1)'}">${dep.status}</div>
                             </div>
                         </div>`;
@@ -394,7 +394,7 @@ function renderAccountCards() {
                 <span class="br-sub">${acc.bank_name} · ${acc.account_number || ''}</span>
             </div>
             <div class="br-meta">
-                <span class="br-amount">${fmtMoney(acc.current_balance)}</span>
+                <span class="br-amount">${formatMoneyWithSAR(acc.current_balance)}</span>
             </div>
         </div>`;
     }).join('');
@@ -419,7 +419,7 @@ function renderRecentDepositsList(deposits) {
                 </div>
             </div>
             <div class="deposit-item-right">
-                <div class="deposit-item-amount">+${formatMoney(dep.amount)}</div>
+                <div class="deposit-item-amount">+${formatMoneyWithSAR(dep.amount)}</div>
                 <div class="deposit-item-type">${dep.deposit_type}</div>
             </div>
         </div>`).join('') +
@@ -462,7 +462,7 @@ function renderUpcomingDepositsTimeline() {
                 <div class="timeline-content">
                     <div class="tl-label ${urgency}">${label}</div>
                     <div class="tl-name">${dep.deposit_name}</div>
-                    <div class="tl-amount">${formatMoney(dep.expected_amount)}</div>
+                    <div class="tl-amount">${formatMoneyWithSAR(dep.expected_amount)}</div>
                     <div class="tl-account">${dep.account_name || '—'}</div>
                 </div>
                 <div class="timeline-actions">
@@ -506,17 +506,17 @@ function renderDepositsTab() {
             <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;margin-bottom:1.25rem">
                 <div class="acc-daily-stat" style="border-right:3px solid var(--accent-green)">
                     <div style="font-size:.8rem;color:var(--text-muted)">إجمالي مُؤكَّد</div>
-                    <div style="font-size:1.3rem;font-weight:700;color:var(--accent-green)">${fmtMoney(totalThisMonth)}</div>
+                    <div style="font-size:1.3rem;font-weight:700;color:var(--accent-green)">${formatMoneyWithSAR(totalThisMonth)}</div>
                     <div style="font-size:.78rem;color:var(--text-muted)">${thisMonthConfirmed.length} إيداع</div>
                 </div>
                 <div class="acc-daily-stat" style="border-right:3px solid var(--accent-orange)">
                     <div style="font-size:.8rem;color:var(--text-muted)">في الانتظار</div>
-                    <div style="font-size:1.3rem;font-weight:700;color:var(--accent-orange)">${fmtMoney(totalPending)}</div>
+                    <div style="font-size:1.3rem;font-weight:700;color:var(--accent-orange)">${formatMoneyWithSAR(totalPending)}</div>
                     <div style="font-size:.78rem;color:var(--text-muted)">${thisMonthPending.length} إيداع</div>
                 </div>
                 <div class="acc-daily-stat" style="border-right:3px solid var(--accent-blue)">
                     <div style="font-size:.8rem;color:var(--text-muted)">إجمالي الشهر</div>
-                    <div style="font-size:1.3rem;font-weight:700;color:var(--accent-blue)">${fmtMoney(totalThisMonth + totalPending)}</div>
+                    <div style="font-size:1.3rem;font-weight:700;color:var(--accent-blue)">${formatMoneyWithSAR(totalThisMonth + totalPending)}</div>
                     <div style="font-size:.78rem;color:var(--text-muted)">${thisMonthDeps.length} إيداع</div>
                 </div>
                 <div class="acc-daily-stat" style="border-right:3px solid var(--accent-cyan)">
@@ -552,7 +552,7 @@ function renderDepositsTab() {
                                 <div class="dep-bank-name">${dep.bank_name || ''}</div>
                             </td>
                             <td><span class="deposit-type-badge">${dep.deposit_type}</span></td>
-                            <td class="dep-amount">+${fmtMoney(dep.amount)}</td>
+                            <td class="dep-amount">+${formatMoneyWithSAR(dep.amount)}</td>
                             <td>${getDepositStatusBadge(dep.status)}</td>
                             <td class="dep-actions">
                                 ${dep.status === 'معلق' && canDo('bank.confirm_deposit')
@@ -622,7 +622,7 @@ function renderDepositsRows(deposits) {
                 <div class="dep-bank-name">${dep.bank_name || ''}</div>
             </td>
             <td><span class="deposit-type-badge">${dep.deposit_type}</span></td>
-            <td class="dep-amount">+${fmtMoney(dep.amount)}</td>
+            <td class="dep-amount">+${formatMoneyWithSAR(dep.amount)}</td>
             <td>${getDepositStatusBadge(dep.status)}</td>
             <td class="dep-actions">
                 ${dep.status === 'معلق' && canDo('bank.confirm_deposit')
@@ -699,10 +699,10 @@ async function renderAccountsTab() {
                             <span class="br-sub">${acc.bank_name} · <code style="font-size:.72rem">${acc.account_number || ''}</code> · ${acc.account_type || 'جاري'}</span>
                         </div>
                         <div class="br-meta">
-                            <span class="br-amount blue">${fmtMoney(acc.current_balance)}</span>
+                            <span class="br-amount blue">${formatMoneyWithSAR(acc.current_balance)}</span>
                             <span class="br-sub-meta">
                                 ${lastBal && lastBal.balance_date !== today
-                ? `<span style="color:${diffColor}">${diffSign}${fmtMoney(Math.abs(diff))}</span>`
+                ? `<span style="color:${diffColor}">${diffSign}${formatMoneyWithSAR(Math.abs(diff))}</span>`
                 : ''}
                                 ${todayBal
                 ? `<span style="color:var(--accent-green);font-size:.72rem">✅ مسجّل اليوم</span>`
@@ -740,12 +740,12 @@ async function renderAccountsTab() {
                             <span class="br-sub">${b.bank_name || ''} · ${fmtDate(b.balance_date)} ${b.notes ? '· ' + b.notes : ''}</span>
                         </div>
                         <div class="br-meta">
-                            <span class="br-amount">${fmtMoney(b.closing_balance)}</span>
-                            <span class="br-sub-meta" style="color:${color}">${diff >= 0 ? '+' : ''}${fmtMoney(diff)}</span>
+                            <span class="br-amount">${formatMoneyWithSAR(b.closing_balance)}</span>
+                            <span class="br-sub-meta" style="color:${color}">${diff >= 0 ? '+' : ''}${formatMoneyWithSAR(diff)}</span>
                         </div>
                         <div class="br-stat-group">
-                            <div class="br-stat"><span>${fmtMoney(b.opening_balance)}</span><small>افتتاح</small></div>
-                            <div class="br-stat green"><span>+${fmtMoney(b.total_deposits)}</span><small>ودائع</small></div>
+                            <div class="br-stat"><span>${formatMoneyWithSAR(b.opening_balance)}</span><small>افتتاح</small></div>
+                            <div class="br-stat green"><span>+${formatMoneyWithSAR(b.total_deposits)}</span><small>ودائع</small></div>
                         </div>
                     </div>`;
     }).join('') : `
@@ -775,11 +775,11 @@ function openRecordBalanceModal(accountId) {
         <div style="background:var(--bg-surface);border-radius:10px;padding:1rem;margin-bottom:1rem;display:flex;justify-content:space-between">
             <div>
                 <div style="font-size:.8rem;color:var(--text-muted)">الرصيد الحالي في النظام</div>
-                <div style="font-size:1.2rem;font-weight:700;color:var(--accent-blue)">${fmtMoney(acc.current_balance)}</div>
+                <div style="font-size:1.2rem;font-weight:700;color:var(--accent-blue)">${formatMoneyWithSAR(acc.current_balance)}</div>
             </div>
             ${last ? `<div style="text-align:left">
                 <div style="font-size:.8rem;color:var(--text-muted)">آخر تسجيل (${fmtDate(last.balance_date)})</div>
-                <div style="font-size:1rem;font-weight:600">${fmtMoney(last.closing_balance)}</div>
+                <div style="font-size:1rem;font-weight:600">${formatMoneyWithSAR(last.closing_balance)}</div>
             </div>` : ''}
         </div>
 
@@ -828,7 +828,7 @@ function calcBalanceDiff(currentBalance) {
     if (!el) return;
     if (isNaN(diff) || diff === 0) { el.textContent = ''; return; }
     el.innerHTML = `<span style="color:${diff > 0 ? 'var(--accent-green)' : 'var(--accent-red)'}">
-        ${diff > 0 ? '▲ زيادة' : '▼ نقص'} ${fmtMoney(Math.abs(diff))} عن رصيد النظام
+        ${diff > 0 ? '▲ زيادة' : '▼ نقص'} ${formatMoneyWithSAR(Math.abs(diff))} عن رصيد النظام
     </span>`;
 }
 
@@ -878,7 +878,7 @@ function openRecordAllBalancesModal() {
                         <span style="font-weight:700">${acc.bank_name}</span>
                         <span style="color:var(--text-muted);font-size:.85rem"> · ${acc.account_name}</span>
                     </div>
-                    <span style="color:var(--accent-blue);font-weight:600">${fmtMoney(acc.current_balance)}</span>
+                    <span style="color:var(--accent-blue);font-weight:600">${formatMoneyWithSAR(acc.current_balance)}</span>
                 </div>
                 <div style="display:flex;gap:.75rem;align-items:center">
                     <input type="number" step="0.01"
@@ -977,7 +977,7 @@ function openEditBalanceModal(accountId) {
             <div class="form-group full-span">
                 <label class="form-label">الرصيد الحالي</label>
                 <div style="font-size:1.4rem;font-weight:700;color:var(--accent-blue);padding:.5rem 0">
-                    ${fmtMoney(acc.current_balance)}
+                    ${formatMoneyWithSAR(acc.current_balance)}
                 </div>
             </div>
             <div class="form-group full-span">
@@ -1056,10 +1056,10 @@ function openBalanceHistoryModal(accountId) {
         const color = diff >= 0 ? 'var(--accent-green)' : 'var(--accent-red)';
         return `<tr>
                             <td style="font-weight:600">${fmtDate(b.balance_date)}</td>
-                            <td>${fmtMoney(b.opening_balance)}</td>
-                            <td style="color:var(--accent-green)">+${fmtMoney(b.total_deposits)}</td>
-                            <td style="font-weight:700">${fmtMoney(b.closing_balance)}</td>
-                            <td style="color:${color};font-weight:600">${diff >= 0 ? '+' : ''}${fmtMoney(diff)}</td>
+                            <td>${formatMoneyWithSAR(b.opening_balance)}</td>
+                            <td style="color:var(--accent-green)">+${formatMoneyWithSAR(b.total_deposits)}</td>
+                            <td style="font-weight:700">${formatMoneyWithSAR(b.closing_balance)}</td>
+                            <td style="color:${color};font-weight:600">${diff >= 0 ? '+' : ''}${formatMoneyWithSAR(diff)}</td>
                             <td style="font-size:.82rem;color:var(--text-muted)">${b.notes || '—'}</td>
                         </tr>`;
     }).join('')}
@@ -1136,11 +1136,11 @@ function renderMonthlyTab() {
         <!-- إحصاءات الشهر -->
         <div class="monthly-stats-row">
             <div class="monthly-stat">
-                <div class="ms-value">${formatMoney(totalExpected)}</div>
+                <div class="ms-value">${formatMoneyWithSAR(totalExpected)}</div>
                 <div class="ms-label">المتوقع هذا الشهر</div>
             </div>
             <div class="monthly-stat ms-received">
-                <div class="ms-value">${formatMoney(totalReceived)}</div>
+                <div class="ms-value">${formatMoneyWithSAR(totalReceived)}</div>
                 <div class="ms-label">تم استلامه</div>
             </div>
             <div class="monthly-stat">
@@ -1277,7 +1277,7 @@ function renderMonthlyDepositCards() {
                     <span class="br-sub">🏦 ${dep.account_name || '—'} ${dep.notes ? '· ' + dep.notes : ''}</span>
                 </div>
                 <div class="br-meta">
-                    <span class="br-amount green">${formatMoney(dep.expected_amount)}</span>
+                    <span class="br-amount green">${formatMoneyWithSAR(dep.expected_amount)}</span>
                     <span class="br-tag" style="color:${indColor}">${statusLabel}</span>
                 </div>
                 <div class="br-actions">
@@ -1306,7 +1306,7 @@ function showDayDeposits(day) {
     const listHtml = dayDeposits.map(dep => `
         <div class="day-dep-item">
             <strong>${dep.deposit_name}</strong>
-            <span>${formatMoney(dep.expected_amount)}</span>
+            <span>${formatMoneyWithSAR(dep.expected_amount)}</span>
             <span class="dep-status-sm">${dep.status}</span>
         </div>`).join('');
 
@@ -1374,12 +1374,12 @@ function updateQuickStats(totalBalance, thisMonth, pending, confirmed) {
     container.innerHTML = `
         <div class="quick-stat-card qsc-blue">
             <div class="qsc-icon">🏦</div>
-            <div class="qsc-value">${formatMoney(totalBalance)}</div>
+            <div class="qsc-value">${formatMoneyWithSAR(totalBalance)}</div>
             <div class="qsc-label">إجمالي الأرصدة</div>
         </div>
         <div class="quick-stat-card qsc-green">
             <div class="qsc-icon">📈</div>
-            <div class="qsc-value">${formatMoney(thisMonth)}</div>
+            <div class="qsc-value">${formatMoneyWithSAR(thisMonth)}</div>
             <div class="qsc-label">ودائع هذا الشهر</div>
         </div>
         <div class="quick-stat-card qsc-orange">
@@ -1721,7 +1721,7 @@ function viewDepositDetails(id) {
             <div class="ddv-row"><span>البنك</span><strong>${dep.bank_name || '—'}</strong></div>
             <div class="ddv-row"><span>التاريخ</span><strong>${formatDate(dep.deposit_date)}</strong></div>
             <div class="ddv-row"><span>النوع</span><strong>${dep.deposit_type}</strong></div>
-            <div class="ddv-row"><span>المبلغ</span><strong class="dep-amount-lg">+${formatMoney(dep.amount)}</strong></div>
+            <div class="ddv-row"><span>المبلغ</span><strong class="dep-amount-lg">+${formatMoneyWithSAR(dep.amount)}</strong></div>
             <div class="ddv-row"><span>الحالة</span>${getDepositStatusBadge(dep.status)}</div>
             ${dep.depositor_name ? `<div class="ddv-row"><span>المودع</span><strong>${dep.depositor_name}</strong></div>` : ''}
             ${dep.reference_number ? `<div class="ddv-row"><span>المرجع</span><strong>${dep.reference_number}</strong></div>` : ''}
@@ -1758,7 +1758,7 @@ function checkDepositAlerts() {
         if (diffDays < 0) {
             alerts.push({ type: 'overdue', msg: `⚠️ وديعة متأخرة: ${dep.deposit_name} (${Math.abs(diffDays)} يوم تأخير)`, dep });
         } else if (diffDays === 0) {
-            alerts.push({ type: 'today', msg: `🔔 وديعة اليوم: ${dep.deposit_name} — ${formatMoney(dep.expected_amount)}`, dep });
+            alerts.push({ type: 'today', msg: `🔔 وديعة اليوم: ${dep.deposit_name} — ${formatMoneyWithSAR(dep.expected_amount)}`, dep });
         } else if (diffDays <= 3) {
             alerts.push({ type: 'soon', msg: `📅 وديعة قريبة: ${dep.deposit_name} خلال ${diffDays} أيام`, dep });
         }
@@ -2001,7 +2001,7 @@ function renderInvestmentsTab() {
                     <div class="inv-stat-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-4 0v2"/></svg></div>
                     <span class="inv-stat-badge">${active.length} وديعة</span>
                 </div>
-                <div class="inv-stat-value">${fmtMoney(totalInv)}</div>
+                <div class="inv-stat-value">${formatMoneyWithSAR(totalInv)}</div>
                 <div class="inv-stat-label">إجمالي مُستثمر</div>
             </div>
             <div class="inv-stat-card inv-stat-green">
@@ -2009,7 +2009,7 @@ function renderInvestmentsTab() {
                     <div class="inv-stat-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg></div>
                     <span class="inv-stat-badge">حتى اليوم</span>
                 </div>
-                <div class="inv-stat-value">${fmtMoney(totalPro)}</div>
+                <div class="inv-stat-value">${formatMoneyWithSAR(totalPro)}</div>
                 <div class="inv-stat-label">ربح متراكم</div>
             </div>
             <div class="inv-stat-card ${overdue > 0 ? 'inv-stat-red' : 'inv-stat-muted'}">
@@ -2033,7 +2033,7 @@ function renderInvestmentsTab() {
                     <div class="inv-stat-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div>
                     <span class="inv-stat-badge">${done.length} وديعة</span>
                 </div>
-                <div class="inv-stat-value">${fmtMoney(totalDoneProfit)}</div>
+                <div class="inv-stat-value">${formatMoneyWithSAR(totalDoneProfit)}</div>
                 <div class="inv-stat-label">أرباح محققة</div>
             </div>
         </div>
@@ -2155,8 +2155,8 @@ function renderInvestmentRows(list) {
 
         // ── الربح المعروض ─────────────────────────────────
         const profitVal = status === 'منتهي' && inv.actual_profit != null
-            ? fmtMoney(inv.actual_profit)
-            : fmtMoney(inv.expected_profit);
+            ? formatMoneyWithSAR(inv.actual_profit)
+            : formatMoneyWithSAR(inv.expected_profit);
 
         html += `<tr class="${rowCls}" data-inv-id="${inv.id}" onclick="toggleInvestment(${inv.id})">
             <td>
@@ -2167,7 +2167,7 @@ function renderInvestmentRows(list) {
                 <div style="font-size:.83rem;font-weight:500;overflow:hidden;text-overflow:ellipsis">${inv.bank_name || '—'}</div>
                 <div style="font-size:.71rem;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis">${inv.account_name || ''}</div>
             </td>
-            <td style="font-weight:700;color:var(--accent-blue);font-variant-numeric:tabular-nums;direction:ltr;text-align:left">${fmtMoney(inv.amount)}</td>
+            <td style="font-weight:700;color:var(--accent-blue);font-variant-numeric:tabular-nums;direction:ltr;text-align:left">${formatMoneyWithSAR(inv.amount)}</td>
             <td style="font-weight:600;color:var(--accent-green);text-align:center">${parseFloat(inv.interest_rate)}%</td>
             <td>
                 <div style="font-size:.83rem">${fmtDate(inv.maturity_date)}</div>${sub}
@@ -2227,7 +2227,7 @@ function openInvDetailModal(inv) {
             <div class="idm-header">
                 <div class="idm-header-left">
                     ${statusPill}
-                    <div class="idm-amount">ر.س ${fmtMoney(inv.amount)}</div>
+                    <div class="idm-amount"><span class="sar-symbol"></span> ${formatMoneyWithSAR(inv.amount)}</div>
                     <div class="idm-dep-name">${inv.deposit_name || inv.reference_number}</div>
                 </div>
                 <button class="idm-close" onclick="closeInvDetailModal()">
@@ -2279,7 +2279,7 @@ function openInvDetailModal(inv) {
                     <div class="idm-amounts-grid">
                         <div class="idm-amount-card">
                             <div class="idm-amount-label">المبلغ الأصلي</div>
-                            <div class="idm-amount-val" style="color:var(--accent-blue)">${fmtMoney(inv.amount)}</div>
+                            <div class="idm-amount-val" style="color:var(--accent-blue)">${formatMoneyWithSAR(inv.amount)}</div>
                         </div>
                         <div class="idm-amount-card">
                             <div class="idm-amount-label">معدل الفائدة</div>
@@ -2287,19 +2287,19 @@ function openInvDetailModal(inv) {
                         </div>
                         <div class="idm-amount-card">
                             <div class="idm-amount-label">الربح المتوقع</div>
-                            <div class="idm-amount-val" style="color:var(--accent-green)">+${fmtMoney(expected)}</div>
+                            <div class="idm-amount-val" style="color:var(--accent-green)">+${formatMoneyWithSAR(expected)}</div>
                         </div>
                         ${isActive ? `<div class="idm-amount-card">
                             <div class="idm-amount-label">الربح المتراكم</div>
-                            <div class="idm-amount-val" style="color:var(--accent-blue)">+${fmtMoney(accrued)}</div>
+                            <div class="idm-amount-val" style="color:var(--accent-blue)">+${formatMoneyWithSAR(accrued)}</div>
                         </div>` : ''}
                         ${actual !== null ? `<div class="idm-amount-card">
                             <div class="idm-amount-label">الربح الفعلي</div>
-                            <div class="idm-amount-val" style="color:#40c057;font-size:1.1rem">+${fmtMoney(actual)}</div>
+                            <div class="idm-amount-val" style="color:#40c057;font-size:1.1rem">+${formatMoneyWithSAR(actual)}</div>
                         </div>` : ''}
                         <div class="idm-amount-card idm-amount-total">
                             <div class="idm-amount-label">الإجمالي</div>
-                            <div class="idm-amount-val">${fmtMoney(parseFloat(inv.amount) + (actual !== null ? actual : expected))}</div>
+                            <div class="idm-amount-val">${formatMoneyWithSAR(parseFloat(inv.amount) + (actual !== null ? actual : expected))}</div>
                         </div>
                     </div>
                 </div>
@@ -2358,7 +2358,7 @@ function closeInvDetailModal() {
 function openAddInvestmentModal() {
     const opts = bankAccounts
         .filter(a => a.is_active == 1)
-        .map(a => `<option value="${a.id}">${a.bank_name} — ${a.account_name} (${fmtMoney(a.current_balance)})</option>`)
+        .map(a => `<option value="${a.id}">${a.bank_name} — ${a.account_name} (${formatMoneyWithSAR(a.current_balance)})</option>`)
         .join('');
 
     if (!opts) { showToast('لا توجد حسابات بنكية نشطة', 'error'); return; }
@@ -2375,7 +2375,7 @@ function openAddInvestmentModal() {
                 <select id="ni-account" class="form-input">${opts}</select>
             </div>
             <div class="form-group">
-                <label class="form-label">المبلغ (ر.س) <span style="color:var(--accent-red)">*</span></label>
+                <label class="form-label">المبلغ (<span class="sar-symbol"></span>) <span style="color:var(--accent-red)">*</span></label>
                 <input id="ni-amount" class="form-input" type="number" min="1" step="0.01" placeholder="0.00" oninput="calcNewInvProfit()">
             </div>
             <div class="form-group">
@@ -2431,7 +2431,7 @@ function calcNewInvProfit() {
     const days = parseInt(document.getElementById('ni-days')?.value) || 0;
     const profit = Math.round(amount * rate / 100 * days / 360 * 100) / 100;
     const el = document.getElementById('ni-profit-val');
-    if (el) el.textContent = profit > 0 ? '+' + fmtMoney(profit) : '—';
+    if (el) el.textContent = profit > 0 ? '+' + formatMoneyWithSAR(profit) : '—';
 }
 
 function calcNewInvMaturity() {
@@ -2499,12 +2499,12 @@ function openMatureInvestmentModal(id) {
         <div style="background:rgba(105,219,124,.08);border:1px solid rgba(105,219,124,.25);border-radius:10px;padding:1rem;margin-bottom:1rem">
             <div style="font-size:.9rem;color:var(--text-primary);line-height:1.7">
                 <strong>${inv.deposit_name || inv.reference_number}</strong><br>
-                الأصل: <strong style="color:var(--accent-blue)">${fmtMoney(inv.amount)}</strong> |
-                الربح المتوقع: <strong style="color:var(--accent-green)">+${fmtMoney(expected)}</strong>
+                الأصل: <strong style="color:var(--accent-blue)">${formatMoneyWithSAR(inv.amount)}</strong> |
+                الربح المتوقع: <strong style="color:var(--accent-green)">+${formatMoneyWithSAR(expected)}</strong>
             </div>
         </div>
         <div class="form-group">
-            <label class="form-label">الربح الفعلي (ر.س)</label>
+            <label class="form-label">الربح الفعلي (<span class="sar-symbol"></span>)</label>
             <input id="mature-profit" class="form-input" type="number" min="0" step="0.01"
                 value="${expected}" placeholder="${expected}">
             <small style="color:var(--text-muted);font-size:.78rem">اتركه كما هو إذا مطابق للمتوقع</small>
@@ -2555,7 +2555,7 @@ function openCancelInvestmentModal(id) {
             <span style="font-size:1.75rem">⚠️</span>
             <div style="color:var(--text-primary);font-size:.95rem;line-height:1.6">
                 <strong>تحذير:</strong> الإلغاء المبكر — المبلغ الأصلي
-                (<strong style="color:var(--accent-blue)">${fmtMoney(inv.amount)}</strong>)
+                (<strong style="color:var(--accent-blue)">${formatMoneyWithSAR(inv.amount)}</strong>)
                 سيُعاد للحساب. يمكنك إضافة ربح جزئي إن وُجد.
             </div>
         </div>
@@ -2566,10 +2566,10 @@ function openCancelInvestmentModal(id) {
                     min="0" step="0.01" placeholder="0.00"
                     style="padding-left:2.5rem"
                     oninput="updateCancelTotal(${inv.amount})">
-                <span style="position:absolute;left:.75rem;top:50%;transform:translateY(-50%);color:var(--text-muted);font-size:.85rem;pointer-events:none">ر.س</span>
+                <span style="position:absolute;left:.75rem;top:50%;transform:translateY(-50%);color:var(--text-muted);font-size:.85rem;pointer-events:none"><span class="sar-symbol"></span></span>
             </div>
             <div id="cancel-total-preview" style="margin-top:.5rem;font-size:.82rem;color:var(--text-muted)">
-                إجمالي المُعاد: <strong style="color:var(--accent-blue)">${fmtMoney(inv.amount)}</strong>
+                إجمالي المُعاد: <strong style="color:var(--accent-blue)">${formatMoneyWithSAR(inv.amount)}</strong>
             </div>
         </div>
         <div class="form-group">
@@ -2593,11 +2593,11 @@ function updateCancelTotal(principal) {
     if (!preview) return;
     if (profit > 0) {
         preview.innerHTML =
-            'إجمالي المُعاد: أصل <strong style="color:var(--accent-blue)">' + fmtMoney(principal) + '</strong>' +
-            ' + ربح جزئي <strong style="color:var(--accent-green)">' + fmtMoney(profit) + '</strong>' +
-            ' = <strong style="color:var(--text-primary)">' + fmtMoney(total) + '</strong>';
+            'إجمالي المُعاد: أصل <strong style="color:var(--accent-blue)">' + formatMoneyWithSAR(principal) + '</strong>' +
+            ' + ربح جزئي <strong style="color:var(--accent-green)">' + formatMoneyWithSAR(profit) + '</strong>' +
+            ' = <strong style="color:var(--text-primary)">' + formatMoneyWithSAR(total) + '</strong>';
     } else {
-        preview.innerHTML = 'إجمالي المُعاد: <strong style="color:var(--accent-blue)">' + fmtMoney(principal) + '</strong>';
+        preview.innerHTML = 'إجمالي المُعاد: <strong style="color:var(--accent-blue)">' + formatMoneyWithSAR(principal) + '</strong>';
     }
 }
 
@@ -2657,7 +2657,7 @@ async function openEditInvestmentModal(id) {
                 <input id="ei-ref" class="form-input" type="text" value="${inv.reference_number || ''}">
             </div>
             <div class="form-group">
-                <label class="form-label">المبلغ (ر.س)</label>
+                <label class="form-label">المبلغ (<span class="sar-symbol"></span>)</label>
                 <input id="ei-amount" class="form-input" type="number" min="1" step="0.01"
                     value="${inv.amount}" oninput="calcEditProfit()">
             </div>
@@ -2689,7 +2689,7 @@ async function openEditInvestmentModal(id) {
                 <textarea id="ei-notes" class="form-input" rows="2">${inv.notes || ''}</textarea>
             </div>
             <div id="ei-profit-preview" style="grid-column:1/-1;background:rgba(74,171,247,.07);border:1px solid rgba(74,171,247,.2);border-radius:10px;padding:.75rem 1rem;font-size:.85rem;color:var(--text-primary)">
-                الربح المتوقع: <strong style="color:var(--accent-green)" id="ei-profit-val">+${fmtMoney(inv.expected_profit)}</strong>
+                الربح المتوقع: <strong style="color:var(--accent-green)" id="ei-profit-val">+${formatMoneyWithSAR(inv.expected_profit)}</strong>
             </div>
         </div>
         <div style="display:flex;gap:.75rem;margin-top:1.25rem;justify-content:flex-end">
@@ -2708,7 +2708,7 @@ function calcEditProfit() {
     const days = parseInt(document.getElementById('ei-days')?.value) || 0;
     const profit = Math.round(amount * rate / 100 * days / 360 * 100) / 100;
     const el = document.getElementById('ei-profit-val');
-    if (el) el.textContent = '+' + fmtMoney(profit);
+    if (el) el.textContent = '+' + formatMoneyWithSAR(profit);
 }
 
 function calcEditMaturity() {

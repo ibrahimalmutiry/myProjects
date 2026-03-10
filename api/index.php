@@ -43,9 +43,38 @@ try {
 $method = $_SERVER['REQUEST_METHOD'];
 $action = $_GET['action'] ?? '';
 
+// ── دالة مساعدة: تأكد من وجود جدول system_settings ──────────
+function ensureSystemSettingsTable($conn = null) {
+    if (!$conn) $conn = db();
+    $sql = "CREATE TABLE IF NOT EXISTS system_settings (
+        id            INT          NOT NULL AUTO_INCREMENT,
+        setting_key   VARCHAR(100) NOT NULL,
+        setting_value VARCHAR(255) NOT NULL DEFAULT '',
+        setting_label VARCHAR(200) DEFAULT NULL,
+        setting_group VARCHAR(100) DEFAULT 'general',
+        updated_by    INT          DEFAULT NULL,
+        updated_at    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        UNIQUE KEY uq_key (setting_key)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+    $conn->query($sql);
+}
+
+// ── دالة مساعدة: جلب إعداد من system_settings ──────────────
+function getSystemSetting(string $key, string $default = ''): string {
+    $conn = db();
+    $stmt = $conn->prepare('SELECT setting_value FROM system_settings WHERE setting_key=? LIMIT 1');
+    if (!$stmt) return $default;
+    $stmt->bind_param('s', $key);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $row = $result ? $result->fetch_assoc() : null;
+    $stmt->close();
+    return ($row && $row['setting_value'] !== null) ? (string)$row['setting_value'] : $default;
+}
+
 // معالجة الطلبات
 try {
-    $conn = db();
     switch ($action) {
 
         // ─── الإحصائيات ───────────────────────────────────────
@@ -376,7 +405,7 @@ try {
         
             /* ── نهاية الـ PATCH ── أضف هذا قبل default: في الـ switch ── */
         // ═══════════════════════════════════════════════════════
-        //  APIs الحسابات البنكية
+        //  APIs الودائع البنكية
         // ═══════════════════════════════════════════════════════
 
         // ─── الحسابات البنكية ───────────────────────────────────
@@ -386,7 +415,7 @@ try {
             jsonResponse(['success' => true, 'data' => $accounts]);
             break;
 
-        // ─── جميع الحسابات البنكية ──────────────────────────────
+        // ─── جميع الودائع البنكية ──────────────────────────────
         case 'bank_deposits':
             require_once __DIR__ . '/../includes/bank_functions.php';
             $limit    = isset($_GET['limit']) ? (int)$_GET['limit'] : null;
@@ -1127,6 +1156,8 @@ try {
                 SELECT
                     t.id, t.transaction_number, t.transaction_date,
                     t.description, t.amount, t.priority,
+                    IFNULL(t.currency, 'SAR') AS currency,
+                    IFNULL(t.exchange_rate, 1) AS exchange_rate,
                     tt.name  AS transaction_type,
                     ts.name  AS sub_type,
                     ec.name  AS created_by_name,
@@ -1157,8 +1188,9 @@ try {
                                                     OR sp.transaction_type_id IS NULL)
                                                AND sp.is_active = 1
                                                AND sp.scope IN ('transaction','all')
-                WHERE p.status = 'معلق'
+                WHERE (p.status = 'معلق' OR p.status IS NULL)
                   AND b.budget_status IS NOT NULL
+                  AND (p.status IS NULL OR p.status != 'تم الدفع')
             ";
             if ($typeFilter) $sql .= " AND t.type_id = $typeFilter";
             $sql .= " ORDER BY FIELD(t.priority,'urgent','high','normal'), sla_pct DESC, t.created_at ASC";
@@ -1182,15 +1214,12 @@ try {
             break;
 
         case 'issue_payment_order':
-            $input     = json_decode(file_get_contents('php://input'), true) ?? [];
-            $ids       = array_map('intval', $input['ids']    ?? []);
-            $payMethod = trim($input['method'] ?? 'تحويل بنكي');
+            $conn = db();
+            $input    = json_decode(file_get_contents('php://input'), true) ?? [];
+            $ids      = array_map('intval', $input['ids']    ?? []);
+            $method   = 'تحويل بنكي'; // ثابت دائماً
             $notes    = trim($input['notes']  ?? '');
-            $poPrefix  = getSetting('prefix_payment_order', 'PO');
-            $today     = date('Ymd');
-            $seqRes    = $conn->query("SELECT COUNT(*) AS cnt FROM payment_data WHERE reference_number LIKE '{$poPrefix}-{$today}-%'");
-            $seqNum    = $seqRes ? (int)$seqRes->fetch_assoc()['cnt'] + 1 : 1;
-            $orderRef  = $poPrefix . '-' . $today . '-' . str_pad($seqNum, 4, '0', STR_PAD_LEFT);
+            $orderRef = 'PO-' . date('Ymd') . '-' . strtoupper(substr(uniqid(), -5));
 
             if (empty($ids)) { jsonResponse(['success' => false, 'message' => 'لم يتم تحديد أي معاملات']); break; }
 
@@ -1200,7 +1229,7 @@ try {
             foreach ($ids as $tid) {
                 $ok = updatePaymentData($tid, [
                     'status'    => 'تم الدفع',
-                    'method'    => $payMethod,
+                    'method'    => $method,
                     'reference' => $orderRef,
                     'notes'     => $notes ?: "أمر دفع يومي: $orderRef",
                 ]);
@@ -1210,29 +1239,67 @@ try {
             $details = [];
             if (!empty($updated)) {
                 $in = implode(',', $updated);
-                $r2 = $conn->query("SELECT t.id, t.transaction_number, t.description, t.amount, tt.name AS transaction_type, ec.name AS created_by_name, b.budget_code FROM transactions t LEFT JOIN transaction_types tt ON t.type_id=tt.id LEFT JOIN employees ec ON t.created_by=ec.id LEFT JOIN budget_data b ON t.id=b.transaction_id WHERE t.id IN ($in) ORDER BY t.transaction_number");
+                $r2 = $conn->query("SELECT t.id, t.transaction_number, t.description, t.amount, IFNULL(t.currency,'SAR') AS currency, IFNULL(t.amount_sar, t.amount) AS amount_sar, tt.name AS transaction_type, ec.name AS created_by_name, b.budget_code FROM transactions t LEFT JOIN transaction_types tt ON t.type_id=tt.id LEFT JOIN employees ec ON t.created_by=ec.id LEFT JOIN budget_data b ON t.id=b.transaction_id WHERE t.id IN ($in) ORDER BY t.transaction_number");
                 if ($r2) while ($row = $r2->fetch_assoc()) {
-                    $row['payment_date'] = $now; $row['payment_method'] = $payMethod; $row['order_ref'] = $orderRef;
+                    $row['payment_date'] = $now; $row['payment_method'] = $method; $row['order_ref'] = $orderRef;
                     $details[] = $row;
                 }
             }
 
+            $sigReviewer = getSystemSetting('signer_reviewer') ?: '';
+            $sigApprover = getSystemSetting('signer_approver') ?: '';
             jsonResponse([
-                'success'      => true,
-                'order_ref'    => $orderRef,
-                'updated'      => count($updated),
-                'failed'       => count($failed),
-                'details'      => $details,
-                'total_amount' => array_sum(array_column($details, 'amount')),
-                'issued_by'    => $_SESSION['user_name'] ?? 'النظام',
-                'issued_at'    => $now,
-                'method'       => $payMethod,
+                'success'        => true,
+                'order_ref'      => $orderRef,
+                'updated'        => count($updated),
+                'failed'         => count($failed),
+                'details'        => $details,
+                'total_amount'   => array_sum(array_column($details, 'amount')),
+                'issued_by'      => $_SESSION['user_name'] ?? 'النظام',
+                'issued_at'      => $now,
+                'method'         => $method,
+                'signer_reviewer'=> $sigReviewer,
+                'signer_approver'=> $sigApprover,
             ]);
             break;
 
  
         // ══ إعدادات النظام ══════════════════════════════════════
         case 'get_system_settings':
+            $conn = db();
+            ensureSystemSettingsTable($conn);
+
+            // seed البادئات الافتراضية إن لم تكن موجودة
+            $defaultPrefixes = [
+                ['key' => 'prefix_transaction',   'value' => 'TR',  'label' => 'المعاملات',          'group' => 'prefixes'],
+                ['key' => 'prefix_payment_order',  'value' => 'PO',  'label' => 'أوامر الدفع',         'group' => 'prefixes'],
+                ['key' => 'prefix_reservation',    'value' => 'RES', 'label' => 'حجوزات الموازنة',    'group' => 'prefixes'],
+                ['key' => 'prefix_investment',     'value' => 'INV', 'label' => 'الودائع الاستثمارية', 'group' => 'prefixes'],
+                ['key' => 'prefix_correspondence', 'value' => 'COR', 'label' => 'الخطابات',           'group' => 'prefixes'],
+            ];
+
+            // seed أسماء الموقّعين في أوامر الدفع
+            $defaultSigners = [
+                ['key' => 'signer_reviewer', 'value' => '', 'label' => 'مدير الخزينة (المراجع)',        'group' => 'payment_order'],
+                ['key' => 'signer_approver', 'value' => '', 'label' => 'رئيس القطاع المالي (المعتمد)', 'group' => 'payment_order'],
+            ];
+            $stmtSig = $conn->prepare('INSERT IGNORE INTO system_settings (setting_key, setting_value, setting_label, setting_group) VALUES (?,?,?,?)');
+            if ($stmtSig) {
+                foreach ($defaultSigners as $s) {
+                    $stmtSig->bind_param('ssss', $s['key'], $s['value'], $s['label'], $s['group']);
+                    $stmtSig->execute();
+                }
+                $stmtSig->close();
+            }
+            $stmtSeed = $conn->prepare('INSERT IGNORE INTO system_settings (setting_key, setting_value, setting_label, setting_group) VALUES (?,?,?,?)');
+            if ($stmtSeed) {
+                foreach ($defaultPrefixes as $p) {
+                    $stmtSeed->bind_param('ssss', $p['key'], $p['value'], $p['label'], $p['group']);
+                    $stmtSeed->execute();
+                }
+                $stmtSeed->close();
+            }
+
             $rows = [];
             $r = $conn->query('SELECT * FROM system_settings ORDER BY setting_group, id');
             if ($r) while ($row = $r->fetch_assoc()) $rows[] = $row;
@@ -1240,6 +1307,8 @@ try {
             break;
 
         case 'save_system_setting':
+            $conn = db();
+            ensureSystemSettingsTable($conn);
             $input = json_decode(file_get_contents('php://input'), true) ?? [];
             $sKey  = trim($input['key']   ?? '');
             $sVal  = strtoupper(trim($input['value'] ?? ''));
@@ -1248,10 +1317,13 @@ try {
                 jsonResponse(['success' => false, 'message' => 'بيانات ناقصة']);
                 return;
             }
-            if (!preg_match('/^[A-Z0-9]{1,10}$/', $sVal)) {
+            // البادئات: أحرف إنجليزية فقط — الأسماء: أي نص
+            if (strpos($sKey, 'prefix_') === 0 && !preg_match('/^[A-Z0-9]{1,10}$/', $sVal)) {
                 jsonResponse(['success' => false, 'message' => 'أحرف إنجليزية كبيرة أو أرقام فقط (1-10)']);
                 return;
             }
+            $sVal = trim($input['value'] ?? ''); // إعادة القيمة بدون strtoupper للأسماء
+            if (strpos($sKey, 'prefix_') === 0) $sVal = strtoupper($sVal);
             $stmt = $conn->prepare('INSERT INTO system_settings (setting_key,setting_value,updated_by) VALUES (?,?,?) ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value),updated_by=VALUES(updated_by)');
             if (!$stmt) { jsonResponse(['success' => false, 'message' => $conn->error]); return; }
             $stmt->bind_param('ssi', $sKey, $sVal, $sBy);
@@ -1262,6 +1334,7 @@ try {
 
         // ══ سجل أوامر الدفع ═════════════════════════════════════
         case 'get_payment_orders_history':
+            $conn = db();
             $dateFrom = $conn->real_escape_string($_GET['date_from'] ?? date('Y-m-01'));
             $dateTo   = $conn->real_escape_string($_GET['date_to']   ?? date('Y-m-d'));
             $refQ     = $conn->real_escape_string($_GET['order_ref'] ?? '');
@@ -1274,7 +1347,15 @@ try {
                     p.payment_method,
                     ep.name            AS issued_by,
                     COUNT(t.id)        AS txn_count,
-                    SUM(t.amount)      AS total_amount,
+                    SUM(IFNULL(t.amount_sar, t.amount)) AS total_amount_sar,
+                    SUM(t.amount)                        AS total_amount_raw,
+                    CASE WHEN COUNT(DISTINCT IFNULL(t.currency,'SAR')) = 1
+                         THEN MAX(IFNULL(t.currency,'SAR'))
+                         ELSE 'SAR'
+                    END AS currency,
+                    CASE WHEN COUNT(DISTINCT IFNULL(t.currency,'SAR')) > 1
+                         THEN 1 ELSE 0
+                    END AS is_mixed_currency,
                     GROUP_CONCAT(t.transaction_number ORDER BY t.transaction_number SEPARATOR ', ') AS txn_numbers
                 FROM payment_data p
                 JOIN transactions t ON t.id = p.transaction_id
@@ -1286,14 +1367,18 @@ try {
             $orders = [];
             $r = $conn->query($sql);
             if ($r) while ($row = $r->fetch_assoc()) $orders[] = $row;
-            jsonResponse(['success' => true, 'data' => $orders]);
+            jsonResponse(['success' => true, 'data' => $orders, 'orders' => $orders]); // كلا المفتاحين للتوافق
             break;
 
         case 'get_payment_order_details':
+            $conn = db();
             $ref = $conn->real_escape_string($_GET['ref'] ?? '');
             if (!$ref) { jsonResponse(['success' => false, 'message' => 'رقم الأمر مطلوب']); return; }
             $r = $conn->query("
                 SELECT t.id, t.transaction_number, t.description, t.amount,
+                       IFNULL(t.currency,'SAR') AS currency,
+                       IFNULL(t.exchange_rate,1) AS exchange_rate,
+                       IFNULL(t.amount_sar, t.amount) AS amount_sar,
                        tt.name AS transaction_type, ec.name AS created_by_name,
                        b.budget_code, p.payment_date, p.payment_method,
                        p.reference_number AS order_ref, ep.name AS issued_by
@@ -1308,10 +1393,18 @@ try {
             ");
             $rows = [];
             if ($r) while ($row = $r->fetch_assoc()) $rows[] = $row;
+            $sigReviewer2 = getSystemSetting('signer_reviewer') ?: '';
+            $sigApprover2 = getSystemSetting('signer_approver') ?: '';
             jsonResponse([
-                'success'      => true,
-                'data'         => $rows,
-                'total_amount' => array_sum(array_column($rows, 'amount')),
+                'success'         => true,
+                'details'         => $rows,
+                'total_amount'    => array_sum(array_column($rows, 'amount')),
+                'order_ref'       => $ref,
+                'signer_reviewer' => $sigReviewer2,
+                'signer_approver' => $sigApprover2,
+                'method'       => count($rows) > 0 ? ($rows[0]['payment_method'] ?? 'تحويل بنكي') : 'تحويل بنكي',
+                'issued_by'    => count($rows) > 0 ? ($rows[0]['issued_by'] ?? '') : '',
+                'issued_at'    => count($rows) > 0 ? ($rows[0]['payment_date'] ?? '') : '',
             ]);
             break;
 

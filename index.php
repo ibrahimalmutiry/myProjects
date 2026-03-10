@@ -36,8 +36,7 @@ $userRole = $_SESSION['user_role'] ?? '';
     <link rel="stylesheet" href="css/bank-rows.css">
     <link rel="stylesheet" href="css/daily-payments.css">
 
-    <link rel="icon"
-        href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+    <link rel="icon" href="images/logo.png">
 </head>
 
 <body>
@@ -77,7 +76,10 @@ $userRole = $_SESSION['user_role'] ?? '';
 
         <!-- هيدر: اللوجو فقط -->
         <div class="sidebar-header">
-            <div class="sidebar-logo-icon">⚡</div>
+            <div class="sidebar-logo-icon">
+                <img src="images/logo.png" alt="الشعار"
+                    style="width:38px;height:38px;border-radius:50%;object-fit:cover;display:block">
+            </div>
             <div class="sidebar-logo-text">
                 <h1>نظام إدارة المعاملات</h1>
                 <span>Workflow Management</span>
@@ -268,16 +270,7 @@ $userRole = $_SESSION['user_role'] ?? '';
                         <?php endif; ?>
                     </div>
 
-                    <!-- <?php if (!empty($_SESSION['department_name'])): ?>
-                    <div class="user-dept">
-                        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2.5">
-                            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-                            <polyline points="9 22 9 12 15 12 15 22" />
-                        </svg>
-                        <span><?= htmlspecialchars($_SESSION['department_name']) ?></span>
-                    </div>
-                    <?php endif; ?> -->
+
                 </div>
             </div>
 
@@ -362,78 +355,6 @@ $userRole = $_SESSION['user_role'] ?? '';
     <script>
     // معلومات المستخدم الحالي
     <?php
-// تحميل صلاحيات الجلسة — يعمل حتى لو لم تُنفَّذ migration بعد
-function loadPermissionsForSession($userId) {
-    $conn = db();
-    $userId = (int)$userId;
-    
-    // تحقق من وجود العمود أولاً
-    $chk = $conn->query("SHOW COLUMNS FROM employees LIKE 'permission_level'");
-    if (!$chk || $chk->num_rows === 0) {
-        // العمود غير موجود → admin يحصل على system_admin
-        $r = $conn->query("SELECT role FROM employees WHERE id=$userId LIMIT 1");
-        $row = $r ? $r->fetch_assoc() : null;
-        if ($row && $row['role'] === 'admin') {
-            $_SESSION['permission_level'] = 'system_admin';
-            $_SESSION['can_delete'] = true;
-        } else {
-            $_SESSION['permission_level'] = 'employee';
-            $_SESSION['can_delete'] = false;
-        }
-        $allPages = ['dashboard','transactions','correspondence','bank-deposits','sla','performance','settings','notifications','reservations','budget-plans'];
-        $_SESSION['page_permissions'] = array_fill_keys($allPages, ($_SESSION['permission_level'] === 'system_admin'));
-        return;
-    }
-    
-    $r = $conn->query("SELECT role, permission_level, can_delete FROM employees WHERE id=$userId LIMIT 1");
-    if (!$r || !($row = $r->fetch_assoc())) return;
-    
-    // إصلاح: admin دائماً system_admin
-    if ($row['role'] === 'admin' && $row['permission_level'] !== 'system_admin') {
-        $conn->query("UPDATE employees SET permission_level='system_admin', can_delete=1 WHERE id=$userId");
-        $row['permission_level'] = 'system_admin';
-        $row['can_delete'] = 1;
-    }
-    
-    $_SESSION['permission_level'] = $row['permission_level'];
-    $_SESSION['can_delete'] = (bool)$row['can_delete'];
-    
-    $allPages = ['dashboard','transactions','correspondence','bank-deposits','sla','performance','settings','notifications','reservations','budget-plans'];
-    
-    if ($row['permission_level'] === 'system_admin') {
-        $_SESSION['page_permissions']   = array_fill_keys($allPages, true);
-        $_SESSION['action_permissions'] = [];
-    } else {
-        // جلب صلاحيات الصفحات
-        $chkTbl = $conn->query("SHOW TABLES LIKE 'employee_page_permissions'");
-        $stored = [];
-        if ($chkTbl && $chkTbl->num_rows > 0) {
-            $r2 = $conn->query("SELECT page, can_access FROM employee_page_permissions WHERE employee_id=$userId");
-            if ($r2) while ($pr = $r2->fetch_assoc()) $stored[$pr['page']] = (bool)$pr['can_access'];
-        }
-        $defaults = [
-            'manager'  => ['dashboard'=>1,'transactions'=>1,'correspondence'=>1,'bank-deposits'=>1,'sla'=>1,'performance'=>1,'settings'=>0,'notifications'=>1,'reservations'=>1,'budget-plans'=>1],
-            'employee' => ['dashboard'=>0,'transactions'=>1,'correspondence'=>1,'bank-deposits'=>1,'sla'=>0,'performance'=>0,'settings'=>0,'notifications'=>1,'reservations'=>1,'budget-plans'=>0],
-        ];
-        $def = $defaults[$row['permission_level']] ?? [];
-        $pagePerms = [];
-        foreach ($allPages as $p) {
-            $pagePerms[$p] = isset($stored[$p]) ? $stored[$p] : (bool)($def[$p] ?? false);
-        }
-        $_SESSION['page_permissions'] = $pagePerms;
-
-        // جلب صلاحيات الإجراءات
-        $actionPerms = [];
-        $chkAct = $conn->query("SHOW TABLES LIKE 'employee_action_permissions'");
-        if ($chkAct && $chkAct->num_rows > 0) {
-            $ra = $conn->query("SELECT action, can_do FROM employee_action_permissions WHERE employee_id=$userId");
-            if ($ra) while ($ar = $ra->fetch_assoc()) $actionPerms[$ar['action']] = (bool)$ar['can_do'];
-        }
-        $_SESSION['action_permissions'] = $actionPerms;
-    }
-}
-
-// تحميل/تحديث الصلاحيات في كل طلب لضمان تطبيق أي تغييرات
 if (isset($_SESSION['user_id'])) {
     loadPermissionsForSession((int)$_SESSION['user_id']);
 }
@@ -473,77 +394,8 @@ if (isset($_SESSION['user_id'])) {
             return 'notifications';
         };
     })();
-
-    // ══════════════════════════════════════════════════════
-    //  إدارة السايدبار
-    // ══════════════════════════════════════════════════════
-    const sidebar = document.getElementById('sidebar');
-    const overlay = document.getElementById('sidebarOverlay');
-    const COLLAPSED_KEY = 'sidebar_collapsed';
-
-    // استعادة الحالة المحفوظة
-    (function initSidebar() {
-        const saved = localStorage.getItem(COLLAPSED_KEY);
-        if (saved === '1') {
-            sidebar.classList.add('collapsed');
-        }
-        // على الشاشات المتوسطة: collapsed افتراضي
-        if (window.innerWidth <= 1100 && window.innerWidth > 768) {
-            sidebar.classList.remove('collapsed');
-            sidebar.classList.remove('expanded');
-        }
-    })();
-
-    // طي/توسيع على الشاشات الكبيرة
-    function toggleSidebar() {
-        if (window.innerWidth <= 768) return;
-        if (window.innerWidth <= 1100) {
-            sidebar.classList.toggle('expanded');
-            return;
-        }
-        sidebar.classList.toggle('collapsed');
-        localStorage.setItem(COLLAPSED_KEY, sidebar.classList.contains('collapsed') ? '1' : '0');
-        updateTogglePosition();
-    }
-
-    // تحديث موضع الزر حسب حالة السايدبار
-    function updateTogglePosition() {
-        const toggle = document.getElementById('sidebarToggle');
-        if (!toggle) return;
-        const isCollapsed = sidebar.classList.contains('collapsed');
-        const width = isCollapsed ?
-            getComputedStyle(document.documentElement).getPropertyValue('--sidebar-collapsed').trim() :
-            getComputedStyle(document.documentElement).getPropertyValue('--sidebar-width').trim();
-        toggle.style.right = 'calc(' + width + ' - 14px)';
-    }
-
-    // فتح/إغلاق على الموبايل
-    function toggleMobileSidebar() {
-        sidebar.classList.toggle('mobile-open');
-        overlay.classList.toggle('active');
-        document.body.style.overflow = sidebar.classList.contains('mobile-open') ? 'hidden' : '';
-    }
-
-    // إغلاق الموبايل عند اختيار تبويب
-    document.querySelectorAll('.nav-tab').forEach(function(tab) {
-        tab.addEventListener('click', function() {
-            if (window.innerWidth <= 768) {
-                sidebar.classList.remove('mobile-open');
-                overlay.classList.remove('active');
-                document.body.style.overflow = '';
-            }
-        });
-    });
-
-    // ضبط عند تغيير حجم الشاشة
-    window.addEventListener('resize', function() {
-        if (window.innerWidth > 768) {
-            sidebar.classList.remove('mobile-open');
-            overlay.classList.remove('active');
-            document.body.style.overflow = '';
-        }
-    });
     </script>
+    <script src="js/sidebar-init.js"></script>
     <script src="js/app-profile.js"></script>
 </body>
 

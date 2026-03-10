@@ -150,7 +150,7 @@ function renderDailyPaymentsPage() {
             <div class="dp-sel-bar-info">
                 <strong id="dp-sel-bar-count">0</strong> معاملة محددة
                 &nbsp;|&nbsp;
-                الإجمالي: <strong id="dp-sel-bar-amount">0</strong> ر.س
+                الإجمالي: <strong id="dp-sel-bar-amount">0</strong>
             </div>
             <div class="dp-sel-bar-actions">
                 <button class="dp-btn dp-btn-ghost" onclick="clearSelection()">إلغاء التحديد</button>
@@ -180,15 +180,6 @@ function renderDailyPaymentsPage() {
                 </button>
             </div>
             <div class="dp-modal-body">
-                <div class="dp-form-group">
-                    <label>طريقة الدفع</label>
-                    <select class="dp-select dp-select-full" id="dp-method">
-                        <option value="تحويل بنكي">🏦 تحويل بنكي</option>
-                        <option value="شيك">📋 شيك</option>
-                        <option value="نقد">💵 نقد</option>
-                        <option value="أمر دفع إلكتروني">💻 أمر دفع إلكتروني</option>
-                    </select>
-                </div>
                 <div class="dp-form-group">
                     <label>ملاحظات (اختياري)</label>
                     <textarea class="dp-textarea" id="dp-order-notes" placeholder="ملاحظة على أمر الدفع..."></textarea>
@@ -296,7 +287,7 @@ async function loadDailyPayments() {
         const res = await fetch('api/?action=get_pending_payments');
         const data = await res.json();
         if (!data.success) throw new Error(data.message);
-        dpTransactions = data.data || [];
+        dpTransactions = (data.data || []).map(t => ({ ...t, id: parseInt(t.id) }));
         dpSelected.clear();
         updateDpStats();
         renderDpRows(dpTransactions);
@@ -319,7 +310,11 @@ function updateDpStats() {
     const ok = total - breach - warn;
 
     document.getElementById('dps-pending').textContent = total;
-    document.getElementById('dps-amount').textContent = fmtMoney(amount) + ' ر.س';
+    // عرض الإجمالي بالعملة إذا كانت موحدة، وإلا بالريال
+    const allCurs = dpTransactions.map(t => t.currency || 'SAR');
+    const uniqCur = [...new Set(allCurs)];
+    const displayCur = uniqCur.length === 1 ? uniqCur[0] : 'SAR';
+    document.getElementById('dps-amount').innerHTML = fmtMoneyCur(amount, displayCur);
     document.getElementById('dps-breach').textContent = breach;
     document.getElementById('dps-warn').textContent = warn;
     document.getElementById('dps-ok').textContent = ok;
@@ -369,8 +364,7 @@ function renderDpRows(list) {
                 <span class="dp-type-badge">${t.transaction_type || '—'}${t.sub_type ? ` / ${t.sub_type}` : ''}</span>
             </td>
             <td>
-                <span class="dp-amount">${fmtMoney(amount)}</span>
-                <span class="dp-currency">ر.س</span>
+                <span class="dp-amount">${fmtMoneyCur(amount, t.currency || 'SAR')}</span>
             </td>
             <td>${priorityBadge}</td>
             <td>
@@ -437,6 +431,7 @@ function toggleDpRow(e, id) {
 }
 
 function onDpCheckChange(id, checked) {
+    id = parseInt(id);
     checked ? dpSelected.add(id) : dpSelected.delete(id);
     const row = document.querySelector(`tr[data-id="${id}"]`);
     if (row) row.classList.toggle('dp-row-selected', checked);
@@ -485,7 +480,12 @@ function updateSelectionUI() {
     if (bar) bar.style.display = count > 0 ? 'flex' : 'none';
 
     document.getElementById('dp-sel-bar-count').textContent = count;
-    document.getElementById('dp-sel-bar-amount').textContent = fmtMoney(amount);
+    // حساب العملة الغالبة على المعاملات المحددة
+    const selCurrencies = [...dpSelected].map(id => dpTransactions.find(x => x.id == id)?.currency || 'SAR');
+    const selCurrency = selCurrencies.every(c => c === selCurrencies[0]) ? selCurrencies[0] : 'mixed';
+    document.getElementById('dp-sel-bar-amount').innerHTML = selCurrency === 'mixed'
+        ? formatMoneyWithSAR(amount)
+        : fmtMoneyCur(amount, selCurrency);
 
     // label
     const lbl = document.getElementById('dp-sel-label');
@@ -553,8 +553,13 @@ function openIssuePaymentModal() {
     const total = selected.reduce((s, t) => s + parseFloat(t.amount || 0), 0);
 
     // ملخص
-    document.getElementById('dp-modal-sub').textContent =
-        `${selected.length} معاملة — إجمالي: ${fmtMoney(total)} ر.س`;
+    document.getElementById('dp-modal-sub').innerHTML =
+        (() => {
+            const currencies = selected.map(t => t.currency || 'SAR');
+            const singleCur = currencies.every(c => c === currencies[0]) ? currencies[0] : 'mixed';
+            const totalStr = singleCur === 'mixed' ? formatMoneyWithSAR(total) : fmtMoneyCur(total, singleCur);
+            return `${selected.length} معاملة — إجمالي: ${totalStr}`;
+        })();
 
     // جدول المعاينة
     const rows = selected.map(t => `
@@ -562,7 +567,7 @@ function openIssuePaymentModal() {
             <td>${t.transaction_number || '#' + t.id}</td>
             <td>${truncate(t.description, 40)}</td>
             <td>${t.transaction_type || '—'}</td>
-            <td style="text-align:left;font-variant-numeric:tabular-nums">${fmtMoney(parseFloat(t.amount || 0))} ر.س</td>
+            <td style="text-align:left;font-variant-numeric:tabular-nums">${fmtMoneyCur(parseFloat(t.amount || 0), t.currency || 'SAR')}</td>
             <td>${getPriorityBadge(t.priority)}</td>
         </tr>
     `).join('');
@@ -576,7 +581,11 @@ function openIssuePaymentModal() {
             <tbody>${rows}</tbody>
             <tfoot><tr>
                 <td colspan="3" style="font-weight:700;text-align:right">الإجمالي</td>
-                <td style="font-weight:800;color:var(--accent-green);text-align:left">${fmtMoney(total)} ر.س</td>
+                <td style="font-weight:800;color:var(--accent-green);text-align:left">${(() => {
+            const cs = selected.map(t => t.currency || 'SAR');
+            const sc = cs.every(c => c === cs[0]) ? cs[0] : 'mixed';
+            return sc === 'mixed' ? formatMoneyWithSAR(total) : fmtMoneyCur(total, sc);
+        })()}</td>
                 <td></td>
             </tr></tfoot>
         </table>
@@ -598,7 +607,6 @@ function closeIssueModal() {
 // ────────────────────────────────────────────
 async function confirmPaymentOrder() {
     const btn = document.getElementById('dp-confirm-btn');
-    const method = document.getElementById('dp-method').value;
     const notes = document.getElementById('dp-order-notes').value;
 
     btn.disabled = true;
@@ -610,7 +618,6 @@ async function confirmPaymentOrder() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 ids: [...dpSelected],
-                method,
                 notes,
             })
         });
@@ -618,9 +625,20 @@ async function confirmPaymentOrder() {
         if (!data.success) throw new Error(data.message);
 
         dpLastOrder = data;
+
+        // احذف المعاملات المُصدرة من القائمة فوراً بدون انتظار
+        const issuedIds = new Set((data.details || []).map(t => parseInt(t.id)));
+        dpTransactions = dpTransactions.filter(t => !issuedIds.has(parseInt(t.id)));
+        dpSelected.clear();
+        renderDpRows(dpTransactions);
+        updateDpStats();
+        updateSelectionUI();
+
         closeIssueModal();
         showPaymentOrderModal(data);
-        await loadDailyPayments();
+
+        // ثم حمّل من السيرفر للتأكد من التزامن
+        loadDailyPayments();
 
     } catch (e) {
         alert('خطأ: ' + e.message);
@@ -633,15 +651,30 @@ async function confirmPaymentOrder() {
 // ────────────────────────────────────────────
 //  Modal: أمر الدفع الصادر
 // ────────────────────────────────────────────
+// حساب إجمالي أمر الدفع مع مراعاة العملات المختلطة
+function calcOrderTotal(details) {
+    if (!details || !details.length) return { amount: 0, currency: 'SAR', isMixed: false };
+    const currencies = [...new Set(details.map(t => t.currency || 'SAR'))];
+    const isMixed = currencies.length > 1;
+    if (isMixed) {
+        // مجموع بالريال
+        const total = details.reduce((s, t) => s + parseFloat(t.amount_sar || t.amount || 0), 0);
+        return { amount: total, currency: 'SAR', isMixed: true };
+    } else {
+        const total = details.reduce((s, t) => s + parseFloat(t.amount || 0), 0);
+        return { amount: total, currency: currencies[0], isMixed: false };
+    }
+}
+
 function showPaymentOrderModal(data) {
     const rows = (data.details || []).map((t, i) => `
         <tr>
-            <td>${i + 1}</td>
-            <td>${t.transaction_number || '#' + t.id}</td>
-            <td>${t.description || '—'}</td>
-            <td>${t.transaction_type || '—'}</td>
-            <td>${t.budget_code || '—'}</td>
-            <td class="po-amount">${fmtMoney(parseFloat(t.amount || 0))} ر.س</td>
+            <td style="text-align:center;color:#666;font-size:.8rem">${i + 1}</td>
+            <td style="font-weight:600;color:#1a1a2e;white-space:nowrap">${t.transaction_number || '#' + t.id}</td>
+            <td style="max-width:200px">${t.description || '—'}</td>
+            <td><span style="background:#f0f4ff;color:#3b5bdb;padding:2px 8px;border-radius:4px;font-size:.78rem">${t.transaction_type || '—'}</span></td>
+            <td style="font-family:monospace;color:#555">${t.budget_code || '—'}</td>
+            <td style="text-align:left;font-weight:700;font-variant-numeric:tabular-nums;direction:ltr;white-space:nowrap;color:#2b8a3e">${fmtMoneyCur(parseFloat(t.amount || 0), t.currency || 'SAR')}</td>
         </tr>
     `).join('');
 
@@ -650,88 +683,88 @@ function showPaymentOrderModal(data) {
     const timeStr = now.toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
 
     document.getElementById('dp-printable-content').innerHTML = `
-        <!-- ═══ رأس أمر الدفع ═══ -->
-        <div class="po-header">
-            <div class="po-header-logo">
-                <div class="po-logo-icon">⚡</div>
-                <div class="po-org-name">نظام إدارة المعاملات المالية</div>
+        <!-- رأس الوثيقة -->
+        <div style="display:flex;flex-direction:row;justify-content:space-between;align-items:center;padding-bottom:18px;margin-bottom:22px;border-bottom:3px solid #1a1a2e;direction:rtl;unicode-bidi:embed">
+            <div style="direction:rtl">
+                <div style="font-size:1.7rem;font-weight:900;color:#1a1a2e;direction:rtl">أمر دفع يومي</div>
+                <div style="font-size:.85rem;color:#666;margin-top:3px;font-family:monospace;direction:ltr;text-align:right">${data.order_ref}</div>
             </div>
-            <div class="po-header-title">
-                <div class="po-doc-type">أمر دفع يومي</div>
-                <div class="po-doc-ref">${data.order_ref}</div>
-            </div>
-        </div>
-
-        <!-- ═══ بيانات الأمر ═══ -->
-        <div class="po-meta-grid">
-            <div class="po-meta-item">
-                <div class="po-meta-label">تاريخ الإصدار</div>
-                <div class="po-meta-val">${dateStr}</div>
-            </div>
-            <div class="po-meta-item">
-                <div class="po-meta-label">وقت الإصدار</div>
-                <div class="po-meta-val">${timeStr}</div>
-            </div>
-            <div class="po-meta-item">
-                <div class="po-meta-label">طريقة الدفع</div>
-                <div class="po-meta-val">${data.method}</div>
-            </div>
-            <div class="po-meta-item">
-                <div class="po-meta-label">صادر بواسطة</div>
-                <div class="po-meta-val">${data.issued_by}</div>
-            </div>
-            <div class="po-meta-item">
-                <div class="po-meta-label">عدد المعاملات</div>
-                <div class="po-meta-val">${data.updated} معاملة</div>
-            </div>
-            <div class="po-meta-item po-meta-total">
-                <div class="po-meta-label">إجمالي المبلغ</div>
-                <div class="po-meta-val po-total-val">${fmtMoney(data.total_amount)} ر.س</div>
+            <div style="text-align:left;direction:ltr">
+                <div style="font-size:1.8rem">⚡</div>
+                <div style="font-size:.8rem;font-weight:700;color:#444;margin-top:2px">نظام إدارة المعاملات المالية</div>
             </div>
         </div>
 
-        <!-- ═══ جدول المعاملات ═══ -->
-        <table class="po-table">
+        <!-- بيانات الأمر — شبكة 3 × 2 -->
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:22px">
+            <div style="padding:10px 14px;border:1px solid #e0e0e0;border-radius:8px;background:#fafafa">
+                <div style="font-size:.68rem;color:#888;margin-bottom:3px">تاريخ الإصدار</div>
+                <div style="font-weight:700;font-size:.92rem">${dateStr}</div>
+            </div>
+            <div style="padding:10px 14px;border:1px solid #e0e0e0;border-radius:8px;background:#fafafa">
+                <div style="font-size:.68rem;color:#888;margin-bottom:3px">وقت الإصدار</div>
+                <div style="font-weight:700;font-size:.92rem">${timeStr}</div>
+            </div>
+            <div style="padding:10px 14px;border:1px solid #e0e0e0;border-radius:8px;background:#fafafa">
+                <div style="font-size:.68rem;color:#888;margin-bottom:3px">طريقة الدفع</div>
+                <div style="font-weight:700;font-size:.92rem">${data.method || 'تحويل بنكي'}</div>
+            </div>
+            <div style="padding:10px 14px;border:1px solid #e0e0e0;border-radius:8px;background:#fafafa">
+                <div style="font-size:.68rem;color:#888;margin-bottom:3px">صادر بواسطة</div>
+                <div style="font-weight:700;font-size:.92rem">${data.issued_by || '—'}</div>
+            </div>
+            <div style="padding:10px 14px;border:1px solid #e0e0e0;border-radius:8px;background:#fafafa">
+                <div style="font-size:.68rem;color:#888;margin-bottom:3px">عدد المعاملات</div>
+                <div style="font-weight:700;font-size:.92rem">${data.updated || (data.details || []).length} معاملة</div>
+            </div>
+            <div style="padding:10px 14px;border:2px solid #40c057;border-radius:8px;background:#f0fdf4">
+                <div style="font-size:.68rem;color:#2b8a3e;margin-bottom:3px">إجمالي المبلغ</div>
+                <div style="font-weight:800;font-size:1rem;color:#2b8a3e;direction:ltr;text-align:left">${(() => { const o = calcOrderTotal(data.details); return fmtMoneyCur(o.amount, o.currency) + (o.isMixed ? ' <span style="font-size:.65rem;color:#888">(ريال)</span>' : ''); })()}</div>
+            </div>
+        </div>
+
+        <!-- جدول المعاملات -->
+        <table style="width:100%;border-collapse:collapse;margin-bottom:28px;font-size:.82rem">
             <thead>
-                <tr>
-                    <th>#</th>
-                    <th>رقم المعاملة</th>
-                    <th>الوصف</th>
-                    <th>النوع</th>
-                    <th>رمز الموازنة</th>
-                    <th>المبلغ</th>
+                <tr style="background:#1a1a2e;color:#fff;direction:rtl">
+                    <th style="padding:9px 10px;text-align:center;width:36px;font-weight:600;background:#1a1a2e;color:#fff">#</th>
+                    <th style="padding:9px 10px;text-align:right;font-weight:600;background:#1a1a2e;color:#fff">رقم المعاملة</th>
+                    <th style="padding:9px 10px;text-align:right;font-weight:600;background:#1a1a2e;color:#fff">الوصف</th>
+                    <th style="padding:9px 10px;text-align:right;font-weight:600;background:#1a1a2e;color:#fff">النوع</th>
+                    <th style="padding:9px 10px;text-align:right;font-weight:600;background:#1a1a2e;color:#fff">رمز الموازنة</th>
+                    <th style="padding:9px 10px;text-align:left;font-weight:600;background:#1a1a2e;color:#fff">المبلغ</th>
                 </tr>
             </thead>
             <tbody>${rows}</tbody>
             <tfoot>
-                <tr class="po-total-row">
-                    <td colspan="5" style="text-align:right;font-weight:700">الإجمالي الكلي</td>
-                    <td class="po-amount po-grand-total">${fmtMoney(data.total_amount)} ر.س</td>
+                <tr style="background:#f8f9fa;border-top:2px solid #1a1a2e">
+                    <td colspan="5" style="padding:10px;text-align:right;font-weight:800;font-size:.88rem">الإجمالي الكلي</td>
+                    <td style="padding:10px;text-align:left;font-weight:800;font-size:.95rem;color:#2b8a3e;direction:ltr">${(() => { const o = calcOrderTotal(data.details); return fmtMoneyCur(o.amount, o.currency); })()}</td>
                 </tr>
             </tfoot>
         </table>
 
-        <!-- ═══ توقيعات ═══ -->
-        <div class="po-signatures">
-            <div class="po-sig-box">
-                <div class="po-sig-line"></div>
-                <div class="po-sig-label">محضّر الأمر</div>
-                <div class="po-sig-name">${data.issued_by}</div>
+        <!-- التوقيعات -->
+        <div style="display:flex;gap:20px;margin-bottom:28px">
+            <div style="flex:1;text-align:center;border:1px solid #ddd;border-radius:8px;padding:14px 10px 10px">
+                <div style="height:48px;border-bottom:1px solid #aaa;margin-bottom:8px"></div>
+                <div style="font-size:.8rem;font-weight:700;color:#333">محضّر الأمر</div>
+                <div style="font-size:.78rem;color:#555;margin-top:3px">${data.issued_by || ''}</div>
             </div>
-            <div class="po-sig-box">
-                <div class="po-sig-line"></div>
-                <div class="po-sig-label">المراجع</div>
-                <div class="po-sig-name"></div>
+            <div style="flex:1;text-align:center;border:1px solid #ddd;border-radius:8px;padding:14px 10px 10px">
+                <div style="height:48px;border-bottom:1px solid #aaa;margin-bottom:8px"></div>
+                <div style="font-size:.8rem;font-weight:700;color:#333">المراجع</div>
+                <div style="font-size:.78rem;color:#555;margin-top:3px">${data.signer_reviewer || ''}</div>
             </div>
-            <div class="po-sig-box">
-                <div class="po-sig-line"></div>
-                <div class="po-sig-label">المعتمد</div>
-                <div class="po-sig-name"></div>
+            <div style="flex:1;text-align:center;border:1px solid #ddd;border-radius:8px;padding:14px 10px 10px">
+                <div style="height:48px;border-bottom:1px solid #aaa;margin-bottom:8px"></div>
+                <div style="font-size:.8rem;font-weight:700;color:#333">المعتمد</div>
+                <div style="font-size:.78rem;color:#555;margin-top:3px">${data.signer_approver || ''}</div>
             </div>
         </div>
 
-        <!-- ═══ تذييل ═══ -->
-        <div class="po-footer">
+        <!-- تذييل -->
+        <div style="display:flex;justify-content:space-between;font-size:.68rem;color:#999;border-top:1px solid #eee;padding-top:8px">
             <span>رقم المرجع: ${data.order_ref}</span>
             <span>تم إصداره بتاريخ ${dateStr}</span>
             <span>نظام إدارة المعاملات المالية</span>
@@ -749,59 +782,58 @@ function closeOrderModal() {
     setTimeout(() => modal.style.display = 'none', 200);
 }
 
+function buildPrintHTML(content) {
+    return `
+        <!DOCTYPE html><html dir="rtl" lang="ar">
+        <head>
+        <meta charset="UTF-8">
+        <title>أمر دفع</title>
+        <style>
+            * { box-sizing:border-box; margin:0; padding:0; }
+            body {
+                font-family: 'Segoe UI', Tahoma, 'Arial', sans-serif;
+                font-size: 12px; color: #111;
+                padding: 28px 32px;
+                direction: rtl;
+            }
+            table { width:100%; border-collapse:collapse; direction:rtl; unicode-bidi:embed; }
+            th, td { border:1px solid #ddd; padding:8px 10px; text-align:right; direction:rtl; }
+            th { background:#1a1a2e !important; color:#fff !important; font-weight:600; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+            div, span, p { direction:rtl; unicode-bidi:embed; }
+            td[style*="text-align:left"], th[style*="text-align:left"] { text-align:left; }
+            @media print {
+                body { padding:16px 20px; }
+                th { background:#1a1a2e !important; color:#fff !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+            }
+            /* رمز SAR */
+            @font-face {
+                font-family: 'saudi_riyal';
+                src: url('https://cdn.jsdelivr.net/npm/@emran-alhaddad/saudi-riyal-font/fonts/saudi_riyal.woff2') format('woff2');
+            }
+            .sar-symbol::before { content:"\e900"; font-family:'saudi_riyal' !important; font-style:normal; }
+        </style>
+        </head><body>${content}</body></html>
+    `;
+}
+
 function printOrder() {
     const content = document.getElementById('dp-printable-content').innerHTML;
     const win = window.open('', '_blank');
-    win.document.write(`
-        <!DOCTYPE html><html dir="rtl" lang="ar">
-        <head><meta charset="UTF-8"><title>أمر دفع</title>
-        <style>
-            * { box-sizing: border-box; margin: 0; padding: 0; }
-            body { font-family: 'Segoe UI', Tahoma, Arial, sans-serif; font-size: 12px; color: #111; padding: 24px; }
-            .po-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:20px; padding-bottom:16px; border-bottom:2px solid #111; }
-            .po-doc-type { font-size:1.5rem; font-weight:800; }
-            .po-doc-ref { font-size:.85rem; color:#555; margin-top:4px; }
-            .po-logo-icon { font-size:2rem; }
-            .po-org-name { font-weight:700; font-size:.9rem; margin-top:4px; }
-            .po-meta-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:20px; }
-            .po-meta-item { padding:8px 12px; border:1px solid #ddd; border-radius:8px; }
-            .po-meta-label { font-size:.72rem; color:#666; margin-bottom:2px; }
-            .po-meta-val { font-weight:700; font-size:.9rem; }
-            .po-meta-total { background:#f0f9f0; border-color:#40c057; }
-            .po-total-val { color:#2b8a3e; font-size:1rem; }
-            .po-table { width:100%; border-collapse:collapse; margin-bottom:24px; }
-            .po-table th,td { border:1px solid #ddd; padding:7px 10px; text-align:right; }
-            .po-table th { background:#f5f5f5; font-weight:700; font-size:.78rem; }
-            .po-table td { font-size:.82rem; }
-            .po-amount { text-align:left; font-variant-numeric:tabular-nums; direction:ltr; }
-            .po-total-row td { background:#f5f5f5; font-weight:700; }
-            .po-grand-total { color:#2b8a3e; font-size:1rem; }
-            .po-signatures { display:flex; gap:24px; margin-bottom:20px; }
-            .po-sig-box { flex:1; text-align:center; }
-            .po-sig-line { height:60px; border-bottom:1px solid #999; margin-bottom:6px; }
-            .po-sig-label { font-size:.75rem; color:#555; }
-            .po-footer { display:flex; justify-content:space-between; font-size:.7rem; color:#888; border-top:1px solid #ddd; padding-top:8px; margin-top:8px; }
-        </style>
-        </head><body>${content}</body></html>
-    `);
+    win.document.write(buildPrintHTML(content));
     win.document.close();
     win.focus();
-    win.print();
-    win.close();
+    setTimeout(() => { win.print(); win.close(); }, 800);
 }
 
-async function downloadOrderPDF() {
-    const btn = document.querySelector('.dp-order-controls .dp-btn-ghost:nth-child(2)');
-    if (btn) { btn.disabled = true; btn.innerHTML = '⏳ جاري التحضير...'; }
-    try {
-        const today = new Date().toISOString().slice(0, 10);
-        await downloadAsPDF('dp-printable-content', `امر-دفع-${today}.pdf`);
-    } finally {
-        if (btn) {
-            btn.disabled = false;
-            btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> تحميل PDF';
-        }
-    }
+function downloadOrderPDF() {
+    // نستخدم نفس printOrder لكن مع تعليمات حفظ PDF
+    const content = document.getElementById('dp-printable-content').innerHTML;
+    const win = window.open('', '_blank');
+    win.document.write(buildPrintHTML(content));
+    win.document.close();
+    win.focus();
+    // نعطي المتصفح وقت لتحميل الخط ثم نطبع
+    setTimeout(() => { win.print(); }, 800);
 }
 
 // ────────────────────────────────────────────
@@ -814,12 +846,12 @@ function fmtDate(d) {
     return dt.toLocaleDateString('ar-SA', { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
-// fmtMoney — تُستخدم من app-common.js أو نعرفها هنا
+// fmtMoney / formatMoneyWithSAR — fallback إذا لم تُحمّل app-common.js
 if (typeof fmtMoney === 'undefined') {
-    window.fmtMoney = n => {
-        const num = parseFloat(n) || 0;
-        return num.toLocaleString('ar-SA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    };
+    window.fmtMoney = n => (parseFloat(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+if (typeof formatMoneyWithSAR === 'undefined') {
+    window.formatMoneyWithSAR = n => fmtMoney(n) + ' <span class="sar-symbol"></span>';
 }
 
 // ════════════════════════════════════════════════════════════
@@ -887,7 +919,12 @@ function renderHistoryResults(orders) {
                     <td><span class="dp-date">${fmtDate(o.payment_date)}</span></td>
                     <td><span class="dp-type-badge">${o.payment_method || '—'}</span></td>
                     <td style="text-align:center;font-weight:700">${o.txn_count}</td>
-                    <td><span class="dp-amount">${fmtMoney(o.total_amount)}</span> <span class="dp-currency">ر.س</span></td>
+                    <td><span class="dp-amount">
+                        ${o.is_mixed_currency == 1
+            ? formatMoneyWithSAR(o.total_amount_sar || o.total_amount_raw || 0) + ' <small style="color:var(--text-muted);font-size:.7rem">(متعدد)</small>'
+            : fmtMoneyCur(o.total_amount_raw || o.total_amount_sar || 0, o.currency || 'SAR')
+        }
+                    </span></td>
                     <td><span style="font-size:.8rem;color:var(--text-muted)">${o.issued_by || '—'}</span></td>
                     <td>
                         <button class="dp-btn dp-btn-ghost" style="padding:.3rem .7rem;font-size:.75rem"
@@ -899,7 +936,7 @@ function renderHistoryResults(orders) {
             </tbody>
         </table>
         <div style="font-size:.75rem;color:var(--text-muted);padding:.5rem 0;text-align:left">
-            ${orders.length} نتيجة — إجمالي: ${fmtMoney(orders.reduce((s, o) => s + parseFloat(o.total_amount || 0), 0))} ر.س
+            ${orders.length} نتيجة — إجمالي: ${formatMoneyWithSAR(orders.reduce((s, o) => s + parseFloat(o.total_amount_sar || o.total_amount_raw || 0), 0))}
         </div>
     `;
 }
@@ -909,7 +946,7 @@ async function viewHistoryOrder(ref) {
         const res = await fetch(`api/?action=get_payment_order_details&ref=${encodeURIComponent(ref)}`);
         const data = await res.json();
         if (!data.success) throw new Error(data.message);
-        const rows = data.data || [];
+        const rows = data.details || data.data || [];
         if (!rows.length) { alert('لا توجد بيانات'); return; }
         const first = rows[0];
         closeHistoryModal();

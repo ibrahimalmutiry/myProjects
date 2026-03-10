@@ -83,14 +83,13 @@ body.sidebar-collapsed .main-content {
     width: 38px;
     height: 38px;
     min-width: 38px;
-    background: var(--btn-primary-bg);
-    border-radius: 10px;
+    background: transparent;
+    border-radius: 0;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 1.1rem;
-    color: var(--btn-primary-text);
     flex-shrink: 0;
+    overflow: hidden;
 }
 
 .sidebar-logo-text {

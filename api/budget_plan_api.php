@@ -45,13 +45,16 @@ try {
                     GROUP BY plan_id
                 ) alloc ON alloc.plan_id = bp.id
                 LEFT JOIN (
-                    SELECT budget_plan_id,
-                           SUM(CASE WHEN currency='SAR' THEN grand_total
-                                    ELSE grand_total * COALESCE(exchange_rate,1) END) AS total_reserved
-                    FROM budget_reservations
-                    WHERE status NOT IN ('مسودة','مرفوض','ملغى')
-                    GROUP BY budget_plan_id
-                ) res ON res.budget_plan_id = bp.id
+                    SELECT br.budget_plan_id, bc2.id AS cat_id,
+                           SUM(CASE WHEN br.currency='SAR' THEN br.grand_total
+                                    ELSE br.grand_total * COALESCE(br.exchange_rate,1) END) AS total_reserved
+                    FROM budget_reservations br
+                    LEFT JOIN budget_categories bc2
+                        ON bc2.name = br.budget_category OR bc2.code = br.budget_category
+                    WHERE (br.fiscal_year = $year OR br.fiscal_year = $year % 100)
+                      AND br.status NOT IN ('مسودة','مرفوض','ملغى')
+                    GROUP BY br.budget_plan_id, bc2.id
+                ) res ON (res.budget_plan_id = bp.id OR (res.budget_plan_id IS NULL AND res.cat_id = bp.category_id))
                 WHERE bp.fiscal_year = $year
                 ORDER BY bc.code ASC
             ";
@@ -177,16 +180,24 @@ try {
             $r    = $conn->query("SELECT id, code, name FROM cost_centers WHERE is_active=1 ORDER BY code ASC");
             if ($r) while ($row = $r->fetch_assoc()) $ccs[] = $row;
 
-            // السنوات المتاحة
-            $years = [];
-            $r     = $conn->query("SELECT DISTINCT fiscal_year FROM budget_plans ORDER BY fiscal_year DESC");
-            if ($r) while ($row = $r->fetch_assoc()) $years[] = (int)$row['fiscal_year'];
-            if (!in_array((int)date('Y'), $years)) array_unshift($years, (int)date('Y'));
+            // السنوات التي فيها بنود فعلية
+            $yearsWithData = [];
+            $r = $conn->query("SELECT DISTINCT fiscal_year FROM budget_plans ORDER BY fiscal_year DESC");
+            if ($r) while ($row = $r->fetch_assoc()) $yearsWithData[] = (int)$row['fiscal_year'];
+
+            // كل السنوات في الـ dropdown (فعلية + حالية + قادمة)
+            $years    = $yearsWithData;
+            $thisYear = (int)date('Y');
+            $nextYear = $thisYear + 1;
+            if (!in_array($thisYear, $years)) $years[] = $thisYear;
+            if (!in_array($nextYear, $years)) $years[] = $nextYear;
+            rsort($years);
 
             jsonResponse(['success' => true, 'data' => [
-                'categories'  => $cats,
-                'cost_centers' => $ccs,
-                'years'       => $years,
+                'categories'    => $cats,
+                'cost_centers'  => $ccs,
+                'years'         => $years,
+                'years_with_data' => $yearsWithData,
             ]]);
 
         // ══════════════════════════════════════════
@@ -198,14 +209,18 @@ try {
             $fyearRaw  = (int)($_GET['fiscal_year'] ?? date('Y'));
             // توحيد السنة: 26 → 2026
             $fyear     = $fyearRaw < 100 ? 2000 + $fyearRaw : $fyearRaw;
+            // استثناء الحجز الحالي من حساب المحجوز (حتى لا يحسب نفسه)
+            $excludeId = (int)($_GET['exclude_id'] ?? 0);
+            $excludeSql = $excludeId > 0 ? "AND id != $excludeId" : '';
             if (!$catCode || !$ccCode2)
                 jsonResponse(['success' => false, 'message' => 'cat_code و cc_code مطلوبان'], 400);
 
+            // يبحث بالكود أولاً ثم بالاسم (للتوافق مع البيانات القديمة)
             $planRow = $conn->query("
-                SELECT bp.id AS plan_id, bc.name AS cat_name, bp.fiscal_year
+                SELECT bp.id AS plan_id, bc.name AS cat_name, bc.code AS cat_code, bp.fiscal_year
                 FROM budget_plans bp
                 JOIN budget_categories bc ON bc.id = bp.category_id
-                WHERE bc.code = '$catCode'
+                WHERE (bc.code = '$catCode' OR bc.name = '$catCode')
                   AND bp.fiscal_year = $fyear
                 LIMIT 1
             ");
@@ -233,10 +248,13 @@ try {
                                SUM(CASE WHEN currency='SAR' THEN grand_total
                                         ELSE grand_total * COALESCE(exchange_rate,1) END) AS reserved
                         FROM budget_reservations
-                        WHERE budget_plan_id = $autoPlanId
+                        WHERE (budget_plan_id = $autoPlanId OR (budget_plan_id IS NULL AND (budget_category = (SELECT name FROM budget_categories WHERE code='$catCode' LIMIT 1) OR budget_category = '$catCode')))
                           AND cost_center    = '$ccCode2'
+                          AND (fiscal_year = $fyear OR fiscal_year = $fyear % 100)
                           AND status NOT IN ('مسودة','مرفوض','ملغى')
-                    ) res ON 1=1
+                          $excludeSql
+                        GROUP BY cost_center
+                    ) res ON res.cost_center = cc.code
                     WHERE bpcc.plan_id = $autoPlanId
                     LIMIT 1
                 ");
@@ -245,18 +263,32 @@ try {
                     break;
                 }
             }
-            // مركز التكلفة غير مخصص له ميزانية، ارجع اجمالي البند
+            // مركز التكلفة غير مخصص له ميزانية في الخطة — اعرض إجمالي البند مع فلتر CC
+            // نحدد شرط CC: إذا __all__ نجمع الكل، وإلا نفلتر
+            $ccFilter = ($ccCode2 && $ccCode2 !== '__all__') ? "AND cost_center = '$ccCode2'" : '';
             $r3 = $conn->query("
                 SELECT
-                    COALESCE(SUM(bpcc.allocated), 0)                                                          AS allocated,
-                    COALESCE((SELECT SUM(CASE WHEN currency='SAR' THEN grand_total ELSE grand_total * COALESCE(exchange_rate,1) END)
-                              FROM budget_reservations WHERE budget_plan_id = $autoPlanId
-                                AND status NOT IN ('مسودة','مرفوض','ملغى')), 0)                               AS reserved,
+                    COALESCE(SUM(bpcc.allocated), 0) AS allocated,
+                    COALESCE((
+                        SELECT SUM(CASE WHEN currency='SAR' THEN grand_total ELSE grand_total * COALESCE(exchange_rate,1) END)
+                        FROM budget_reservations
+                        WHERE (budget_plan_id = $autoPlanId
+                               OR (budget_plan_id IS NULL AND (fiscal_year = $fyear OR fiscal_year = $fyear % 100)
+                                   AND (budget_category = '{$planData['cat_name']}' OR budget_category = '$catCode')))
+                          AND status NOT IN ('مسودة','مرفوض','ملغى')
+                          $ccFilter $excludeSql
+                    ), 0) AS reserved,
                     COALESCE(SUM(bpcc.allocated), 0)
-                    - COALESCE((SELECT SUM(CASE WHEN currency='SAR' THEN grand_total ELSE grand_total * COALESCE(exchange_rate,1) END)
-                                FROM budget_reservations WHERE budget_plan_id = $autoPlanId
-                                  AND status NOT IN ('مسودة','مرفوض','ملغى')), 0)                             AS remaining,
-                    'category_total'                                                                           AS scope
+                    - COALESCE((
+                        SELECT SUM(CASE WHEN currency='SAR' THEN grand_total ELSE grand_total * COALESCE(exchange_rate,1) END)
+                        FROM budget_reservations
+                        WHERE (budget_plan_id = $autoPlanId
+                               OR (budget_plan_id IS NULL AND (fiscal_year = $fyear OR fiscal_year = $fyear % 100)
+                                   AND (budget_category = '{$planData['cat_name']}' OR budget_category = '$catCode')))
+                          AND status NOT IN ('مسودة','مرفوض','ملغى')
+                          $ccFilter $excludeSql
+                    ), 0) AS remaining,
+                    'category_total' AS scope
                 FROM budget_plan_cost_centers bpcc
                 WHERE bpcc.plan_id = $autoPlanId
             ");

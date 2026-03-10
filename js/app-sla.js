@@ -296,9 +296,11 @@ async function escalateStage(txId, stage, stageLabel, btn) {
 // ─── عرض تفاصيل SLA / OLA ────────────────────────────────────
 function renderSlaDetailModal(d) {
     const SC = { ok: 'var(--accent-green)', warning: 'var(--accent-orange)', breached: 'var(--accent-red)' };
-    const SL = { ok: '✅ ضمن المدة', warning: '⚠️ تحذير', breached: '🔴 تجاوز' };
     const slaColor = SC[d.sla_status] || 'var(--text-muted)';
     const slaBarW = Math.min(d.sla_pct, 100);
+    const cardCls = d.sla_status === 'ok' ? 'card-ok' : d.sla_status === 'warning' ? 'card-warn' : 'card-breach';
+    const pillCls = d.sla_status === 'ok' ? 'pill-ok' : d.sla_status === 'warning' ? 'pill-warn' : 'pill-breach';
+    const statusTxt = d.sla_status === 'ok' ? '✓ ضمن المدة' : d.sla_status === 'warning' ? '⚠ تحذير' : '✕ تجاوز';
 
     const fmtMin = m => {
         if (!m && m !== 0) return '—';
@@ -309,40 +311,44 @@ function renderSlaDetailModal(d) {
         return hr + 'س' + (mn > 0 ? ' و' + mn + 'د' : '');
     };
 
-    // ── خط التقدم الكلي ───────────────────────────────────────
+    // ── بطاقة SLA الكلي ──────────────────────────────────────
     const totalHtml = `
-    <div class="sla-total-bar">
-        <div class="sla-total-header">
-            <span class="sla-total-label">⏱ SLA الكلي</span>
-            <span class="sla-total-status" style="color:${slaColor}">${SL[d.sla_status] || d.sla_status}</span>
+    <div class="sla-total-card ${cardCls}">
+        <div class="sla-total-row1">
+            <span class="sla-total-lbl">⏱ SLA الكلي</span>
+            <span class="sla-total-status-pill ${pillCls}">${statusTxt}</span>
+        </div>
+        <div class="sla-total-numbers">
+            <span class="sla-total-elapsed" style="color:${slaColor}">${fmtMin(d.total_elapsed)}</span>
+            <span class="sla-total-sep">/</span>
+            <span class="sla-total-allowed">${fmtMin(d.sla_total_min)} مسموح</span>
+            <span class="sla-total-pct-badge" style="color:${slaColor}">${d.sla_pct}%</span>
         </div>
         <div class="sla-progress-track">
             <div class="sla-progress-fill" style="width:${slaBarW}%;background:${slaColor}"></div>
         </div>
-        <div class="sla-progress-labels">
-            <span style="color:${slaColor};font-weight:700">${fmtMin(d.total_elapsed)} (${d.sla_pct}%)</span>
-            <span style="color:var(--text-muted)">من ${fmtMin(d.sla_total_min)} مسموح</span>
-        </div>
     </div>`;
 
-    // ── مراحل OLA كـ timeline ─────────────────────────────────
+    // ── مراحل OLA ────────────────────────────────────────────
     const stagesHtml = (d.stages || []).map((st, idx) => {
         const isLast = idx === (d.stages.length - 1);
 
         // معلّق
         if (st.status === 'paused' || st.ola_paused) {
             return `
-            <div class="sla-stage-item sla-stage-paused">
-                <div class="sla-stage-dot-col">
-                    <div class="sla-stage-dot" style="background:var(--accent-amber);border-color:var(--accent-amber)">⏸</div>
-                    ${!isLast ? '<div class="sla-stage-line sla-stage-line-muted"></div>' : ''}
+            <div class="sla-stage-row">
+                <div class="sla-dot-col">
+                    <div class="sla-dot" style="background:rgba(234,179,8,.2);border-color:rgba(234,179,8,.5);color:#b45309">⏸</div>
+                    ${!isLast ? '<div class="sla-connector" style="background:var(--border-color)"></div>' : ''}
                 </div>
-                <div class="sla-stage-body">
-                    <div class="sla-stage-title">
-                        <span>${st.label}</span>
-                        <span class="sla-badge" style="background:rgba(234,179,8,.15);color:#b45309">OLA معلّق</span>
+                <div class="sla-stage-card sla-stage-card-paused">
+                    <div class="sla-card-head">
+                        <span class="sla-card-name">${st.label}</span>
+                        <span class="sla-badge sla-badge-paused">⏸ OLA معلّق</span>
                     </div>
-                    <div class="sla-stage-note">بانتظار عودة أمر الشراء — لا يُحتسب في OLA</div>
+                    <div class="sla-card-body">
+                        <div class="sla-card-note">بانتظار عودة أمر الشراء — لا يُحتسب في OLA</div>
+                    </div>
                 </div>
             </div>`;
         }
@@ -350,97 +356,104 @@ function renderSlaDetailModal(d) {
         const pct = Math.min(st.pct, 150);
         const barW = Math.min(st.pct, 100);
         const isDone = st.status === 'done' || st.status === 'breached_done';
-        const color = st.status === 'breached' ? 'var(--accent-red)'
-            : st.status === 'warning' ? 'var(--accent-orange)'
-                : isDone ? 'var(--accent-green)'
-                    : st.status === 'active' ? 'var(--accent-blue)'
-                        : st.status === 'escalated' ? 'var(--accent-red)'
+        const isAct = st.status === 'active';
+
+        const dotColor = st.status === 'breached' ? '#e03131'
+            : st.status === 'warning' ? '#c07a00'
+                : isDone ? '#2e9e44'
+                    : isAct ? '#1c7ed6'
+                        : st.status === 'escalated' ? '#e03131'
                             : 'var(--border-color)';
 
-        const dotIcon = isDone ? '✓'
-            : st.status === 'escalated' ? '🔔'
-                : st.status === 'breached' ? '✗'
-                    : st.status === 'warning' ? '!'
-                        : st.status === 'active' ? '●'
-                            : st.status === 'waiting' ? '○'
-                                : '○';
+        const dotBg = st.status === 'breached' ? 'rgba(239,68,68,.15)'
+            : st.status === 'warning' ? 'rgba(245,158,11,.15)'
+                : isDone ? 'rgba(64,192,87,.15)'
+                    : isAct ? 'rgba(77,171,247,.15)'
+                        : st.status === 'escalated' ? 'rgba(239,68,68,.15)'
+                            : 'var(--bg-card)';
 
-        const statusBadge = isDone ? `<span class="sla-badge sla-badge-done">✓ مكتملة</span>`
-            : st.status === 'escalated' ? `<span class="sla-badge sla-badge-esc">🔔 مُصعَّدة</span>`
-                : st.status === 'breached' ? `<span class="sla-badge sla-badge-breach">🔴 تجاوزOLA</span>`
-                    : st.status === 'warning' ? `<span class="sla-badge sla-badge-warn">⚠️ تحذير</span>`
-                        : st.status === 'active' ? `<span class="sla-badge sla-badge-active">🔵 جارية</span>`
-                            : st.status === 'waiting' ? `<span class="sla-badge" style="color:var(--text-muted)">⏳ انتظار</span>`
-                                : `<span class="sla-badge" style="color:var(--text-muted)">لم تبدأ</span>`;
+        const dotIcon = isDone ? '✓' : st.status === 'escalated' ? '!' : st.status === 'breached' ? '✕'
+            : st.status === 'warning' ? '!' : isAct ? '●' : '○';
 
-        // صفوف الأوقات
-        let timeCells = '';
-        if (st.waiting_min > 0) {
-            timeCells += `<div class="sla-time-cell"><div class="sla-time-label">⏳ انتظار قبل الاستلام</div><div class="sla-time-val" style="color:var(--text-muted)">${fmtMin(st.waiting_min)}</div></div>`;
-        }
-        if (st.elapsed_min > 0 || st.status === 'active') {
-            timeCells += `<div class="sla-time-cell"><div class="sla-time-label">⚙️ وقت المعالجة OLA</div><div class="sla-time-val" style="color:${color}">${fmtMin(st.elapsed_min)}</div></div>`;
-        }
-        if (st.post_escalation_min != null && st.post_escalation_min > 0) {
-            timeCells += `<div class="sla-time-cell"><div class="sla-time-label">🔔 بعد التصعيد</div><div class="sla-time-val" style="color:var(--accent-orange)">${fmtMin(st.post_escalation_min)}</div></div>`;
-        }
+        const badgeCls = isDone ? 'sla-badge-done' : isAct ? 'sla-badge-active'
+            : st.status === 'breached' ? 'sla-badge-breach'
+                : st.status === 'warning' ? 'sla-badge-warn'
+                    : st.status === 'escalated' ? 'sla-badge-esc'
+                        : st.status === 'waiting' ? 'sla-badge-wait' : 'sla-badge-wait';
 
-        // شريط التقدم — فقط للمراحل ذات بيانات
-        const showBar = st.status !== 'pending' && st.status !== 'waiting' && st.elapsed_min >= 0 && st.pct > 0;
+        const badgeTxt = isDone ? '✓ مكتملة' : isAct ? '● جارية'
+            : st.status === 'breached' ? '✕ تجاوز OLA'
+                : st.status === 'warning' ? '⚠ تحذير'
+                    : st.status === 'escalated' ? '! مُصعَّدة'
+                        : st.status === 'waiting' ? '○ انتظار' : '○ لم تبدأ';
+
+        const cardCls2 = isAct ? 'sla-stage-card-active' : isDone ? 'sla-stage-card-done'
+            : st.status === 'breached' ? 'sla-stage-card-breach' : '';
+
+        // chips الأوقات
+        let chipsHtml = '';
+        if (st.waiting_min > 0)
+            chipsHtml += `<div class="sla-time-chip"><span class="sla-time-chip-lbl">⏳ انتظار</span><span class="sla-time-chip-val" style="color:var(--text-muted)">${fmtMin(st.waiting_min)}</span></div>`;
+        if (st.elapsed_min > 0 || isAct)
+            chipsHtml += `<div class="sla-time-chip"><span class="sla-time-chip-lbl">⚙ معالجة OLA</span><span class="sla-time-chip-val" style="color:${dotColor}">${fmtMin(st.elapsed_min)}</span></div>`;
+        if (st.post_escalation_min > 0)
+            chipsHtml += `<div class="sla-time-chip"><span class="sla-time-chip-lbl">🔔 بعد التصعيد</span><span class="sla-time-chip-val" style="color:var(--accent-orange)">${fmtMin(st.post_escalation_min)}</span></div>`;
+
+        const showBar = st.status !== 'pending' && st.status !== 'waiting' && st.pct > 0;
         const barHtml = showBar ? `
-            <div class="sla-mini-bar">
-                <div class="sla-mini-fill" style="width:${barW}%;background:${color}"></div>
-                ${pct > 100 ? `<div class="sla-mini-overflow" style="width:${Math.min(pct - 100, 50)}%"></div>` : ''}
-            </div>
-            <div class="sla-bar-labels">
-                <span style="color:${color};font-weight:600">${pct}%</span>
-                <span style="color:var(--text-muted)">من ${st.allowed_hrs}س مسموح</span>
+            <div class="sla-ola-bar-wrap">
+                <div class="sla-ola-bar-labels">
+                    <span style="color:${dotColor};font-weight:700">${pct}%</span>
+                    <span style="color:var(--text-muted);font-size:.68rem">من ${st.allowed_hrs}س مسموح</span>
+                </div>
+                <div class="sla-ola-bar-track">
+                    <div class="sla-ola-bar-fill" style="width:${barW}%;background:${dotColor}"></div>
+                </div>
             </div>` : '';
 
-        // زر التصعيد
-        const escBtn = (st.status === 'breached' && !st.is_escalated)
-            ? `<div class="sla-breach-actions">
+        const escHtml = (st.status === 'breached' && !st.is_escalated)
+            ? `<div class="sla-esc-wrap">
                 <button class="sla-esc-btn" id="esc-btn-${st.stage}"
                     onclick="escalateStage(${d.transaction_id},'${st.stage}','${st.label}',this)">
                     🔔 تصعيد للمشرف
-                </button>
-               </div>`
-            : st.is_escalated
-                ? `<div class="sla-escalated-ok">✅ تم التصعيد للمشرف</div>`
-                : '';
+                </button></div>`
+            : st.is_escalated ? `<div class="sla-esc-wrap"><div class="sla-escalated-ok">✅ تم التصعيد للمشرف</div></div>` : '';
+
+        const hasBody = chipsHtml || showBar || escHtml;
 
         return `
-        <div class="sla-stage-item ${isDone ? 'sla-stage-done' : ''} ${st.status === 'active' ? 'sla-stage-active' : ''}">
-            <div class="sla-stage-dot-col">
-                <div class="sla-stage-dot" style="background:${color};border-color:${color};color:${isDone || st.status === 'active' ? '#fff' : '#fff'}">${dotIcon}</div>
-                ${!isLast ? `<div class="sla-stage-line" style="background:${isDone ? color : 'var(--border-color)'}"></div>` : ''}
+        <div class="sla-stage-row">
+            <div class="sla-dot-col">
+                <div class="sla-dot ${isAct ? 'sla-dot-active' : ''}"
+                    style="background:${dotBg};border-color:${dotColor};color:${dotColor}">${dotIcon}</div>
+                ${!isLast ? `<div class="sla-connector" style="background:${isDone ? dotColor : 'var(--border-color)'}"></div>` : ''}
             </div>
-            <div class="sla-stage-body">
-                <div class="sla-stage-title">
-                    <span style="font-weight:700;color:var(--text-primary)">${st.label}</span>
-                    <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
-                        ${st.employee !== '—' ? `<span class="sla-employee-tag">👤 ${st.employee}</span>` : ''}
-                        ${statusBadge}
+            <div class="sla-stage-card ${cardCls2}">
+                <div class="sla-card-head">
+                    <span class="sla-card-name">${st.label}</span>
+                    <div class="sla-card-badges">
+                        ${st.employee && st.employee !== '—' ? `<span class="sla-emp-badge">👤 ${st.employee}</span>` : ''}
+                        <span class="sla-badge ${badgeCls}">${badgeTxt}</span>
                     </div>
                 </div>
-                ${timeCells ? `<div class="sla-time-grid">${timeCells}</div>` : ''}
-                ${barHtml}
-                ${escBtn}
+                ${hasBody ? `<div class="sla-card-body">
+                    ${chipsHtml ? `<div class="sla-times-grid">${chipsHtml}</div>` : ''}
+                    ${barHtml}${escHtml}
+                </div>` : ''}
             </div>
         </div>`;
     }).join('');
 
-    const elapsed = fmtMin(d.total_elapsed);
-    const allowed = fmtMin(d.sla_total_min);
-
     return `
     <div class="sla-detail-wrap">
         ${totalHtml}
-        <div class="sla-stages-title">📊 تفاصيل OLA لكل مرحلة</div>
-        <div class="sla-stages-timeline">
-            ${stagesHtml}
+        <div class="sla-phases-header">
+            <div class="sla-phases-line" style="flex:1;height:1px;background:var(--border-color)"></div>
+            <span class="sla-phases-title" style="font-size:.72rem;font-weight:700;color:var(--text-muted);letter-spacing:.06em;padding:0 .6rem;white-space:nowrap">تفاصيل OLA لكل مرحلة</span>
+            <div class="sla-phases-line" style="flex:1;height:1px;background:var(--border-color)"></div>
         </div>
-        <div style="margin-top:1rem;display:flex;justify-content:flex-end">
+        <div class="sla-timeline">${stagesHtml}</div>
+        <div style="margin-top:.75rem;display:flex;justify-content:flex-end">
             <button class="btn btn-secondary" onclick="closeModal()">إغلاق</button>
         </div>
     </div>`;
@@ -1166,58 +1179,323 @@ function renderSlaEmailEscalationsTable(rows) {
     tr.row-warn   { background:rgba(245,158,11,.05); }
 
     /* ══════════════════════════════════
-       نافذة تفاصيل SLA
+       نافذة تفاصيل SLA — تصميم جديد
        ══════════════════════════════════ */
-    .sla-detail-wrap { direction:rtl; }
-    .sla-total-bar { background:var(--bg-surface); border-radius:12px; padding:1rem 1.25rem;
-        margin-bottom:1.25rem; border:1px solid var(--border-color); }
-    .sla-total-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:.75rem; }
-    .sla-total-label  { font-weight:700; font-size:1rem; }
-    .sla-total-status { font-weight:700; font-size:1rem; }
-    .sla-progress-track { height:12px; border-radius:6px; background:var(--bg-card);
-        overflow:hidden; margin-bottom:.4rem; }
-    .sla-progress-fill  { height:100%; border-radius:6px; transition:width .5s; }
-    .sla-progress-labels{ display:flex; justify-content:space-between; font-size:.82rem; }
-    .sla-stages-title { font-weight:700; color:var(--text-primary); margin-bottom:1rem; font-size:.9rem; }
-    .sla-stages-timeline { display:flex; flex-direction:column; gap:0; }
-    .sla-stage-item { display:flex; gap:.875rem; }
-    .sla-stage-dot-col { display:flex; flex-direction:column; align-items:center; flex-shrink:0; }
-    .sla-stage-dot { width:28px; height:28px; border-radius:50%; border:2px solid;
-        display:flex; align-items:center; justify-content:center;
-        font-size:.72rem; font-weight:900; flex-shrink:0; }
-    .sla-stage-line { width:2px; flex:1; min-height:16px; margin:2px 0; }
-    .sla-stage-line-muted { background:var(--border-color) !important; }
-    .sla-stage-body { flex:1; padding-bottom:1.25rem; }
-    .sla-stage-item:last-child .sla-stage-body { padding-bottom:.25rem; }
-    .sla-stage-title { display:flex; justify-content:space-between; align-items:center;
-        flex-wrap:wrap; gap:.4rem; margin-bottom:.5rem; }
-    .sla-employee-tag { font-size:.78rem; color:var(--text-muted);
-        background:var(--bg-surface); border-radius:4px; padding:1px 6px; }
-    .sla-badge { font-size:.74rem; font-weight:700; padding:2px 8px; border-radius:4px; }
-    .sla-badge-done   { background:rgba(64,192,87,.15);  color:#40c057; }
-    .sla-badge-esc    { background:rgba(239,68,68,.12);  color:var(--accent-red); }
-    .sla-badge-breach { background:rgba(239,68,68,.12);  color:var(--accent-red); }
-    .sla-badge-warn   { background:rgba(245,158,11,.12); color:var(--accent-orange); }
-    .sla-badge-active { background:rgba(77,171,247,.12); color:var(--accent-blue); }
-    .sla-time-grid { display:flex; gap:.5rem; flex-wrap:wrap; margin-bottom:.5rem; }
-    .sla-time-cell { background:var(--bg-surface); border-radius:7px; padding:.4rem .65rem; min-width:90px; }
-    .sla-time-label { font-size:.72rem; color:var(--text-muted); margin-bottom:.1rem; }
-    .sla-time-val   { font-size:.88rem; font-weight:700; }
-    .sla-mini-bar { height:7px; border-radius:4px; background:var(--bg-card);
-        overflow:hidden; margin-bottom:.25rem; position:relative; }
-    .sla-mini-fill    { height:100%; border-radius:4px; transition:width .5s; }
-    .sla-mini-overflow{ position:absolute; right:0; top:0; height:100%;
-        background:repeating-linear-gradient(90deg,rgba(239,68,68,.4) 0,rgba(239,68,68,.4) 4px,transparent 4px,transparent 8px); }
-    .sla-bar-labels { display:flex; justify-content:space-between; font-size:.75rem; margin-bottom:.5rem; }
-    .sla-breach-actions { margin-top:.4rem; }
-    .sla-esc-btn { background:var(--accent-red); color:#fff; border:none; border-radius:6px;
-        padding:.3rem .8rem; font-size:.78rem; font-family:inherit; cursor:pointer;
-        font-weight:600; transition:opacity .2s; }
-    .sla-esc-btn:hover { opacity:.85; }
-    .sla-escalated-ok { font-size:.78rem; color:var(--accent-green);
-        background:#16a34a18; padding:3px 8px; border-radius:4px; margin-top:.3rem; display:inline-block; }
-    .sla-stage-paused .sla-stage-body { opacity:.8; }
-    .sla-stage-note { font-size:.8rem; color:var(--text-muted); margin-top:.15rem; }
+
+    /* ── Wrapper ── */
+    .sla-detail-wrap {
+        direction: rtl;
+        font-family: 'Noto Sans Arabic', 'Segoe UI', sans-serif;
+        padding: .25rem 0;
+    }
+
+    /* ── بطاقة SLA الكلي ── */
+    .sla-total-card {
+        border-radius: 14px;
+        padding: 1.1rem 1.25rem 1rem;
+        margin-bottom: 1.25rem;
+        position: relative;
+        overflow: hidden;
+        border: 1px solid var(--border-color);
+        background: var(--bg-surface);
+    }
+    .sla-total-card::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(135deg, rgba(255,255,255,.04) 0%, transparent 60%);
+        pointer-events: none;
+    }
+    .sla-total-card.card-ok      { border-color: rgba(64,192,87,.35);  background: rgba(64,192,87,.06); }
+    .sla-total-card.card-warn    { border-color: rgba(245,158,11,.35); background: rgba(245,158,11,.06); }
+    .sla-total-card.card-breach  { border-color: rgba(239,68,68,.35);  background: rgba(239,68,68,.06); }
+
+    .sla-total-row1 {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: .7rem;
+    }
+    .sla-total-lbl {
+        font-size: .78rem;
+        font-weight: 600;
+        color: var(--text-muted);
+        letter-spacing: .03em;
+        text-transform: uppercase;
+    }
+    .sla-total-status-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: .3rem;
+        font-size: .78rem;
+        font-weight: 700;
+        padding: .25rem .75rem;
+        border-radius: 20px;
+    }
+    .pill-ok     { background: rgba(64,192,87,.15);  color: #2e9e44; }
+    .pill-warn   { background: rgba(245,158,11,.15); color: #c07a00; }
+    .pill-breach { background: rgba(239,68,68,.15);  color: #e03131; }
+
+    .sla-total-numbers {
+        display: flex;
+        align-items: baseline;
+        gap: .4rem;
+        margin-bottom: .65rem;
+    }
+    .sla-total-elapsed {
+        font-size: 1.55rem;
+        font-weight: 800;
+        line-height: 1;
+        letter-spacing: -.02em;
+    }
+    .sla-total-sep { font-size: 1rem; color: var(--text-muted); font-weight: 300; }
+    .sla-total-allowed { font-size: .88rem; color: var(--text-muted); }
+    .sla-total-pct-badge {
+        margin-right: auto;
+        font-size: .8rem;
+        font-weight: 700;
+        padding: .15rem .55rem;
+        border-radius: 6px;
+        background: var(--bg-card);
+    }
+
+    .sla-progress-track {
+        height: 8px;
+        border-radius: 4px;
+        background: var(--bg-card);
+        overflow: hidden;
+    }
+    .sla-progress-fill {
+        height: 100%;
+        border-radius: 4px;
+        transition: width .6s cubic-bezier(.4,0,.2,1);
+    }
+
+    /* ── عنوان المراحل ── */
+    .sla-phases-header {
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+        margin-bottom: .9rem;
+    }
+    .sla-phases-header-line {
+        flex: 1;
+        height: 1px;
+        background: var(--border-color);
+    }
+    .sla-phases-title {
+        font-size: .74rem;
+        font-weight: 700;
+        color: var(--text-muted);
+        letter-spacing: .06em;
+        text-transform: uppercase;
+        white-space: nowrap;
+    }
+
+    /* ── Timeline ── */
+    .sla-timeline { display: flex; flex-direction: column; }
+
+    .sla-stage-row {
+        display: flex;
+        gap: .875rem;
+        position: relative;
+    }
+
+    /* خط الـ timeline */
+    .sla-dot-col {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        flex-shrink: 0;
+        width: 30px;
+    }
+    .sla-dot {
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: .72rem;
+        font-weight: 900;
+        flex-shrink: 0;
+        border: 2.5px solid;
+        transition: transform .2s;
+        position: relative;
+        z-index: 1;
+    }
+    .sla-dot-active { box-shadow: 0 0 0 4px rgba(77,171,247,.2); }
+    .sla-connector {
+        width: 2px;
+        flex: 1;
+        min-height: 12px;
+        margin: 3px 0;
+        border-radius: 2px;
+    }
+
+    /* بطاقة المرحلة */
+    .sla-stage-card {
+        flex: 1;
+        margin-bottom: .875rem;
+        border-radius: 10px;
+        border: 1px solid var(--border-color);
+        background: var(--bg-surface);
+        overflow: hidden;
+        transition: box-shadow .2s;
+    }
+    .sla-stage-card:hover { box-shadow: 0 2px 12px rgba(0,0,0,.08); }
+    .sla-stage-card-active {
+        border-color: rgba(77,171,247,.4);
+        background: rgba(77,171,247,.04);
+    }
+    .sla-stage-card-done {
+        opacity: .82;
+    }
+    .sla-stage-card-breach {
+        border-color: rgba(239,68,68,.3);
+        background: rgba(239,68,68,.04);
+    }
+    .sla-stage-card-paused {
+        opacity: .7;
+        border-style: dashed;
+    }
+
+    .sla-card-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: .6rem .85rem .5rem;
+        gap: .5rem;
+        flex-wrap: wrap;
+    }
+    .sla-card-name {
+        font-size: .88rem;
+        font-weight: 700;
+        color: var(--text-primary);
+    }
+    .sla-card-badges {
+        display: flex;
+        align-items: center;
+        gap: .35rem;
+        flex-wrap: wrap;
+    }
+
+    .sla-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: .2rem;
+        font-size: .7rem;
+        font-weight: 700;
+        padding: .18rem .55rem;
+        border-radius: 5px;
+    }
+    .sla-badge-done    { background: rgba(64,192,87,.12);  color: #2e9e44; }
+    .sla-badge-active  { background: rgba(77,171,247,.12); color: #1c7ed6; }
+    .sla-badge-warn    { background: rgba(245,158,11,.12); color: #c07a00; }
+    .sla-badge-breach  { background: rgba(239,68,68,.12);  color: #e03131; }
+    .sla-badge-esc     { background: rgba(239,68,68,.12);  color: #e03131; }
+    .sla-badge-paused  { background: rgba(234,179,8,.12);  color: #b45309; }
+    .sla-badge-wait    { background: var(--bg-card);       color: var(--text-muted); }
+    .sla-emp-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: .25rem;
+        font-size: .7rem;
+        color: var(--text-muted);
+        background: var(--bg-card);
+        border-radius: 4px;
+        padding: .18rem .5rem;
+    }
+
+    /* body البطاقة */
+    .sla-card-body {
+        padding: 0 .85rem .65rem;
+        border-top: 1px solid var(--border-color);
+    }
+    .sla-card-note {
+        padding: .4rem 0;
+        font-size: .78rem;
+        color: var(--text-muted);
+    }
+
+    /* شبكة الأوقات */
+    .sla-times-grid {
+        display: flex;
+        gap: .5rem;
+        flex-wrap: wrap;
+        padding: .45rem 0 .35rem;
+    }
+    .sla-time-chip {
+        display: flex;
+        flex-direction: column;
+        background: var(--bg-card);
+        border-radius: 7px;
+        padding: .35rem .6rem;
+        min-width: 80px;
+    }
+    .sla-time-chip-lbl {
+        font-size: .65rem;
+        color: var(--text-muted);
+        margin-bottom: .1rem;
+        font-weight: 500;
+    }
+    .sla-time-chip-val {
+        font-size: .85rem;
+        font-weight: 700;
+    }
+
+    /* شريط OLA */
+    .sla-ola-bar-wrap { padding: .15rem 0 .4rem; }
+    .sla-ola-bar-labels {
+        display: flex;
+        justify-content: space-between;
+        font-size: .71rem;
+        margin-bottom: .3rem;
+    }
+    .sla-ola-bar-track {
+        height: 6px;
+        border-radius: 3px;
+        background: var(--bg-card);
+        overflow: hidden;
+    }
+    .sla-ola-bar-fill {
+        height: 100%;
+        border-radius: 3px;
+        transition: width .5s ease;
+    }
+
+    /* زر التصعيد */
+    .sla-esc-wrap { padding: .4rem 0 .1rem; }
+    .sla-esc-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: .35rem;
+        background: #e03131;
+        color: #fff;
+        border: none;
+        border-radius: 7px;
+        padding: .35rem .85rem;
+        font-size: .78rem;
+        font-family: inherit;
+        cursor: pointer;
+        font-weight: 700;
+        transition: opacity .2s, transform .1s;
+    }
+    .sla-esc-btn:hover { opacity: .88; transform: translateY(-1px); }
+    .sla-esc-btn:active { transform: none; }
+    .sla-escalated-ok {
+        display: inline-flex;
+        align-items: center;
+        gap: .3rem;
+        font-size: .78rem;
+        color: #2e9e44;
+        background: rgba(64,192,87,.12);
+        padding: .3rem .7rem;
+        border-radius: 6px;
+        font-weight: 600;
+    }
+
+
 
     /* ══════════════════════════════════════════════════
        مدير سياسات SLA/OLA — التصميم المُحسَّن

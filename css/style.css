@@ -1804,12 +1804,17 @@ body {
 
 .tx-amount {
     font-weight: 600;
+    direction: ltr;
+
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.25rem;
 }
 
 .tx-amount small {
     color: var(--text-muted);
     font-weight: 400;
-    margin-right: 0.25rem;
+    margin-left: 0;
 }
 
 .th-green {
@@ -4198,8 +4203,16 @@ body {
     gap: 0.3rem;
 }
 
-.timeline-time {
-    direction: ltr;
+.timeline-employee-avatar {
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
 }
 
 /* ØªØ­Ù„ÙŠÙ„Ø§Øª */
@@ -4613,8 +4626,16 @@ body {
     gap: 0.25rem;
 }
 
-.event-time {
-    direction: ltr;
+.event-employee-avatar {
+    width: 20px;
+    height: 20px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.65rem;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
 }
 
 /* Responsive */
@@ -5446,10 +5467,6 @@ body {
 /* ========== دعم RTL و LTR ========== */
 
 /* الوضع الإنجليزي (LTR) */
-[dir="ltr"] {
-    direction: ltr;
-    text-align: left;
-}
 
 [dir="ltr"] .navbar-container {
     flex-direction: row;
@@ -7275,7 +7292,8 @@ input:checked+.toggle-slider:before {
     font-weight: 700;
     color: var(--accent-green);
     white-space: nowrap;
-    direction: ltr;
+    /* direction: ltr; */
+    ;
 }
 
 /* ── شريط مراحل التقدم ─────────────────────────────────────── */

@@ -81,17 +81,15 @@ if (isset($_SESSION['user_id'])) {
     }
 
     .login-card {
-        background: var(--bg-card);
-        border: 1px solid var(--border-color);
+        /* background: var(--bg-card); */
+        /* border: 1px solid var(--border-color); */
         border-radius: 24px;
         padding: 2.5rem;
-        box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.1);
+        /* box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.1); */
         transition: all 0.3s ease;
     }
 
-    [data-theme="light"] .login-card {
-        box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.08);
-    }
+
 
     /* الشعار */
     .logo {
@@ -451,7 +449,9 @@ if (isset($_SESSION['user_id'])) {
     <div class="login-container">
         <div class="login-card">
             <div class="logo">
-                <div class="logo-icon">⚡</div>
+                <div class="sidebar-logo-icon">
+                    <img src="images/logo.png" alt="الشعار" style="border-radius:50%;object-fit:cover;">
+                </div>
                 <h1>نظام إدارة معاملات القطاع المالي</h1>
                 <p>سجّل دخولك للمتابعة</p>
             </div>
@@ -637,7 +637,7 @@ if (isset($_SESSION['user_id'])) {
                 if (data.success) {
                     showMessage('تم تسجيل الدخول بنجاح!', 'success');
                     setTimeout(() => {
-                        window.location.href = 'index.php';
+                        window.location.href = 'splash.php';
                     }, 1000);
                     return;
                 } else {

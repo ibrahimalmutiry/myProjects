@@ -58,6 +58,14 @@ function ensureViewExists() {
         $conn->query("INSERT IGNORE INTO budget_data (transaction_id) SELECT id FROM transactions");
     }
     
+    // ضمان وجود أعمدة العملة قبل إنشاء الـ View
+    $chkCur = $conn->query("SHOW COLUMNS FROM transactions LIKE 'currency'");
+    if (!$chkCur || $chkCur->num_rows === 0) {
+        $conn->query("ALTER TABLE transactions ADD COLUMN currency VARCHAR(10) NOT NULL DEFAULT 'SAR'");
+        $conn->query("ALTER TABLE transactions ADD COLUMN exchange_rate DECIMAL(10,4) NOT NULL DEFAULT 1.0000");
+        $conn->query("ALTER TABLE transactions ADD COLUMN amount_sar DECIMAL(15,2) DEFAULT NULL");
+    }
+
     // حذف View القديم وإنشاء جديد
     $conn->query("DROP VIEW IF EXISTS v_full_transactions");
     
@@ -75,6 +83,9 @@ function ensureViewExists() {
         ts.name as transaction_sub_type,
         t.description,
         t.amount,
+        IFNULL(t.currency, 'SAR') as currency,
+        IFNULL(t.exchange_rate, 1) as exchange_rate,
+        IFNULL(t.amount_sar, t.amount) as amount_sar,
         IFNULL(t.attachment, '') as attachment,
         IFNULL(t.attachment_name, '') as attachment_name,
         
@@ -336,10 +347,13 @@ function getUrgentTransactions() {
     $conn = db();
 
     // ضمان وجود أعمدة priority في جدول transactions
-    $conn->query("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS priority ENUM('normal','high','urgent') DEFAULT 'normal'");
-    $conn->query("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS priority_set_by INT DEFAULT NULL");
-    $conn->query("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS priority_set_at DATETIME DEFAULT NULL");
-    $conn->query("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS priority_note VARCHAR(255) DEFAULT NULL");
+    $_chk_pri = $conn->query("SHOW COLUMNS FROM transactions LIKE 'priority'");
+    if (!$_chk_pri || $_chk_pri->num_rows === 0) {
+        $conn->query("ALTER TABLE transactions ADD COLUMN priority ENUM('normal','high','urgent') DEFAULT 'normal'");
+        $conn->query("ALTER TABLE transactions ADD COLUMN priority_set_by INT DEFAULT NULL");
+        $conn->query("ALTER TABLE transactions ADD COLUMN priority_set_at DATETIME DEFAULT NULL");
+        $conn->query("ALTER TABLE transactions ADD COLUMN priority_note VARCHAR(255) DEFAULT NULL");
+    }
 
     // جلب المعاملات العاجلة: join بين transactions (للأولوية اليدوية) والـ View (لبقية البيانات)
     $sql = "
@@ -391,10 +405,13 @@ function setTransactionPriority($transactionId, $priority, $note = null) {
     $conn = db();
 
     // ضمان وجود الأعمدة
-    $conn->query("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS priority ENUM('normal','high','urgent') DEFAULT 'normal'");
-    $conn->query("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS priority_set_by INT DEFAULT NULL");
-    $conn->query("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS priority_set_at DATETIME DEFAULT NULL");
-    $conn->query("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS priority_note VARCHAR(255) DEFAULT NULL");
+    $_chk_pri = $conn->query("SHOW COLUMNS FROM transactions LIKE 'priority'");
+    if (!$_chk_pri || $_chk_pri->num_rows === 0) {
+        $conn->query("ALTER TABLE transactions ADD COLUMN priority ENUM('normal','high','urgent') DEFAULT 'normal'");
+        $conn->query("ALTER TABLE transactions ADD COLUMN priority_set_by INT DEFAULT NULL");
+        $conn->query("ALTER TABLE transactions ADD COLUMN priority_set_at DATETIME DEFAULT NULL");
+        $conn->query("ALTER TABLE transactions ADD COLUMN priority_note VARCHAR(255) DEFAULT NULL");
+    }
 
     $transactionId = (int)$transactionId;
     $priority = $conn->real_escape_string($priority);
@@ -448,8 +465,12 @@ function getTransactionTypes() {
     $conn = db();
 
     // ضمان وجود أعمدة التصنيف الهرمي
-    $conn->query("ALTER TABLE transaction_types ADD COLUMN IF NOT EXISTS parent_id INT DEFAULT NULL");
-    $conn->query("ALTER TABLE transaction_types ADD COLUMN IF NOT EXISTS sort_order INT DEFAULT 0");
+    $chkPar = $conn->query("SHOW COLUMNS FROM transaction_types LIKE 'parent_id'");
+    if (!$chkPar || $chkPar->num_rows === 0)
+        $conn->query("ALTER TABLE transaction_types ADD COLUMN parent_id INT DEFAULT NULL");
+    $chkSort = $conn->query("SHOW COLUMNS FROM transaction_types LIKE 'sort_order'");
+    if (!$chkSort || $chkSort->num_rows === 0)
+        $conn->query("ALTER TABLE transaction_types ADD COLUMN sort_order INT DEFAULT 0");
 
     // نجلب الكل مرتبة: الرئيسية أولاً ثم الفرعية، وداخل كل مستوى حسب sort_order ثم الاسم
     $sql = "SELECT * FROM transaction_types WHERE is_active = 1
@@ -517,14 +538,27 @@ function saveSetting(string $key, string $value, ?int $updatedBy = null): bool {
  */
 function generateTransactionNumber() {
     $conn = db();
-    
-    $year = date('Y');
-    $result = $conn->query("SELECT MAX(id) as max_id FROM transactions");
-    $row = $result->fetch_assoc();
-    $nextId = ($row['max_id'] ?? 0) + 1;
-    
+
+    // اجلب الـ prefix قبل أي transaction (لا يمكن الاستعلام داخل LOCK TABLES)
     $prefix = getSetting('prefix_transaction', 'TR');
-    return $prefix . '-' . str_pad($nextId, 4, '0', STR_PAD_LEFT);
+
+    // استخدم transaction + SELECT FOR UPDATE بدل LOCK TABLES
+    $conn->begin_transaction();
+
+    $result = $conn->query("
+        SELECT CAST(SUBSTRING_INDEX(transaction_number, '-', -1) AS UNSIGNED) AS seq
+        FROM transactions
+        WHERE transaction_number REGEXP '^[A-Za-z]+-[0-9]+$'
+        ORDER BY seq DESC
+        LIMIT 1
+        FOR UPDATE
+    ");
+    $row = $result ? $result->fetch_assoc() : null;
+    $nextSeq = (isset($row['seq']) ? (int)$row['seq'] : 0) + 1;
+
+    $conn->commit();
+
+    return $prefix . '-' . str_pad($nextSeq, 4, '0', STR_PAD_LEFT);
 }
 
 /**
@@ -535,7 +569,18 @@ function addTransaction($data, $file = null) {
     ensureCreatorColumns();
 
     // ضمان وجود عمود sub_type_id
-    $conn->query("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS sub_type_id INT DEFAULT NULL");
+    $chk = $conn->query("SHOW COLUMNS FROM transactions LIKE 'sub_type_id'");
+    if (!$chk || $chk->num_rows === 0) {
+        $conn->query("ALTER TABLE transactions ADD COLUMN sub_type_id INT DEFAULT NULL");
+    }
+
+    // ضمان وجود عمودي currency و exchange_rate
+    $chkCur = $conn->query("SHOW COLUMNS FROM transactions LIKE 'currency'");
+    if (!$chkCur || $chkCur->num_rows === 0) {
+        $conn->query("ALTER TABLE transactions ADD COLUMN currency VARCHAR(10) NOT NULL DEFAULT 'SAR'");
+        $conn->query("ALTER TABLE transactions ADD COLUMN exchange_rate DECIMAL(10,4) NOT NULL DEFAULT 1.0000");
+        $conn->query("ALTER TABLE transactions ADD COLUMN amount_sar DECIMAL(15,2) DEFAULT NULL");
+    }
 
     $transactionNumber = generateTransactionNumber();
 
@@ -546,18 +591,29 @@ function addTransaction($data, $file = null) {
     $subTypeId  = 'NULL';
     $parentType = $conn->query("SELECT parent_id FROM transaction_types WHERE id=$typeId LIMIT 1");
     if ($parentType && ($pRow = $parentType->fetch_assoc()) && $pRow['parent_id']) {
-        // الـ type_id هو فرعي → نحفظه في sub_type_id ونضع parent_id في type_id
         $subTypeId = $typeId;
         $typeId    = (int)$pRow['parent_id'];
     }
 
-    $description = $conn->real_escape_string($data['description']);
-    $amount      = (float)$data['amount'];
-    $createdBy   = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : 'NULL';
+    $description  = $conn->real_escape_string($data['description']);
+    $amount       = (float)$data['amount'];
+    $currency     = strtoupper($conn->real_escape_string($data['currency'] ?? 'SAR'));
+    $exchangeRate = 1.0;
+    if ($currency !== 'SAR') {
+        $manualRate = (float)($data['exchange_rate'] ?? 0);
+        if ($manualRate > 0) {
+            $exchangeRate = $manualRate;
+        } else {
+            $rEx = $conn->query("SELECT rate_to_sar FROM exchange_rates WHERE currency='$currency' LIMIT 1");
+            if ($rEx && ($exRow = $rEx->fetch_assoc())) $exchangeRate = (float)$exRow['rate_to_sar'];
+        }
+    }
+    $amountSar = round($amount * $exchangeRate, 2);
+    $createdBy = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : 'NULL';
 
     $sql = "INSERT INTO transactions
-        (transaction_number, transaction_date, type_id, sub_type_id, description, amount, created_by, created_at)
-        VALUES ('$transactionNumber', NOW(), $typeId, $subTypeId, '$description', $amount, $createdBy, NOW())";
+        (transaction_number, transaction_date, type_id, sub_type_id, description, amount, currency, exchange_rate, amount_sar, created_by, created_at)
+        VALUES ('$transactionNumber', NOW(), $typeId, $subTypeId, '$description', $amount, '$currency', $exchangeRate, $amountSar, $createdBy, NOW())";
     
     if ($conn->query($sql)) {
         $transactionId = $conn->insert_id;
@@ -615,11 +671,61 @@ function ensureCreatorColumns() {
     }
 
     // ضمان وجود sub_type_id للتصنيف الفرعي
-    $conn->query("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS sub_type_id INT DEFAULT NULL");
+    $chkSub = $conn->query("SHOW COLUMNS FROM transactions LIKE 'sub_type_id'");
+    if (!$chkSub || $chkSub->num_rows === 0)
+        $conn->query("ALTER TABLE transactions ADD COLUMN sub_type_id INT DEFAULT NULL");
 
     // ضمان وجود أعمدة التصنيف الهرمي في transaction_types
-    $conn->query("ALTER TABLE transaction_types ADD COLUMN IF NOT EXISTS parent_id INT DEFAULT NULL");
-    $conn->query("ALTER TABLE transaction_types ADD COLUMN IF NOT EXISTS sort_order INT DEFAULT 0");
+    $_chk_par = $conn->query("SHOW COLUMNS FROM transaction_types LIKE 'parent_id'");
+    if (!$_chk_par || $_chk_par->num_rows === 0)
+        $conn->query("ALTER TABLE transaction_types ADD COLUMN parent_id INT DEFAULT NULL");
+    $_chk_srt = $conn->query("SHOW COLUMNS FROM transaction_types LIKE 'sort_order'");
+    if (!$_chk_srt || $_chk_srt->num_rows === 0)
+        $conn->query("ALTER TABLE transaction_types ADD COLUMN sort_order INT DEFAULT 0");
+
+    // ── إصلاح أرقام المعاملات المكررة وإضافة UNIQUE constraint ──
+    fixDuplicateTransactionNumbers($conn);
+}
+
+function fixDuplicateTransactionNumbers($conn) {
+    // أضف UNIQUE KEY إذا لم يكن موجوداً
+    $idx = $conn->query("SHOW INDEX FROM transactions WHERE Key_name = 'uq_transaction_number'");
+    if (!$idx || $idx->num_rows === 0) {
+        // أصلح التكرارات أولاً قبل إضافة الـ constraint
+        $prefix = 'TR';
+        $res2 = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key='prefix_transaction' LIMIT 1");
+        if ($res2) {
+            $row2 = $res2->fetch_assoc();
+            if ($row2) $prefix = $row2['setting_value'];
+        }
+
+        // اجلب كل المعاملات مرتبة حسب ID
+        $res = $conn->query("SELECT id, transaction_number FROM transactions ORDER BY id ASC");
+        $seen = [];
+        $seq  = 1;
+        if ($res) {
+            while ($r = $res->fetch_assoc()) {
+                $num = $r['transaction_number'];
+                if (in_array($num, $seen)) {
+                    // رقم مكرر — أعد تسميته
+                    $newNum = $prefix . '-' . str_pad($seq, 4, '0', STR_PAD_LEFT);
+                    while (in_array($newNum, $seen)) {
+                        $seq++;
+                        $newNum = $prefix . '-' . str_pad($seq, 4, '0', STR_PAD_LEFT);
+                    }
+                    $newEsc = $conn->real_escape_string($newNum);
+                    $conn->query("UPDATE transactions SET transaction_number='$newEsc' WHERE id=" . (int)$r['id']);
+                    $seen[] = $newNum;
+                } else {
+                    $seen[] = $num;
+                }
+                $seq++;
+            }
+        }
+
+        // الآن أضف الـ UNIQUE constraint بأمان
+        $conn->query("ALTER TABLE transactions ADD UNIQUE KEY uq_transaction_number (transaction_number)");
+    }
 }
 
 /**
@@ -954,14 +1060,16 @@ function updatePaymentData($transactionId, $data) {
     $reference = $conn->real_escape_string($data['reference'] ?? '');
     $notes = $conn->real_escape_string($data['notes'] ?? '');
     
-    $sql = "UPDATE payment_data SET 
-            employee_id = $employeeId,
-            payment_date = '$now',
-            payment_method = $method,
-            status = '$status',
-            reference_number = '$reference',
-            notes = '$notes'
-            WHERE transaction_id = $transactionId";
+    // INSERT إذا لم يكن السجل موجوداً، UPDATE إذا كان موجوداً
+    $sql = "INSERT INTO payment_data (transaction_id, employee_id, payment_date, payment_method, status, reference_number, notes)
+            VALUES ($transactionId, $employeeId, '$now', $method, '$status', '$reference', '$notes')
+            ON DUPLICATE KEY UPDATE
+            employee_id      = VALUES(employee_id),
+            payment_date     = VALUES(payment_date),
+            payment_method   = VALUES(payment_method),
+            status           = VALUES(status),
+            reference_number = VALUES(reference_number),
+            notes            = VALUES(notes)";
     
     if ($conn->query($sql)) {
         // تسجيل الحدث
@@ -1924,11 +2032,70 @@ function getRecentNotifications($limit = 5) {
     return $notifications;
 }
 
-/*
- * أضف هذا في api/index.php داخل switch statement:
- 
-    case 'notifications':
-        $limit = (int)($_GET['limit'] ?? 5);
-        echo json_encode(['success' => true, 'data' => getRecentNotifications($limit)]);
-        break;
-*/
+// ── صلاحيات الجلسة (مُحوَّلة من index.php) ─────────────────
+if (!function_exists('loadPermissionsForSession')) {
+function loadPermissionsForSession($userId) {
+    $conn = db();
+    $userId = (int)$userId;
+    
+    $chk = $conn->query("SHOW COLUMNS FROM employees LIKE 'permission_level'");
+    if (!$chk || $chk->num_rows === 0) {
+        $r = $conn->query("SELECT role FROM employees WHERE id=$userId LIMIT 1");
+        $row = $r ? $r->fetch_assoc() : null;
+        if ($row && $row['role'] === 'admin') {
+            $_SESSION['permission_level'] = 'system_admin';
+            $_SESSION['can_delete'] = true;
+        } else {
+            $_SESSION['permission_level'] = 'employee';
+            $_SESSION['can_delete'] = false;
+        }
+        $allPages = ['dashboard','transactions','correspondence','bank-deposits','sla','performance','settings','notifications','reservations','budget-plans'];
+        $_SESSION['page_permissions'] = array_fill_keys($allPages, ($_SESSION['permission_level'] === 'system_admin'));
+        return;
+    }
+    
+    $r = $conn->query("SELECT role, permission_level, can_delete FROM employees WHERE id=$userId LIMIT 1");
+    if (!$r || !($row = $r->fetch_assoc())) return;
+    
+    if ($row['role'] === 'admin' && $row['permission_level'] !== 'system_admin') {
+        $conn->query("UPDATE employees SET permission_level='system_admin', can_delete=1 WHERE id=$userId");
+        $row['permission_level'] = 'system_admin';
+        $row['can_delete'] = 1;
+    }
+    
+    $_SESSION['permission_level'] = $row['permission_level'];
+    $_SESSION['can_delete'] = (bool)$row['can_delete'];
+    
+    $allPages = ['dashboard','transactions','correspondence','bank-deposits','sla','performance','settings','notifications','reservations','budget-plans'];
+    
+    if ($row['permission_level'] === 'system_admin') {
+        $_SESSION['page_permissions']   = array_fill_keys($allPages, true);
+        $_SESSION['action_permissions'] = [];
+    } else {
+        $chkTbl = $conn->query("SHOW TABLES LIKE 'employee_page_permissions'");
+        $stored = [];
+        if ($chkTbl && $chkTbl->num_rows > 0) {
+            $r2 = $conn->query("SELECT page, can_access FROM employee_page_permissions WHERE employee_id=$userId");
+            if ($r2) while ($pr = $r2->fetch_assoc()) $stored[$pr['page']] = (bool)$pr['can_access'];
+        }
+        $defaults = [
+            'manager'  => ['dashboard'=>1,'transactions'=>1,'correspondence'=>1,'bank-deposits'=>1,'sla'=>1,'performance'=>1,'settings'=>0,'notifications'=>1,'reservations'=>1,'budget-plans'=>1],
+            'employee' => ['dashboard'=>0,'transactions'=>1,'correspondence'=>1,'bank-deposits'=>1,'sla'=>0,'performance'=>0,'settings'=>0,'notifications'=>1,'reservations'=>1,'budget-plans'=>0],
+        ];
+        $def = $defaults[$row['permission_level']] ?? [];
+        $pagePerms = [];
+        foreach ($allPages as $p) {
+            $pagePerms[$p] = isset($stored[$p]) ? $stored[$p] : (bool)($def[$p] ?? false);
+        }
+        $_SESSION['page_permissions'] = $pagePerms;
+
+        $actionPerms = [];
+        $chkAct = $conn->query("SHOW TABLES LIKE 'employee_action_permissions'");
+        if ($chkAct && $chkAct->num_rows > 0) {
+            $ra = $conn->query("SELECT action, can_do FROM employee_action_permissions WHERE employee_id=$userId");
+            if ($ra) while ($ar = $ra->fetch_assoc()) $actionPerms[$ar['action']] = (bool)$ar['can_do'];
+        }
+        $_SESSION['action_permissions'] = $actionPerms;
+    }
+}
+} // end function_exists

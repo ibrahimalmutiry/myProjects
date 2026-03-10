@@ -168,7 +168,14 @@ try {
                        eb.name AS budget_employee_name,
                        ea.name AS approved_by_name,
                        COALESCE(s.name, br.supplier_name_manual) AS supplier_name,
-                       t.transaction_number, t.amount AS transaction_amount
+                       t.transaction_number, t.amount AS transaction_amount,
+                       dd.dispatch_type,
+                       dd.routed_to,
+                       dd.status       AS dispatch_status,
+                       dd.ola_active   AS dispatch_ola_active,
+                       dd.dispatched_at,
+                       dd.notes        AS dispatch_notes,
+                       ed.name         AS dispatch_employee_name
                 FROM budget_reservations br
                 LEFT JOIN departments  d  ON br.department_id      = d.id
                 LEFT JOIN employees    e  ON br.requested_by       = e.id
@@ -176,6 +183,8 @@ try {
                 LEFT JOIN employees    ea ON br.approved_by        = ea.id
                 LEFT JOIN suppliers    s  ON br.supplier_id        = s.id
                 LEFT JOIN transactions t  ON br.transaction_id     = t.id
+                LEFT JOIN dispatch_data dd ON t.id = dd.transaction_id
+                LEFT JOIN employees    ed ON dd.employee_id        = ed.id
                 WHERE br.id = $id LIMIT 1
             ");
             $row = $res ? $res->fetch_assoc() : null;
@@ -235,7 +244,7 @@ try {
             }
 
             $number      = generateReservationNumber($conn);
-            $fiscalYear  = (int)date('Y');
+            $fiscalYear  = (int)date('y');
             $priority    = $conn->real_escape_string($body['priority'] ?? 'عادي');
             $budgetCat   = $conn->real_escape_string($body['budget_category'] ?? '');
             $costCenter  = $conn->real_escape_string($body['cost_center'] ?? '');
@@ -705,18 +714,28 @@ try {
 // ════════════════════════════════════════════════════════════
 
 function generateReservationNumber($conn) {
-    $year2  = (int)date('y');   // 26
-    $year4  = (int)date('Y');   // 2026
-    $prefix = (string)$year2;   // "26"
-    $result = $conn->query("
-        SELECT MAX(CAST(SUBSTRING(reservation_number, 3) AS UNSIGNED)) AS maxSeq
-        FROM budget_reservations
-        WHERE fiscal_year = $year4
-          AND reservation_number LIKE '{$prefix}%'
-    ");
-    $row = $result ? $result->fetch_assoc() : null;
-    $seq = (int)($row['maxSeq'] ?? 0) + 1;
-    return $prefix . str_pad($seq, 5, '0', STR_PAD_LEFT);
+    $year   = date('y');
+    $prefix = $year;
+
+    // نحاول حتى 10 مرات لتفادي race condition
+    for ($attempt = 0; $attempt < 10; $attempt++) {
+        $result = $conn->query("
+            SELECT MAX(CAST(SUBSTRING(reservation_number, 3) AS UNSIGNED)) AS maxSeq
+            FROM budget_reservations WHERE fiscal_year = $year
+        ");
+        $row    = $result ? $result->fetch_assoc() : null;
+        $seq    = (int)($row['maxSeq'] ?? 0) + 1 + $attempt;
+        $number = $prefix . str_pad($seq, 5, '0', STR_PAD_LEFT);
+
+        // تحقق أن الرقم غير موجود فعلاً
+        $check = $conn->query("SELECT id FROM budget_reservations WHERE reservation_number='$number' LIMIT 1");
+        if ($check && $check->num_rows === 0) {
+            return $number;
+        }
+    }
+
+    // fallback: أضف timestamp لضمان التفرد
+    return $prefix . str_pad($seq ?? 1, 4, '0', STR_PAD_LEFT) . substr(time(), -3);
 }
 
 function getDepartmentByEmployee($conn, $empId) {

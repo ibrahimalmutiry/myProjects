@@ -134,7 +134,7 @@ function renderTransactionRows(transactions) {
             + (tx.transaction_sub_type ? '<br><span class="tx-sub-type-tag">' + tx.transaction_sub_type + '</span>' : '')
             + '</td>';
         html += '<td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">' + tx.description + '</td>';
-        html += '<td><span class="tx-amount">' + formatNumber(tx.amount) + '<small>ر.س</small></span></td>';
+        html += '<td><span class="tx-amount">' + fmtMoneyCur(tx.amount, tx.currency) + '</span></td>';
         html += '<td>' + getStatusBadge(tx.receive_status) + '</td>';
         html += '<td>' + getStatusBadge(tx.budget_status) + '</td>';
         html += '<td>' + getStatusBadge(tx.payment_status) + '</td>';
@@ -424,8 +424,17 @@ async function openAddModal() {
                     <textarea class="form-textarea" name="description" placeholder="وصف المعاملة..." required></textarea>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">المبلغ (ر.س)</label>
+                    <label class="form-label">المبلغ</label>
                     <input type="number" class="form-input" name="amount" step="0.01" min="0" placeholder="0.00" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">العملة</label>
+                    ${renderCurrencySelect('tx_currency', 'SAR')}
+                </div>
+                <div class="form-group" id="tx_exchange_rate_wrap" style="display:none">
+                    <label class="form-label">سعر الصرف (1 وحدة = ؟ ريال) <span style="color:var(--danger,#ef4444)">*</span></label>
+                    <input type="number" class="form-input" name="exchange_rate" id="tx_exchange_rate"
+                        step="0.0001" min="0.0001" placeholder="مثال: 3.75 للدولار" value="1">
                 </div>
                 <div class="form-group">
                     <label class="form-label">المرفقات (اختياري)</label>
@@ -439,9 +448,20 @@ async function openAddModal() {
         `;
 
         openModal();
+        requestAnimationFrame(() => {
+            initSearchableSelects();
+            const curEl = document.getElementById('tx_currency');
+            if (curEl) curEl.addEventListener('change', e => _onTxCurrencyChange(e.target.value));
+        });
     } catch (error) {
         showToast('خطأ في تحميل البيانات', 'error');
     }
+}
+
+/** يُعالج تغيير العملة في نموذج المعاملة */
+function _onTxCurrencyChange(val) {
+    const wrap = document.getElementById('tx_exchange_rate_wrap');
+    if (wrap) wrap.style.display = val && val !== 'SAR' ? '' : 'none';
 }
 
 function onTxParentChange(parentId) {
@@ -686,6 +706,11 @@ async function submitAddForm(e) {
         return;
     }
     const formData = new FormData(form);
+    // إضافة العملة من searchableSelect (اسمه tx_currency في الـ hidden input)
+    const txCurrency = document.getElementById('tx_currency')?.value || 'SAR';
+    formData.set('currency', txCurrency);
+    const txRate = document.getElementById('tx_exchange_rate')?.value;
+    if (txRate) formData.set('exchange_rate', txRate);
     formData.delete('attachment');
     appendAttachmentsToFormData(formData);
     try {
@@ -834,6 +859,27 @@ function formatEventTime(datetime) {
 // openUploadModal مُعرَّفة في قسم نظام المرفقات المتعددة أعلاه
 
 // تعديل معاملة — تصميم محترف
+
+// banner قفل المرحلة للموظف
+function _stageLockBanner(stageName, color) {
+    return `<div style="
+        display:flex;align-items:center;gap:.75rem;
+        padding:1rem 1.25rem;
+        background:rgba(239,68,68,.07);
+        border:1.5px solid rgba(239,68,68,.25);
+        border-radius:12px;margin-bottom:.5rem;color:#ef4444">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+        </svg>
+        <div>
+          <div style="font-weight:700;font-size:.9rem">مرحلة ${stageName} مُقفلة</div>
+          <div style="font-size:.78rem;color:var(--text-muted);margin-top:.2rem">
+            تم اعتماد هذه المرحلة — التعديل متاح لمدير النظام فقط
+          </div>
+        </div>
+    </div>`;
+}
+
 async function editTransaction(id) {
     const tx = App.transactions.find(t => t.id == id);
     if (!tx) return;
@@ -849,6 +895,13 @@ async function editTransaction(id) {
         const showPayment = isAdmin || userRole === 'payment' || userRole === '';
         const showInvoice = isAdmin || userRole === 'invoice' || userRole === '';
 
+        // ═══ قفل المراحل المكتملة/المعتمدة للموظفين (Admin يتجاوزها) ═══
+        const lockedReceive = !isAdmin && (tx.receive_status === 'مستلم');
+        const lockedBudget = !isAdmin && (tx.budget_status === 'معتمد');
+        const lockedDispatch = !isAdmin && (tx.dispatch_data?.status === 'تم التوجيه' || tx.dispatch_data?.status === 'مكتمل');
+        const lockedPayment = !isAdmin && (tx.payment_status === 'تم الدفع');
+        const lockedInvoice = !isAdmin && (tx.invoice_status === 'صدرت الفاتورة');
+
         const firstTab = showReceive ? 'receiving'
             : showBudget ? 'budget'
                 : showDispatch ? 'dispatch'
@@ -860,7 +913,7 @@ async function editTransaction(id) {
             .replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
         const amount = tx.amount
-            ? formatMoney(tx.amount)
+            ? fmtMoneyCur(tx.amount, tx.currency)
             : '—';
 
         // تعريف التبويبات النشطة
@@ -902,7 +955,8 @@ async function editTransaction(id) {
 
             ${showReceive ? `
             <div class="edit-tab-panel ${firstTab === 'receiving' ? 'active' : ''}" data-tab="receiving">
-              <form onsubmit="submitUpdateForm(event,'receiving')">
+              ${lockedReceive ? _stageLockBanner('الاستلام', 'var(--accent-green)') : ''}
+              <form onsubmit="submitUpdateForm(event,'receiving')" style="${lockedReceive ? 'pointer-events:none;opacity:.55;user-select:none' : ''}">
                 <input type="hidden" name="transaction_id" value="${tx.id}">
                 <div class="edit-auto-badge" style="--c:var(--accent-green)">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -934,7 +988,8 @@ async function editTransaction(id) {
 
             ${showBudget ? `
             <div class="edit-tab-panel ${firstTab === 'budget' ? 'active' : ''}" data-tab="budget">
-              <form onsubmit="submitUpdateForm(event,'budget')">
+              ${lockedBudget ? _stageLockBanner('الموازنة', 'var(--accent-cyan)') : ''}
+              <form onsubmit="submitUpdateForm(event,'budget')" style="${lockedBudget ? 'pointer-events:none;opacity:.55;user-select:none' : ''}">
                 <input type="hidden" name="transaction_id" value="${tx.id}">
                 <div class="edit-auto-badge" style="--c:var(--accent-cyan)">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -998,7 +1053,8 @@ async function editTransaction(id) {
                 ${isPaused ? `<button onclick="openResumeDispatchModal(${tx.id})" class="edit-btn-resume">▶️ استئناف</button>` : ''}
               </div>
               ${isPaused ? `<div class="edit-ola-paused-banner">⏸️ OLA معلّق — بانتظار عودة أمر الشراء</div>` : ''}` : ''}
-              <form onsubmit="submitDispatch(event,${tx.id})">
+              ${lockedDispatch ? _stageLockBanner('التوجيه', '#818cf8') : ''}
+              <form onsubmit="submitDispatch(event,${tx.id})" style="${lockedDispatch ? 'pointer-events:none;opacity:.55;user-select:none' : ''}">
                 <input type="hidden" name="transaction_id" value="${tx.id}">
                 <div class="edit-field-group" style="margin-bottom:1.2rem">
                   <label class="edit-field-label" style="font-weight:700;margin-bottom:.7rem">اختر المسار</label>
@@ -1050,7 +1106,8 @@ async function editTransaction(id) {
 
             ${showPayment ? `
             <div class="edit-tab-panel ${firstTab === 'payment' ? 'active' : ''}" data-tab="payment">
-              <form onsubmit="submitUpdateForm(event,'payment')">
+              ${lockedPayment ? _stageLockBanner('الدفع', 'var(--accent-orange)') : ''}
+              <form onsubmit="submitUpdateForm(event,'payment')" style="${lockedPayment ? 'pointer-events:none;opacity:.55;user-select:none' : ''}">
                 <input type="hidden" name="transaction_id" value="${tx.id}">
                 <div class="edit-auto-badge" style="--c:var(--accent-orange)">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1093,7 +1150,8 @@ async function editTransaction(id) {
 
             ${showInvoice ? `
             <div class="edit-tab-panel ${firstTab === 'invoice' ? 'active' : ''}" data-tab="invoice">
-              <form onsubmit="submitUpdateForm(event,'invoice')">
+              ${lockedInvoice ? _stageLockBanner('الفوترة', 'var(--accent-amber)') : ''}
+              <form onsubmit="submitUpdateForm(event,'invoice')" style="${lockedInvoice ? 'pointer-events:none;opacity:.55;user-select:none' : ''}">
                 <input type="hidden" name="transaction_id" value="${tx.id}">
                 <div class="edit-auto-badge" style="--c:var(--accent-amber)">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1190,6 +1248,23 @@ function switchModalTab(tab, btn) {
 async function submitUpdateForm(e, type) {
     e.preventDefault();
 
+    // ── فحص القفل: لا يُرسل إذا كانت المرحلة مقفلة للموظف ──
+    const tx = App.editingTransaction;
+    const userRole = (typeof currentUser !== 'undefined') ? currentUser.role : '';
+    const isAdmin = userRole === 'admin';
+    if (!isAdmin && tx) {
+        const lockMap = {
+            receiving: tx.receive_status === 'مستلم',
+            budget: tx.budget_status === 'معتمد',
+            payment: tx.payment_status === 'تم الدفع',
+            invoice: tx.invoice_status === 'صدرت الفاتورة',
+        };
+        if (lockMap[type]) {
+            showToast('هذه المرحلة مُقفلة — التعديل متاح لمدير النظام فقط', 'error');
+            return;
+        }
+    }
+
     const form = e.target;
     const formData = new FormData(form);
     const data = Object.fromEntries(formData.entries());
@@ -1225,6 +1300,16 @@ async function submitUpdateForm(e, type) {
 // ─── إرسال قرار الفرز ─────────────────────────────────────────
 async function submitDispatch(e, txId) {
     e.preventDefault();
+    // فحص قفل مرحلة التوجيه
+    const _tx = App.editingTransaction;
+    const _role = (typeof currentUser !== 'undefined') ? currentUser.role : '';
+    if (_role !== 'admin' && _tx) {
+        const _dd = _tx.dispatch_data || {};
+        if (_dd.status === 'تم التوجيه' || _dd.status === 'مكتمل') {
+            showToast('مرحلة التوجيه مُقفلة — التعديل متاح لمدير النظام فقط', 'error');
+            return;
+        }
+    }
     const form = e.target;
     const formData = new FormData(form);
     const data = Object.fromEntries(formData.entries());
@@ -1395,6 +1480,13 @@ async function loadSettingsPage() {
                     </svg>
                     بنود الموازنة
                 </button>
+                <button class="settings-tab-btn" data-section="departments" onclick="showSettingsSection('departments', this)">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>
+                        <line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/>
+                    </svg>
+                    الأقسام
+                </button>
                 <button class="settings-tab-btn" data-section="system" onclick="showSettingsSection('system', this)">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <circle cx="12" cy="12" r="3"></circle>
@@ -1426,6 +1518,8 @@ function showSettingsSection(section, btn) {
         renderTypesSection();
     } else if (section === 'all-transactions') {
         renderAllTransactionsSection();
+    } else if (section === 'departments') {
+        renderDepartmentsSection();
     } else if (section === 'cost-centers') {
         renderCostCentersSection();
     } else if (section === 'budget-categories') {
@@ -1726,11 +1820,13 @@ async function saveEmployee(e) {
     var id = document.getElementById('empId').value;
     var supervisorEl = document.getElementById('empSupervisor');
     var departmentEl = document.getElementById('empDepartment');
+    var empNumberEl = document.getElementById('empNumber');
     var data = {
         name: document.getElementById('empName').value,
         email: document.getElementById('empEmail').value,
         phone: document.getElementById('empPhone').value,
         role: document.getElementById('empRole').value,
+        employee_number: empNumberEl ? empNumberEl.value.trim() : '',
         supervisor_id: supervisorEl ? (supervisorEl.value || null) : null,
         department_id: departmentEl ? (departmentEl.value || null) : null
     };
@@ -2026,7 +2122,7 @@ function renderAllTransactionsSection() {
             html += '<td>' + tx.transaction_date + '</td>';
             html += '<td>' + (tx.transaction_type || '—') + '</td>';
             html += '<td class="truncate">' + tx.description + '</td>';
-            html += '<td>' + formatMoney(tx.amount) + '</td>';
+            html += '<td>' + fmtMoneyCur(tx.amount, tx.currency) + '</td>';
             html += '<td>' + getAlertBadge(tx.alert_type) + '</td>';
             html += '<td>';
             html += '<button class="btn-icon-sm" onclick="viewTransaction(' + tx.id + ')" title="عرض"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg></button>';
@@ -2061,7 +2157,7 @@ function filterSettingsTransactions() {
             html += '<td>' + tx.transaction_date + '</td>';
             html += '<td>' + (tx.transaction_type || '—') + '</td>';
             html += '<td class="truncate">' + tx.description + '</td>';
-            html += '<td>' + formatMoney(tx.amount) + '</td>';
+            html += '<td>' + fmtMoneyCur(tx.amount, tx.currency) + '</td>';
             html += '<td>' + getAlertBadge(tx.alert_type) + '</td>';
             html += '<td>';
             html += '<button class="btn-icon-sm" onclick="viewTransaction(' + tx.id + ')" title="عرض"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg></button>';
@@ -3037,7 +3133,6 @@ async function deleteBudgetCategory(id, name) {
 // ========== قسم النظام ==========
 async function renderSystemSection() {
     var content = document.getElementById('settingsContent');
-    if (!content) return;
 
     // جلب الإحصائيات
     var stats = { transactions: 0, employees: 0, types: 0, total_amount: 0 };
@@ -3060,7 +3155,7 @@ async function renderSystemSection() {
     html += '<div class="stat-item"><span class="stat-number">' + stats.transactions + '</span><span class="stat-label">معاملة</span></div>';
     html += '<div class="stat-item"><span class="stat-number">' + stats.employees + '</span><span class="stat-label">موظف</span></div>';
     html += '<div class="stat-item"><span class="stat-number">' + stats.types + '</span><span class="stat-label">نوع</span></div>';
-    html += '<div class="stat-item"><span class="stat-number">' + formatMoney(stats.total_amount) + '</span><span class="stat-label">إجمالي المبالغ</span></div>';
+    html += '<div class="stat-item"><span class="stat-number">' + formatMoneyWithSAR(stats.total_amount) + '</span><span class="stat-label">إجمالي المبالغ</span></div>';
     html += '</div>';
     html += '</div>';
 
@@ -3081,40 +3176,75 @@ async function renderSystemSection() {
     html += '<div id="prefixes-list"><div class="loading-inline">⏳ جاري التحميل...</div></div>';
     html += '</div>';
 
+    // ── أوامر الدفع — الموقّعون ──
+    html += '<div class="system-card prefixes-card">';
+    html += '<h3>✍️ موقّعو أوامر الدفع</h3>';
+    html += '<p class="prefixes-desc">تظهر هذه الأسماء في مربعات التوقيع أسفل أمر الدفع عند الطباعة</p>';
+    html += '<div id="signers-list"><div class="loading-inline">⏳ جاري التحميل...</div></div>';
+    html += '</div>';
+
     // منطقة الخطر
-    const dangerItems = [
-        { key: 'correspondence', icon: '💬', label: 'الخطابات', desc: 'حذف جميع الخطابات والمراحل والمرفقات وسجل الأحداث' },
-        { key: 'reservations', icon: '📋', label: 'حجوزات الموازنة', desc: 'حذف جميع الحجوزات وأصنافها وسجل الأحداث' },
-        { key: 'sla', icon: '🎯', label: 'بيانات SLA / OLA', desc: 'حذف بيانات مستوى الخدمة المرتبطة بالمعاملات والحجوزات' },
-        { key: 'investments', icon: '🏦', label: 'الودائع الاستثمارية', desc: 'حذف جميع الودائع والاستثمارات وسجل أحداثها' },
-        { key: 'transactions', icon: '💳', label: 'المعاملات المالية', desc: 'حذف جميع المعاملات والفواتير والمدفوعات وسجل الأحداث' },
-    ];
     html += '<div class="system-card danger-zone">';
     html += '<h3>⚠️ منطقة الخطر</h3>';
-    html += '<p>هذه الإجراءات لا يمكن التراجع عنها. تأكد جيداً قبل تنفيذ أي إجراء.</p>';
-    html += '<div class="danger-items">';
-    dangerItems.forEach(function (item) {
-        html += '<div class="danger-item">';
-        html += '<div class="danger-item-info">';
-        html += '<span class="danger-item-icon">' + item.icon + '</span>';
-        html += '<div><strong>' + item.label + '</strong><small>' + item.desc + '</small></div>';
-        html += '</div>';
-        html += '<button class="btn btn-danger btn-danger-sm" data-section="' + item.key + '">حذف</button>';
-        html += '</div>';
-    });
-    html += '</div>'; // danger-items
-    html += '</div>'; // danger-zone
+    html += '<p>هذه الإجراءات لا يمكن التراجع عنها</p>';
+    html += '<div class="danger-buttons">';
+    html += '<button class="btn btn-danger" onclick="clearAllTransactions()">حذف جميع المعاملات</button>';
+    html += '</div>';
+    html += '</div>';
 
     html += '</div>';
     content.innerHTML = html;
     loadPrefixesSection();
+    loadSignersSection();
+}
 
-    // ربط أزرار منطقة الخطر عبر event delegation
-    content.querySelectorAll('.btn-danger-sm[data-section]').forEach(function (btn) {
-        btn.addEventListener('click', function () {
-            clearSection(btn.getAttribute('data-section'));
+async function loadSignersSection() {
+    const el = document.getElementById('signers-list');
+    if (!el) return;
+    try {
+        const res = await fetch('api/?action=get_system_settings');
+        const data = await res.json();
+        if (!data.success) throw new Error(data.message);
+        const signers = (data.data || []).filter(s => s.setting_group === 'payment_order');
+        el.innerHTML = signers.map(s => `
+            <div class="prefix-row" id="prefix-row-${s.setting_key}">
+                <div class="prefix-label">${s.setting_label}</div>
+                <div class="prefix-input-wrap">
+                    <input type="text" class="prefix-input" id="prefix-input-${s.setting_key}"
+                        value="${s.setting_value}" maxlength="100" placeholder="اسم الموظف"
+                        onkeydown="if(event.key==='Enter') saveSigner('${s.setting_key}')">
+                    <button class="prefix-save-btn" onclick="saveSigner('${s.setting_key}')">حفظ</button>
+                    <span class="prefix-status" id="prefix-status-${s.setting_key}"></span>
+                </div>
+            </div>
+        `).join('') || '<div style="color:var(--text-muted);padding:.5rem">لا توجد إعدادات</div>';
+    } catch (e) {
+        if (el) el.innerHTML = `<div style="color:#ff6b6b;padding:.5rem">خطأ: ${e.message}</div>`;
+    }
+}
+
+async function saveSigner(key) {
+    const input = document.getElementById('prefix-input-' + key);
+    const status = document.getElementById('prefix-status-' + key);
+    const btn = document.querySelector(`#prefix-row-${key} .prefix-save-btn`);
+    if (!input) return;
+    const val = input.value.trim();
+    if (btn) { btn.disabled = true; btn.textContent = '...'; }
+    try {
+        const res = await fetch('api/?action=save_system_setting', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ key, value: val }),
         });
-    });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.message);
+        if (status) { status.textContent = '✓ تم الحفظ'; status.style.color = '#69db7c'; }
+        setTimeout(() => { if (status) status.textContent = ''; }, 2500);
+    } catch (e) {
+        if (status) { status.textContent = '✗ ' + e.message; status.style.color = '#ff6b6b'; }
+    } finally {
+        if (btn) { btn.disabled = false; btn.textContent = 'حفظ'; }
+    }
 }
 
 async function loadPrefixesSection() {
@@ -3174,67 +3304,26 @@ async function savePrefix(key) {
 }
 
 async function clearAllTransactions() {
-    await clearSection('transactions');
-}
-
-const CLEAR_SECTION_CONFIG = {
-    correspondence: {
-        label: 'الخطابات وجميع بياناتها',
-        action: 'clear_correspondence',
-        reload: null,
-    },
-    reservations: {
-        label: 'حجوزات الموازنة وجميع بياناتها',
-        action: 'clear_reservations',
-        reload: null,
-    },
-    sla: {
-        label: 'بيانات SLA / OLA',
-        action: 'clear_sla',
-        reload: null,
-    },
-    investments: {
-        label: 'الودائع الاستثمارية وجميع بياناتها',
-        action: 'clear_investments',
-        reload: null,
-    },
-    transactions: {
-        label: 'المعاملات المالية وجميع بياناتها',
-        action: 'clear_transactions',
-        reload: () => loadTransactions(),
-    },
-};
-
-async function clearSection(section) {
-    const cfg = CLEAR_SECTION_CONFIG[section];
-    if (!cfg) return;
-
-    // أول تأكيد
-    if (!confirm(`⚠️ تحذير!\n\nسيتم حذف ${cfg.label} نهائياً.\nهذا الإجراء لا يمكن التراجع عنه.\n\nهل أنت متأكد؟`)) return;
-    // ثاني تأكيد
-    if (!confirm(`تأكيد نهائي: حذف ${cfg.label}؟`)) return;
-
-    // تعطيل الأزرار أثناء التنفيذ
-    document.querySelectorAll('.btn-danger-sm').forEach(b => b.disabled = true);
+    if (!confirm('⚠️ تحذير!\n\nسيتم حذف جميع المعاملات نهائياً.\nهذا الإجراء لا يمكن التراجع عنه.\n\nهل أنت متأكد؟')) return;
+    if (!confirm('تأكيد نهائي: سيتم حذف كل شيء!')) return;
 
     try {
-        const res = await fetch(`api/settings.php?action=${cfg.action}`, {
+        var res = await fetch('api/settings.php?action=clear_all', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' }
         });
-        const result = await res.json();
+
+        var result = await res.json();
 
         if (result.success) {
-            showToast(`✅ تم حذف ${cfg.label}`, 'success');
-            if (cfg.reload) await cfg.reload();
+            showToast('تم حذف جميع المعاملات', 'success');
+            await loadTransactions();
             renderSystemSection();
         } else {
-            showToast(result.message || 'خطأ في التنفيذ', 'error');
+            showToast(result.message || 'خطأ', 'error');
         }
     } catch (err) {
-        showToast('خطأ في الاتصال بالخادم', 'error');
-    } finally {
-        document.querySelectorAll('.btn-danger-sm').forEach(b => b.disabled = false);
+        showToast('خطأ في الاتصال', 'error');
     }
 }
 
@@ -3291,7 +3380,7 @@ var PAGES_CONFIG = [
     { key: 'notifications', label: 'التنبيهات', icon: '🔔', group: 'رئيسية' },
     { key: 'transactions', label: 'المعاملات المالية', icon: '💰', group: 'معاملات' },
     { key: 'reservations', label: 'الحجوزات', icon: '📅', group: 'رئيسية' },
-    { key: 'bank-deposits', label: 'الحسابات البنكية', icon: '🏦', group: 'معاملات' },
+    { key: 'bank-deposits', label: 'الودائع البنكية', icon: '🏦', group: 'معاملات' },
     { key: 'correspondence', label: 'الخطابات', icon: '📨', group: 'معاملات' },
     { key: 'sla', label: 'SLA / OLA', icon: '⏱', group: 'متابعة' },
     { key: 'performance', label: 'متابعة الأداء', icon: '📈', group: 'متابعة' },
@@ -3855,3 +3944,153 @@ function injectPermissionsStyles() {
     `;
     document.head.appendChild(s);
 })();
+
+
+// ═══════════════════════════════════════════════════════
+//  إدارة الأقسام
+// ═══════════════════════════════════════════════════════
+
+async function renderDepartmentsSection() {
+    var content = document.getElementById('settingsContent');
+    content.innerHTML = '<div style="text-align:center;padding:2rem"><div class="spinner"></div></div>';
+    try {
+        var res = await fetch('api/settings.php?action=get_departments');
+        var data = await res.json();
+        var rows = data.data || [];
+
+        var tbody = rows.length
+            ? rows.map(function (d) {
+                var safeName = d.name.replace(/'/g, "\\'");
+                return '<tr>' +
+                    '<td><span class="tx-number">' + (d.code || '—') + '</span></td>' +
+                    '<td style="font-weight:600">' + d.name + '</td>' +
+                    '<td style="color:var(--text-muted);font-size:.85rem">' + (d.description || '—') + '</td>' +
+                    '<td><span class="status-badge ' + (d.is_active == 1 ? 'status-completed' : 'status-cancelled') + '">' + (d.is_active == 1 ? 'نشط' : 'متوقف') + '</span></td>' +
+                    '<td>' +
+                    '<button class="btn btn-ghost-sm" onclick="openDepartmentModal(' + d.id + ')">✏️ تعديل</button> ' +
+                    '<button class="btn btn-ghost-sm" style="color:#ef4444" onclick="deleteDepartment(' + d.id + ',\'' + safeName + '\')">🗑 حذف</button>' +
+                    '</td>' +
+                    '</tr>';
+            }).join('')
+            : '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:2rem">لا توجد أقسام</td></tr>';
+
+        content.innerHTML =
+            '<div class="settings-section-header">' +
+            '<h2>إدارة الأقسام</h2>' +
+            '<button class="btn btn-primary" onclick="openDepartmentModal()">' +
+            '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+            '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>' +
+            '</svg> إضافة قسم' +
+            '</button>' +
+            '</div>' +
+            '<div class="table-container">' +
+            '<table class="data-table">' +
+            '<thead><tr><th>الكود</th><th>اسم القسم</th><th>الوصف</th><th>الحالة</th><th>إجراءات</th></tr></thead>' +
+            '<tbody>' + tbody + '</tbody>' +
+            '</table>' +
+            '</div>';
+    } catch (e) {
+        document.getElementById('settingsContent').innerHTML =
+            '<div style="color:#ef4444;padding:1rem">خطأ في تحميل الأقسام</div>';
+    }
+}
+
+async function openDepartmentModal(id) {
+    var dept = null;
+    if (id) {
+        try {
+            var res = await fetch('api/settings.php?action=get_departments');
+            var data = await res.json();
+            dept = (data.data || []).find(function (d) { return d.id == id; });
+        } catch (e) { }
+    }
+
+    DOM.modalTitle.textContent = id ? '✏️ تعديل القسم' : '➕ إضافة قسم جديد';
+
+    var statusField = id
+        ? '<div class="form-group">' +
+        '<label class="form-label">الحالة</label>' +
+        '<select id="deptActive" class="form-input">' +
+        '<option value="1"' + (dept && dept.is_active == 1 ? ' selected' : '') + '>نشط</option>' +
+        '<option value="0"' + (dept && dept.is_active == 0 ? ' selected' : '') + '>متوقف</option>' +
+        '</select>' +
+        '</div>'
+        : '';
+
+    DOM.modalBody.innerHTML =
+        '<form onsubmit="saveDepartment(event,' + (id || 0) + ')">' +
+        '<div class="modal-form-grid">' +
+        '<div class="form-group">' +
+        '<label class="form-label">اسم القسم *</label>' +
+        '<input type="text" id="deptName" class="form-input" value="' + (dept ? dept.name : '') + '" required placeholder="مثال: القطاع المالي">' +
+        '</div>' +
+        '<div class="form-group">' +
+        '<label class="form-label">الكود</label>' +
+        '<input type="text" id="deptCode" class="form-input" value="' + (dept ? (dept.code || '') : '') + '" placeholder="مثال: FIN" style="text-transform:uppercase" oninput="this.value=this.value.toUpperCase()">' +
+        '</div>' +
+        '<div class="form-group full-span">' +
+        '<label class="form-label">الوصف</label>' +
+        '<textarea id="deptDesc" class="form-input" rows="2" placeholder="وصف مختصر للقسم">' + (dept ? (dept.description || '') : '') + '</textarea>' +
+        '</div>' +
+        statusField +
+        '</div>' +
+        '<div style="display:flex;gap:.75rem;justify-content:flex-end;margin-top:1.25rem">' +
+        '<button type="button" class="btn btn-secondary" onclick="closeModal()">إلغاء</button>' +
+        '<button type="submit" class="btn btn-primary">💾 حفظ</button>' +
+        '</div>' +
+        '</form>';
+
+    openModal();
+}
+
+async function saveDepartment(e, id) {
+    e.preventDefault();
+    var activeEl = document.getElementById('deptActive');
+    var data = {
+        name: document.getElementById('deptName').value.trim(),
+        code: document.getElementById('deptCode').value.trim(),
+        description: document.getElementById('deptDesc').value.trim(),
+        is_active: activeEl ? parseInt(activeEl.value) : 1
+    };
+    if (id) data.id = id;
+
+    var action = id ? 'update_department' : 'add_department';
+    try {
+        var res = await fetch('api/settings.php?action=' + action, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        var result = await res.json();
+        if (result.success) {
+            showToast(id ? 'تم تحديث القسم' : 'تم إضافة القسم', 'success');
+            closeModal();
+            renderDepartmentsSection();
+            loadSettingsEmployees();
+        } else {
+            showToast(result.message || 'خطأ', 'error');
+        }
+    } catch (err) {
+        showToast('خطأ في الاتصال', 'error');
+    }
+}
+
+async function deleteDepartment(id, name) {
+    if (!confirm('هل تريد حذف قسم "' + name + '"؟\nسيتم إلغاء ربط الموظفين بهذا القسم.')) return;
+    try {
+        var res = await fetch('api/settings.php?action=delete_department', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: id })
+        });
+        var result = await res.json();
+        if (result.success) {
+            showToast('تم الحذف', 'success');
+            renderDepartmentsSection();
+        } else {
+            showToast(result.message || 'خطأ في الحذف', 'error');
+        }
+    } catch (e) {
+        showToast('خطأ في الاتصال', 'error');
+    }
+}

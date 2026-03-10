@@ -41,11 +41,59 @@ const DOM = {};
 document.addEventListener('DOMContentLoaded', () => {
     initDOM();
     initEventListeners();
+    initSearchableSelects();
+    injectSARSymbol(); // حقن خط رمز الريال السعودي الجديد
     const tab = (typeof window._firstAllowedTab === 'function')
         ? (window._firstAllowedTab() || 'dashboard')
         : 'dashboard';
     switchTab(tab);
 });
+
+/** حقن خط رمز الريال السعودي الجديد + CSS */
+function injectSARSymbol() {
+    if (document.getElementById('sar-symbol-style')) return;
+
+    // تحميل الخط من CDN
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = 'https://cdn.jsdelivr.net/npm/@emran-alhaddad/saudi-riyal-font/index.css';
+    document.head.appendChild(link);
+
+    // CSS الرمز
+    const style = document.createElement('style');
+    style.id = 'sar-symbol-style';
+    style.textContent = `
+        .sar-symbol {
+          
+            font-family: 'saudi_riyal', sans-serif !important;
+            font-size: 2em;
+            line-height: 1;
+            vertical-align: middle;
+        }
+        .sar-symbol::before {
+            content: "\\e900";
+            font-family: 'saudi_riyal' !important;
+            font-style: normal;
+            font-weight: normal;
+            font-variant: normal;
+            text-transform: none;
+            speak: none;
+            -webkit-font-smoothing: antialiased;
+        }
+        .cur-symbol-text {
+            font-size: 1.50em;
+            vertical-align: middle;
+        }
+        /* تنسيق الرمز داخل المبالغ */
+        .tx-amount .sar-symbol,
+        .dp-currency .sar-symbol,
+        .rf-cur-badge .sar-symbol,
+        .rv-cur-badge .sar-symbol {
+            font-size: 2em;
+        }
+    `;
+    document.head.appendChild(style);
+}
 
 
 /**
@@ -601,14 +649,114 @@ window.initLanguage = initLanguage;
  */
 function formatMoney(amount) {
     return (parseFloat(amount) || 0)
-        .toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-        + ' ر.س';
+        .toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+/**
+ * formatMoney مع رمز SAR — للأماكن التي تعرض SAR فقط
+ */
+function formatMoneyWithSAR(amount) {
+    return formatMoney(amount) + ' <span class="sar-symbol"></span>';
 }
 
 /**
  * نفس formatMoney — اسم بديل للتوافق مع app-bank.js القديم
  */
 var fmtMoney = formatMoney;
+
+// ═══════════════════════════════════════════════════════════
+//  نظام العملات الموحّد — يُستخدم من جميع الملفات
+// ═══════════════════════════════════════════════════════════
+
+/** خريطة العملات: الرمز، الاسم العربي، العلم */
+const CURRENCY_MAP = {
+    SAR: { symbol: 'ر.س', name: 'ريال سعودي', flag: '🇸🇦' },
+    USD: { symbol: '$', name: 'دولار أمريكي', flag: '🇺🇸' },
+    EUR: { symbol: '€', name: 'يورو', flag: '🇪🇺' },
+    GBP: { symbol: '£', name: 'جنيه إسترليني', flag: '🇬🇧' },
+    AED: { symbol: 'د.إ', name: 'درهم إماراتي', flag: '🇦🇪' },
+    KWD: { symbol: 'د.ك', name: 'دينار كويتي', flag: '🇰🇼' },
+    QAR: { symbol: 'ر.ق', name: 'ريال قطري', flag: '🇶🇦' },
+    BHD: { symbol: 'د.ب', name: 'دينار بحريني', flag: '🇧🇭' },
+    OMR: { symbol: 'ر.ع', name: 'ريال عماني', flag: '🇴🇲' },
+    JOD: { symbol: 'د.أ', name: 'دينار أردني', flag: '🇯🇴' },
+    EGP: { symbol: 'ج.م', name: 'جنيه مصري', flag: '🇪🇬' },
+    CNY: { symbol: '¥', name: 'يوان صيني', flag: '🇨🇳' },
+    JPY: { symbol: '¥', name: 'ين ياباني', flag: '🇯🇵' },
+    CHF: { symbol: 'Fr', name: 'فرنك سويسري', flag: '🇨🇭' },
+    CAD: { symbol: 'C$', name: 'دولار كندي', flag: '🇨🇦' },
+    AUD: { symbol: 'A$', name: 'دولار أسترالي', flag: '🇦🇺' },
+    TRY: { symbol: '₺', name: 'ليرة تركية', flag: '🇹🇷' },
+    INR: { symbol: '₹', name: 'روبية هندية', flag: '🇮🇳' },
+};
+
+/** قائمة العملات بصيغة options لـ searchableSelect */
+const CURRENCY_OPTIONS = Object.entries(CURRENCY_MAP).map(([code, c]) => ({
+    value: code,
+    label: `${c.flag} ${code} — ${c.name} (${c.symbol})`
+}));
+
+/**
+ * إرجاع رمز العملة
+ * @param {string} code - كود العملة مثل 'SAR'
+ * @returns {string} الرمز مثل 'ر.س'
+ */
+function getCurrencySymbol(code) {
+    return (CURRENCY_MAP[code] || CURRENCY_MAP.SAR).symbol;
+}
+
+/**
+ * إرجاع رمز العملة بصيغة HTML
+ * SAR → رمز الريال الجديد بخط مخصص
+ * غيره → النص العادي
+ */
+function getCurrencySymbolHTML(code) {
+    if (!code || code === 'SAR') {
+        return '<span class="sar-symbol" aria-label="ريال سعودي"></span>';
+    }
+    return `<span class="cur-symbol-text">${getCurrencySymbol(code)}</span>`;
+}
+
+/**
+ * تنسيق مبلغ مالي بعملة محددة (HTML)
+ * @param {number} amount
+ * @param {string} currencyCode
+ * @returns {string} مثال: "1,234.00 ﷼"
+ */
+function fmtMoneyCur(amount, currencyCode) {
+    const code = currencyCode || 'SAR';
+    const num = (parseFloat(amount) || 0).toLocaleString('en-US',
+        { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return `${getCurrencySymbolHTML(code)} ${num}`;
+}
+
+/**
+ * تنسيق مبلغ مالي — نص بحت بدون HTML (للـ title, placeholder, إلخ)
+ */
+function fmtMoneyCurText(amount, currencyCode) {
+    const sym = getCurrencySymbol(currencyCode || 'SAR');
+    const num = (parseFloat(amount) || 0).toLocaleString('en-US',
+        { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return num + ' ' + sym;
+}
+
+/**
+ * يُنتج HTML لقائمة العملات بتصميم searchableSelect الموحّد
+ * @param {string} id - معرّف الحقل
+ * @param {string} value - القيمة الافتراضية
+ * @param {string} onchange - دالة JS تُنفَّذ عند التغيير (اسم الدالة فقط)
+ * @returns {string} HTML
+ */
+function renderCurrencySelect(id, value = 'SAR', onchange = '') {
+    const opts = [
+        { value: '', label: '-- اختر العملة --' },
+        ...CURRENCY_OPTIONS
+    ];
+    const html = searchableSelect({ id, options: opts, placeholder: 'ابحث عن العملة...', value });
+    if (!onchange) return html;
+    // نُضيف listener بعد إدراج DOM عبر data attribute
+    return html.replace('class="ss-wrap"', `class="ss-wrap" data-onchange="${onchange}"`);
+}
 
 /**
  * تنسيق رقم بفواصل الآلاف
@@ -986,4 +1134,122 @@ async function downloadAsPDF(elementId, filename, extraCSS) {
     } finally {
         noPrint.forEach(e => e.style.removeProperty('display'));
     }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  نظام searchableSelect — CSS + Listeners (مشترك لجميع الملفات)
+// ═══════════════════════════════════════════════════════════
+
+function initSearchableSelects() {
+    // حقن CSS مرة واحدة فقط
+    if (!document.getElementById('ss-global-styles')) {
+        const s = document.createElement('style');
+        s.id = 'ss-global-styles';
+        s.textContent = `
+        .ss-wrap { position:relative; width:100%; }
+        .ss-trigger {
+            display:flex; align-items:center; justify-content:space-between;
+            padding:.55rem .85rem; border-radius:10px;
+            border:1px solid var(--border-color);
+            background:var(--bg-card, #fff);
+            cursor:pointer; min-height:42px;
+            transition:border-color .15s, box-shadow .15s;
+            user-select:none;
+        }
+        .ss-wrap.open .ss-trigger,
+        .ss-trigger:hover { border-color:var(--accent-blue, #6366f1); }
+        .ss-wrap.open .ss-trigger { box-shadow:0 0 0 3px rgba(99,102,241,.15); }
+        .ss-display {
+            font-size:.85rem; color:var(--text-primary, #111);
+            flex:1; min-width:0; overflow:hidden;
+            text-overflow:ellipsis; white-space:nowrap;
+        }
+        .ss-ph { color:var(--text-muted, #999); }
+        .ss-arrow { color:var(--text-muted, #999); flex-shrink:0; transition:transform .2s; }
+        .ss-arrow.flipped { transform:rotate(180deg); }
+        .ss-dropdown {
+            display:none; position:absolute; top:calc(100% + 4px); right:0; left:0;
+            background:var(--bg-card, #fff); border:1px solid var(--border-color, #ddd);
+            border-radius:12px; box-shadow:0 8px 32px rgba(0,0,0,.22);
+            z-index:99999; overflow:hidden;
+            animation:ssDrop .15s ease;
+        }
+        @keyframes ssDrop { from{opacity:0;transform:translateY(-6px)} to{opacity:1;transform:translateY(0)} }
+        .ss-wrap.open .ss-dropdown { display:block; }
+        .ss-search-wrap {
+            display:flex; align-items:center; gap:.5rem;
+            padding:.6rem .8rem; border-bottom:1px solid var(--border-color, #ddd);
+            color:var(--text-muted, #999);
+        }
+        .ss-search {
+            flex:1; border:none; background:transparent; outline:none;
+            font-size:.82rem; color:var(--text-primary, #111); direction:rtl;
+        }
+        .ss-search::placeholder { color:var(--text-muted, #999); }
+        .ss-options { max-height:220px; overflow-y:auto; padding:.35rem; }
+        .ss-options::-webkit-scrollbar { width:4px; }
+        .ss-options::-webkit-scrollbar-thumb { background:var(--border-color, #ddd); border-radius:4px; }
+        .ss-option {
+            padding:.5rem .75rem; border-radius:8px; font-size:.83rem;
+            color:var(--text-primary, #111); cursor:pointer; transition:background .12s;
+            white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+        }
+        .ss-option:hover { background:rgba(99,102,241,.1); }
+        .ss-option.selected { background:rgba(99,102,241,.15); color:var(--accent-blue, #6366f1); font-weight:600; }
+        `;
+        document.head.appendChild(s);
+    }
+
+    // تفعيل delegate listener مرة واحدة فقط
+    if (!window._ssListenerAttached) {
+        document.addEventListener('click', e => {
+            const opt = e.target.closest('.ss-option');
+            if (opt) { _ssSelectOption(opt); return; }
+            if (!e.target.closest('.ss-wrap')) {
+                document.querySelectorAll('.ss-wrap.open').forEach(w => {
+                    w.classList.remove('open');
+                    w.querySelector('.ss-arrow')?.classList.remove('flipped');
+                });
+            }
+        });
+        window._ssListenerAttached = true;
+    }
+}
+
+function _ssSelectOption(opt) {
+    const wrap = opt.closest('.ss-wrap');
+    const id = wrap.dataset.id;
+    const val = opt.dataset.value;
+
+    wrap.dataset.value = val;
+    const hidden = wrap.querySelector(`#${id}`);
+    if (hidden) hidden.value = val;
+    wrap.querySelector('.ss-display').innerHTML = opt.textContent;
+    wrap.querySelectorAll('.ss-option').forEach(o => o.classList.toggle('selected', o === opt));
+
+    // إغلاق
+    wrap.classList.remove('open');
+    wrap.querySelector('.ss-arrow')?.classList.remove('flipped');
+    const search = wrap.querySelector('.ss-search');
+    if (search) { search.value = ''; _ssFilterOptions(search); }
+
+    // إطلاق حدث change على hidden input
+    if (hidden) hidden.dispatchEvent(new Event('change', { bubbles: true }));
+
+    // callbacks مخصصة (budget)
+    if (typeof selectSSOption === 'function') {
+        // نتجاهل — نعتمد على dispatchEvent فقط
+    }
+    if (id === 'rf_cost_center' && typeof onCostCenterChange === 'function') onCostCenterChange(val);
+    if (id === 'rf_supplier_id' && typeof onSupplierChange === 'function') onSupplierChange(hidden);
+    if (id === 'rf_budget_plan_id' && typeof onBudgetPlanChange === 'function') onBudgetPlanChange(val);
+    if (id === 'rf_currency' && typeof _onCurrencyChange === 'function') _onCurrencyChange(val);
+    if (id === 'tx_currency' && typeof _onTxCurrencyChange === 'function') _onTxCurrencyChange(val);
+}
+
+function _ssFilterOptions(input) {
+    const q = input.value.trim().toLowerCase();
+    input.closest('.ss-dropdown').querySelectorAll('.ss-option').forEach(opt => {
+        opt.style.display = opt.textContent.toLowerCase().includes(q) ? '' : 'none';
+    });
 }

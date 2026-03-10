@@ -85,7 +85,7 @@ function renderDashboard(urgentTransactions) {
             <div class="dash-kpi-card purple">
                 <div class="dash-kpi-icon">💰</div>
                 <div class="dash-kpi-body">
-                    <span class="dash-kpi-value" style="font-size:1.05rem">${fmtMoney(s.total_amount || 0)}</span>
+                    <span class="dash-kpi-value" style="font-size:1.05rem">${formatMoneyWithSAR(s.total_amount || 0)}</span>
                     <span class="dash-kpi-label">إجمالي المبالغ</span>
                 </div>
             </div>
@@ -256,7 +256,7 @@ function renderUrgentRows(transactions) {
                 <span class="dash-row-sub">${(tx.description || '').substring(0, 40)}${(tx.description || '').length > 40 ? '...' : ''}</span>
             </div>
             <div class="dash-row-meta">
-                <span class="dash-row-amount">${fmtMoney(tx.amount)}</span>
+                <span class="dash-row-amount">${fmtMoneyCur(tx.amount, tx.currency)}</span>
                 ${tx.priority_set_by_name ? `<span class="dash-row-tag">📌 ${tx.priority_set_by_name}</span>` : ''}
             </div>
             <div class="dash-row-actions">
@@ -275,8 +275,8 @@ function renderSystemRows(s) {
     const rows = [
         { icon: '💼', name: 'المعاملات المالية', tab: 'transactions', cols: [{ v: s.total || 0, l: 'الكل' }, { v: s.paid || 0, l: 'مكتملة', c: 'green' }, { v: s.pending || 0, l: 'معلقة', c: 'orange' }, { v: s.urgent || 0, l: 'عاجلة', c: 'red' }] },
         { icon: '📥', name: 'قسم الاستلام', tab: 'transactions', cols: [{ v: s.received || 0, l: 'مستلمة', c: 'green' }, { v: Math.max(0, (s.total || 0) - (s.received || 0)), l: 'انتظار', c: 'orange' }] },
-        { icon: '💰', name: 'قسم الموازنة', tab: 'transactions', cols: [{ v: s.total || 0, l: 'إجمالي' }, { v: fmtMoney(s.total_amount || 0), l: 'المبالغ' }] },
-        { icon: '💳', name: 'قسم الدفع', tab: 'transactions', cols: [{ v: s.paid || 0, l: 'مدفوع', c: 'green' }, { v: s.pending || 0, l: 'معلق', c: 'orange' }, { v: fmtMoney(s.paid_amount || 0), l: 'المدفوعات' }] },
+        { icon: '💰', name: 'قسم الموازنة', tab: 'transactions', cols: [{ v: s.total || 0, l: 'إجمالي' }, { v: formatMoneyWithSAR(s.total_amount || 0), l: 'المبالغ' }] },
+        { icon: '💳', name: 'قسم الدفع', tab: 'transactions', cols: [{ v: s.paid || 0, l: 'مدفوع', c: 'green' }, { v: s.pending || 0, l: 'معلق', c: 'orange' }, { v: formatMoneyWithSAR(s.paid_amount || 0), l: 'المدفوعات' }] },
         { icon: '🧾', name: 'قسم الفوترة', tab: 'transactions', cols: [{ v: s.invoiced || 0, l: 'مفوترة', c: 'green' }, { v: Math.max(0, (s.total || 0) - (s.invoiced || 0)), l: 'قيد الإجراء', c: 'orange' }] },
         { icon: '📨', name: 'الخطابات والمراسلات', tab: 'correspondence', cols: [], id: 'corrRowCols' },
         { icon: '🏦', name: 'الحسابات البنكية', tab: 'bank-deposits', cols: [], id: 'bankRowCols' },
@@ -324,7 +324,7 @@ async function loadBankBalances() {
                     <span class="dash-row-sub">${acc.bank_name} • ${acc.account_number || ''}</span>
                 </div>
                 <div class="dash-row-meta">
-                    <span class="dash-row-amount ">${fmtMoney(bal)}</span>
+                    <span class="dash-row-amount ">${formatMoneyWithSAR(bal)}</span>
                     <span class="dash-row-tag">${acc.currency || 'SAR'}</span>
                 </div>
             </div>`;
@@ -334,7 +334,7 @@ async function loadBankBalances() {
         <div class="dash-row total-row">
             <div class="dash-row-icon">💰</div>
             <div class="dash-row-main"><span class="dash-row-title" style="font-weight:800">إجمالي الأرصدة</span></div>
-            <div class="dash-row-meta"><span class="dash-row-amount" style="font-size:1.05rem;font-weight:800">${fmtMoney(totalBalance)}</span></div>
+            <div class="dash-row-meta"><span class="dash-row-amount" style="font-size:1.05rem;font-weight:800">${formatMoneyWithSAR(totalBalance)}</span></div>
         </div>`;
 
         container.innerHTML = html;
@@ -342,7 +342,7 @@ async function loadBankBalances() {
         const bankCols = document.getElementById('bankRowCols');
         if (bankCols) bankCols.innerHTML = `
             <div class="dash-col-stat"><span class="dcs-val">${result.data.length}</span><span class="dcs-lbl">حساب</span></div>
-            <div class="dash-col-stat"><span class="dcs-val green">${fmtMoney(totalBalance)}</span><span class="dcs-lbl">الإجمالي</span></div>`;
+            <div class="dash-col-stat"><span class="dcs-val green">${formatMoneyWithSAR(totalBalance)}</span><span class="dcs-lbl">الإجمالي</span></div>`;
 
     } catch (e) {
         if (container) container.innerHTML = '<div class="dash-empty-sm">خطأ في تحميل الأرصدة</div>';
@@ -455,7 +455,7 @@ async function loadRecentReservations() {
                 <div class="dash-col-stat"><span class="dcs-val">${allData.length}</span><span class="dcs-lbl">الكل</span></div>
                 <div class="dash-col-stat"><span class="dcs-val green">${approved}</span><span class="dcs-lbl">معتمد</span></div>
                 <div class="dash-col-stat"><span class="dcs-val orange">${pending}</span><span class="dcs-lbl">انتظار</span></div>
-                <div class="dash-col-stat"><span class="dcs-val">${fmtMoney(totalAmt)}</span><span class="dcs-lbl">إجمالي</span></div>
+                <div class="dash-col-stat"><span class="dcs-val">${formatMoneyWithSAR(totalAmt)}</span><span class="dcs-lbl">إجمالي</span></div>
             </div>
         </div>`;
 
@@ -470,7 +470,7 @@ async function loadRecentReservations() {
                     <span class="dash-row-sub">${r.department_name || ''}${r.requested_by_name ? ' • ' + r.requested_by_name : ''}</span>
                 </div>
                 <div class="dash-row-meta">
-                    <span class="dash-row-amount">${fmtMoney(parseFloat(r.grand_total || 0))}</span>
+                    <span class="dash-row-amount">${fmtMoneyCur(parseFloat(r.grand_total || 0), r.currency)}</span>
                     <span class="dash-row-tag" style="color:${color}">${r.status}</span>
                 </div>
             </div>`;
@@ -784,11 +784,11 @@ async function loadInvestmentsSummary() {
                 <div style="font-size:0.75rem;color:var(--text-muted)">تستحق هذا الشهر</div>
             </div>
             <div style="text-align:center">
-                <div style="font-size:1rem;font-weight:700;color:var(--accent-green)">${fmtMoney(thisMonthTotal)}</div>
+                <div style="font-size:1rem;font-weight:700;color:var(--accent-green)">${formatMoneyWithSAR(thisMonthTotal)}</div>
                 <div style="font-size:0.75rem;color:var(--text-muted)">إجمالي المبالغ</div>
             </div>
             <div style="text-align:center">
-                <div style="font-size:1rem;font-weight:700;color:var(--accent-cyan)">${fmtMoney(thisMonthProfit)}</div>
+                <div style="font-size:1rem;font-weight:700;color:var(--accent-cyan)">${formatMoneyWithSAR(thisMonthProfit)}</div>
                 <div style="font-size:0.75rem;color:var(--text-muted)">ربح متوقع</div>
             </div>
             <div style="text-align:center">
@@ -822,7 +822,7 @@ async function loadInvestmentsSummary() {
                         <span class="dash-row-sub">${inv.account_name || ''} — ${inv.interest_rate || 0}% سنوياً</span>
                     </div>
                     <div class="dash-row-meta">
-                        <span class="dash-row-amount">${fmtMoney(parseFloat(inv.amount || 0))}</span>
+                        <span class="dash-row-amount">${formatMoneyWithSAR(parseFloat(inv.amount || 0))}</span>
                         <span class="dash-row-tag" style="color:${color}">${tag}</span>
                     </div>
                 </div>`;

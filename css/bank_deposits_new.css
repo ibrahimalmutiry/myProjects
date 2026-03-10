@@ -176,7 +176,8 @@
     font-weight: 800;
     color: var(--text-primary);
     font-variant-numeric: tabular-nums;
-    direction: ltr;
+    /* /* direction: ltr; */
+    ;
     text-align: right;
     line-height: 1.2;
 }
@@ -249,7 +250,8 @@
     font-size: 1.3rem;
     font-weight: 800;
     color: var(--text-primary);
-    direction: ltr;
+    /* direction: ltr; */
+    ;
     font-variant-numeric: tabular-nums;
     line-height: 1.2;
     margin-bottom: 0.25rem;
@@ -393,7 +395,8 @@
     font-weight: 800;
     color: var(--text-primary);
     font-variant-numeric: tabular-nums;
-    direction: ltr;
+    /* direction: ltr; */
+    ;
     text-align: right;
 }
 
@@ -638,7 +641,8 @@
     font-size: 1.15rem;
     font-weight: 800;
     color: var(--accent-blue, #0ea5e9);
-    direction: ltr;
+    /* direction: ltr; */
+    ;
     text-align: right;
     font-variant-numeric: tabular-nums;
 }
@@ -722,7 +726,8 @@
     font-size: 1rem;
     font-weight: 800;
     color: #22c55e;
-    direction: ltr;
+    /* direction: ltr; */
+    ;
     text-align: right;
 }
 
@@ -855,7 +860,8 @@
     font-size: 0.82rem;
     font-weight: 600;
     color: #22c55e;
-    direction: ltr;
+    /* direction: ltr; */
+    ;
 }
 
 .tl-account {
@@ -990,7 +996,8 @@
 .dep-amount {
     font-weight: 800;
     color: #22c55e;
-    direction: ltr;
+    /* direction: ltr; */
+    ;
     text-align: right;
     white-space: nowrap;
     font-variant-numeric: tabular-nums;
@@ -1378,7 +1385,8 @@
     font-size: 1.1rem;
     font-weight: 800;
     color: #22c55e;
-    direction: ltr;
+    /* direction: ltr; */
+    ;
     text-align: right;
 }
 
@@ -1905,7 +1913,8 @@ tr.inv-expiring {
     font-size: 1.5rem;
     font-weight: 800;
     color: var(--text-primary);
-    direction: ltr;
+    /* direction: ltr; */
+    ;
     font-variant-numeric: tabular-nums;
     line-height: 1.2;
 }
@@ -2139,7 +2148,8 @@ tr.inv-expiring {
     color: var(--text-primary);
     font-variant-numeric: tabular-nums;
     line-height: 1.1;
-    direction: ltr;
+    /* direction: ltr; */
+    ;
 }
 
 .idm-dep-name {
@@ -2323,7 +2333,8 @@ tr.inv-expiring {
     font-size: .95rem;
     font-weight: 800;
     font-variant-numeric: tabular-nums;
-    direction: ltr;
+    /* direction: ltr; */
+    ;
 }
 
 .idm-amount-total {
@@ -2489,7 +2500,8 @@ tr.inv-expiring {
     font-size: 1.35rem;
     font-weight: 800;
     color: var(--text-primary);
-    direction: ltr;
+    /* /* direction: ltr; */
+    ;
     text-align: right;
     font-variant-numeric: tabular-nums;
     line-height: 1.2;
@@ -2792,7 +2804,8 @@ tr.inv-expiring {
 .bov2-up-footer span:first-child {
     font-weight: 700;
     color: var(--text-primary);
-    direction: ltr;
+    /* direction: ltr; */
+    ;
     font-variant-numeric: tabular-nums;
 }
 
@@ -2878,7 +2891,8 @@ tr.inv-expiring {
     font-size: .9rem;
     font-weight: 800;
     color: var(--text-primary);
-    direction: ltr;
+    /* /* direction: ltr; */
+    ;
     font-variant-numeric: tabular-nums;
     margin-bottom: .4rem;
 }
@@ -2962,7 +2976,8 @@ tr.inv-expiring {
     font-size: .82rem;
     font-weight: 800;
     color: #22c55e;
-    direction: ltr;
+    /* direction: ltr; */
+    ;
     font-variant-numeric: tabular-nums;
 }
 
