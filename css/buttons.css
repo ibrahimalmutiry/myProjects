@@ -1,0 +1,203 @@
+/* =============================================
+   الأزرار
+   Buttons
+   ============================================= */
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.25rem;
+    border-radius: 12px;
+    border: none;
+    font-family: inherit;
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+/*
+.btn-primary {
+    background: linear-gradient(135deg, var(--accent-blue), #0284c7);
+    color: white;
+    box-shadow: 0 10px 25px -5px rgba(14, 165, 233, 0.3);
+}
+
+.btn-primary:hover {
+    background: var(--accent-orange);
+    transform: translateY(-1px);
+} */
+
+.btn-secondary {
+    background: rgba(30, 41, 59, 0.5);
+    color: var(--text-secondary);
+    border: 1px solid var(--border-color);
+}
+
+.btn-secondary:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+.btn-icon {
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border-radius: 10px;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-icon:hover {
+    background: rgba(30, 41, 59, 0.5);
+    color: var(--text-primary);
+}
+
+/* أزرار صغيرة */
+.btn-sm {
+    padding: 0.5rem 0.875rem;
+    font-size: 0.8rem;
+    border-radius: 8px;
+}
+
+.btn-danger {
+    background: rgba(239, 68, 68, .2);
+    color: var(--accent-red);
+    border: 1px solid rgba(239, 68, 68, .3);
+}
+
+.btn-danger:hover {
+    background: rgba(239, 68, 68, .3);
+}
+
+.btn-danger-sm {
+    flex-shrink: 0;
+    padding: .35rem .9rem;
+    font-size: .8rem;
+    font-weight: 600;
+    background: rgba(239, 68, 68, 0.1);
+    color: var(--accent-red);
+    border: 1px solid rgba(239, 68, 68, 0.35);
+    border-radius: 7px;
+    cursor: pointer;
+    transition: background .2s, transform .1s;
+    white-space: nowrap;
+}
+
+.btn-danger-sm:hover {
+    background: rgba(239, 68, 68, 0.22);
+    transform: scale(1.03);
+}
+
+.btn-danger-sm:disabled {
+    opacity: .45;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* زر PDF في الجدول */
+.btn-pdf {
+    color: var(--accent-red) !important;
+}
+
+.btn-pdf:hover {
+    background: rgba(239, 68, 68, .2) !important;
+}
+
+.btn-pdf.disabled {
+    color: #9ca3af !important;
+    cursor: not-allowed;
+}
+
+.btn-pdf.disabled:hover {
+    background: none !important;
+}
+
+.btn-icon-sm {
+    padding: 0.5rem;
+    background: rgba(14, 165, 233, 0.1);
+    border: none;
+    border-radius: 8px;
+    color: var(--accent-blue);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-icon-sm:hover {
+    background: rgba(14, 165, 233, 0.2);
+}
+
+.btn-danger-icon {
+    background: rgba(239, 68, 68, 0.1);
+    color: var(--accent-red);
+}
+
+.btn-danger-icon:hover {
+    background: rgba(239, 68, 68, 0.2);
+}
+
+/* أزرار الإجراءات */
+.tx-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.btn-action {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.btn-action:hover {
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.btn-view:hover {
+    background: rgba(14, 165, 233, 0.15);
+    color: var(--accent-blue);
+    border-color: rgba(14, 165, 233, 0.3);
+}
+
+.btn-edit:hover {
+    background: rgba(16, 185, 129, 0.15);
+    color: var(--accent-green);
+    border-color: rgba(16, 185, 129, 0.3);
+}
+
+/* Light Mode */
+[data-theme="light"] .btn-primary {
+    background: var(--btn-primary-bg);
+    color: var(--btn-primary-text);
+}
+
+[data-theme="light"] .btn-secondary {
+    background: var(--btn-secondary-bg);
+    color: var(--btn-secondary-text);
+    border: 1px solid var(--btn-secondary-border);
+}
+
+[data-theme="light"] .btn-action {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-color);
+    color: var(--icon-secondary);
+}
+
+[data-theme="light"] .btn-action:hover {
+    background: var(--bg-secondary);
+    color: var(--icon-primary);
+}

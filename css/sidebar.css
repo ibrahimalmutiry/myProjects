@@ -673,6 +673,34 @@ body.sidebar-collapsed .sidebar-toggle .toggle-icon-close {
     .sidebar.mobile-open {
         right: 0;
         box-shadow: -8px 0 32px rgba(0, 0, 0, .25);
+        width: var(--sidebar-width);
+    }
+
+    /* إظهار كل النصوص عند فتح السايدبار بالموبايل */
+    .sidebar.mobile-open .sidebar-logo-text {
+        opacity: 1;
+        max-width: 200px;
+        pointer-events: auto;
+    }
+
+    .sidebar.mobile-open .nav-label {
+        opacity: 1;
+        max-width: 200px;
+    }
+
+    .sidebar.mobile-open .nav-group-label {
+        opacity: 1;
+    }
+
+    .sidebar.mobile-open .nav-child-btn .nav-child-label,
+    .sidebar.mobile-open .nav-child-label {
+        opacity: 1;
+        max-width: 200px;
+    }
+
+    .sidebar.mobile-open .user-details {
+        opacity: 1;
+        max-width: 200px;
     }
 
     .main-content {
@@ -776,6 +804,18 @@ body.sidebar-collapsed .sidebar-toggle .toggle-icon-close {
 /* ══════════════════════════════════════════════════════════════
    تحسينات الطباعة
    ══════════════════════════════════════════════════════════════ */
+
+/* موبايل: أظهر الأقسام الفرعية عند فتح السايدبار */
+@media (max-width: 768px) {
+    .sidebar.mobile-open .nav-children {
+        display: flex !important;
+    }
+
+    .sidebar.mobile-open .nav-parent-btn {
+        justify-content: flex-end;
+    }
+}
+
 @media print {
 
     .sidebar,
@@ -834,7 +874,7 @@ body.sidebar-collapsed .sidebar-toggle .toggle-icon-close {
 }
 
 .nav-parent.open .nav-children {
-    max-height: 200px;
+    max-height: 100%;
     opacity: 1;
 }
 

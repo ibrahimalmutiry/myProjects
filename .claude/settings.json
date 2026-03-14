@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -n \"function loadDashboard\\\\|function loadSettings\" /Applications/XAMPP/xamppfiles/htdocs/workflow-system/js/app-*.js)",
+      "Read(//tmp/**)"
+    ],
+    "additionalDirectories": [
+      "/private/tmp"
+    ]
+  }
+}

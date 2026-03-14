@@ -35,7 +35,8 @@ $userRole = $_SESSION['user_role'] ?? '';
     <link rel="stylesheet" href="css/dashboard-redesign.css">
     <link rel="stylesheet" href="css/bank-rows.css">
     <link rel="stylesheet" href="css/daily-payments.css">
-
+    <link rel="stylesheet" href="css/ceo-approvals.css">
+    <link rel="stylesheet" href="css/archive.css">
     <link rel="icon" href="images/logo.png">
 </head>
 
@@ -216,6 +217,61 @@ $userRole = $_SESSION['user_role'] ?? '';
             </div>
 
 
+            <!-- ══ الأرشيف المالي (قابل للطي) ══ -->
+            <div class="nav-parent" id="nav-parent-archive">
+                <button class="nav-tab nav-parent-btn" onclick="toggleNavGroup('archive')"
+                    data-tooltip="الأرشيف المالي">
+                    <span class="nav-icon">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <polyline points="21 8 21 21 3 21 3 8"></polyline>
+                            <rect x="1" y="3" width="22" height="5"></rect>
+                            <line x1="10" y1="12" x2="14" y2="12"></line>
+                        </svg>
+                    </span>
+                    <span class="nav-label">الأرشيف المالي</span>
+                    <span class="nav-badge" id="archive-expiry-badge" style="display:none">!</span>
+                    <span class="nav-chevron" id="nav-chevron-archive">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2.5">
+                            <polyline points="6 9 12 15 18 9" />
+                        </svg>
+                    </span>
+                </button>
+                <div class="nav-children" id="nav-children-archive">
+                    <button class="nav-tab nav-child-btn" data-tab="archive" data-tooltip="جميع المستندات"
+                        onclick="openArchiveSub('all')">
+                        <span class="nav-child-dot"></span>
+                        <span class="nav-label">جميع المستندات</span>
+                    </button>
+                    <button class="nav-tab nav-child-btn" data-tab="archive" data-tooltip="📋 مستندات تشغيلية"
+                        onclick="openArchiveSub('operational')">
+                        <span class="nav-child-dot"></span>
+                        <span class="nav-label">📋 مستندات تشغيلية</span>
+                    </button>
+                    <button class="nav-tab nav-child-btn" data-tab="archive" data-tooltip="💰 مستندات مالية"
+                        onclick="openArchiveSub('financial')">
+                        <span class="nav-child-dot"></span>
+                        <span class="nav-label">💰 مستندات مالية</span>
+                    </button>
+                    <button class="nav-tab nav-child-btn" data-tab="archive" data-tooltip="📊 تقارير وموازنة"
+                        onclick="openArchiveSub('reports')">
+                        <span class="nav-child-dot"></span>
+                        <span class="nav-label">📊 تقارير وموازنة</span>
+                    </button>
+                    <button class="nav-tab nav-child-btn" data-tab="archive" data-tooltip="🏛️ وثائق رسمية"
+                        onclick="openArchiveSub('official')">
+                        <span class="nav-child-dot"></span>
+                        <span class="nav-label">🏛️ وثائق رسمية</span>
+                    </button>
+                    <button class="nav-tab nav-child-btn" data-tab="archive" data-tooltip="🔄 التجديد والصلاحيات"
+                        onclick="openArchiveSub('renewals')">
+                        <span class="nav-child-dot"></span>
+                        <span class="nav-label">🔄 التجديد والصلاحيات</span>
+                    </button>
+                </div>
+            </div>
+
             <span class="nav-group-label">المتابعة</span>
 
             <button class="nav-tab" data-tab="sla" data-tooltip="SLA / OLA">
@@ -237,7 +293,12 @@ $userRole = $_SESSION['user_role'] ?? '';
                 </span>
                 <span class="nav-label">متابعة الأداء</span>
             </button>
-
+            <?php if (in_array($_SESSION['user_role'] ?? '', ['ceo','admin','system_admin'])): ?>
+            <button class="nav-tab" data-tab="ceo-approvals" data-tooltip="اعتمادات الرئيس التنفيذي">
+                <span class="nav-icon">🏛️</span>
+                <span class="nav-label">اعتمادات الرئيس التنفيذي</span>
+            </button>
+            <?php endif; ?>
             <span class="nav-group-label">النظام</span>
 
             <button class="nav-tab" data-tab="settings" data-tooltip="الإعدادات">
@@ -348,9 +409,10 @@ $userRole = $_SESSION['user_role'] ?? '';
     <script src="js/app-budget.js"></script>
     <script src="js/app-bank.js"></script>
     <script src="js/app-daily-payments.js"></script>
-
+    <script src="js/app-ceo-approvals.js"></script>
     <script src="js/correspondence.js"></script>
     <script src="js/excel-import-ui.js"></script>
+    <script src="js/app-archive.js"></script>
 
     <script>
     // معلومات المستخدم الحالي

@@ -342,37 +342,156 @@ try {
         
         case 'full_stats':
             $conn = db();
-            
             $stats = [];
-            
-            // إجمالي المعاملات
             $result = $conn->query("SELECT COUNT(*) as total FROM transactions");
             $stats['transactions'] = $result->fetch_assoc()['total'];
-            
-            // إجمالي الموظفين
             $result = $conn->query("SELECT COUNT(*) as total FROM employees");
             $stats['employees'] = $result->fetch_assoc()['total'];
-            
-            // موظفين حسب القسم
             $result = $conn->query("SELECT role, COUNT(*) as cnt FROM employees GROUP BY role");
             $stats['employees_by_role'] = [];
             while ($row = $result->fetch_assoc()) {
                 $stats['employees_by_role'][$row['role']] = $row['cnt'];
             }
-            
-            // أنواع المعاملات
             $result = $conn->query("SELECT COUNT(*) as total FROM transaction_types");
             $stats['types'] = $result->fetch_assoc()['total'];
-            
-            // إجمالي المبالغ
             $result = $conn->query("SELECT SUM(amount) as total FROM transactions");
             $stats['total_amount'] = $result->fetch_assoc()['total'] ?? 0;
-            
-            // المعاملات هذا الشهر
             $result = $conn->query("SELECT COUNT(*) as total FROM transactions WHERE MONTH(transaction_date) = MONTH(CURRENT_DATE()) AND YEAR(transaction_date) = YEAR(CURRENT_DATE())");
             $stats['this_month'] = $result->fetch_assoc()['total'];
-            
             jsonResponse(['success' => true, 'data' => $stats]);
+            break;
+
+        // ══════════════════ إحصائيات النظام التقنية ══════════════
+        case 'system_health':
+            $conn = db();
+            $out = [];
+
+            // ── أداء النظام ──────────────────────────────────────
+            $out['php_version']    = PHP_VERSION;
+            $out['server_software'] = $_SERVER['SERVER_SOFTWARE'] ?? 'Unknown';
+            $out['uptime']         = @file_get_contents('/proc/uptime') ?: null;
+            $out['load_avg']       = function_exists('sys_getloadavg') ? sys_getloadavg() : null;
+            $out['request_time']   = round((microtime(true) - ($_SERVER['REQUEST_TIME_FLOAT'] ?? microtime(true))) * 1000, 2);
+
+            // ── الذاكرة ──────────────────────────────────────────
+            $out['memory_usage']       = memory_get_usage(true);
+            $out['memory_peak']        = memory_get_peak_usage(true);
+            $out['memory_limit']       = ini_get('memory_limit');
+            $out['memory_limit_bytes'] = (int)(ini_get('memory_limit')) * 1024 * 1024;
+
+            // ── حجم النظام (مجلد uploads) ────────────────────────
+            $uploadsDir = dirname(__DIR__) . '/uploads';
+            if (!is_dir($uploadsDir)) $uploadsDir = __DIR__ . '/uploads';
+            $uploadSize = 0; $uploadCount = 0;
+            if (is_dir($uploadsDir)) {
+                $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($uploadsDir, FilesystemIterator::SKIP_DOTS));
+                foreach ($it as $f) { $uploadSize += $f->getSize(); $uploadCount++; }
+            }
+            $out['uploads_size']  = $uploadSize;
+            $out['uploads_count'] = $uploadCount;
+            $out['uploads_path']  = $uploadsDir;
+
+            // حجم مجلد temp/session
+            $sessSize = 0;
+            $sessPath = session_save_path() ?: sys_get_temp_dir();
+            if (is_dir($sessPath)) {
+                foreach (glob($sessPath . '/sess_*') ?: [] as $sf) $sessSize += filesize($sf);
+            }
+            $out['session_size'] = $sessSize;
+            $out['session_path'] = $sessPath;
+
+            // ── قاعدة البيانات ───────────────────────────────────
+            // حجم كل جدول
+            $r = $conn->query("SELECT table_name, table_rows,
+                data_length + index_length AS total_size,
+                data_length, index_length
+                FROM information_schema.TABLES
+                WHERE table_schema = DATABASE()
+                ORDER BY total_size DESC");
+            $tables = [];
+            $dbTotalSize = 0;
+            while ($row = $r->fetch_assoc()) {
+                $tables[] = $row;
+                $dbTotalSize += $row['total_size'];
+            }
+            $out['db_tables']     = $tables;
+            $out['db_total_size'] = $dbTotalSize;
+            $out['db_table_count'] = count($tables);
+
+            // MySQL نسخة وإعدادات
+            $r = $conn->query("SELECT VERSION() as v");
+            $out['mysql_version'] = $r->fetch_assoc()['v'];
+            $r = $conn->query("SHOW STATUS LIKE 'Threads_connected'");
+            $out['db_connections'] = $r->fetch_assoc()['Value'] ?? 0;
+            $r = $conn->query("SHOW STATUS LIKE 'Queries'");
+            $out['db_queries_total'] = $r->fetch_assoc()['Value'] ?? 0;
+            $r = $conn->query("SHOW STATUS LIKE 'Slow_queries'");
+            $out['db_slow_queries'] = $r->fetch_assoc()['Value'] ?? 0;
+
+            // ── OPcache ──────────────────────────────────────────
+            $out['opcache_enabled'] = function_exists('opcache_get_status');
+            if ($out['opcache_enabled']) {
+                $oc = @opcache_get_status(false);
+                $out['opcache'] = $oc ? [
+                    'used_memory'  => $oc['memory_usage']['used_memory'] ?? 0,
+                    'free_memory'  => $oc['memory_usage']['free_memory'] ?? 0,
+                    'cached_files' => $oc['opcache_statistics']['num_cached_scripts'] ?? 0,
+                    'hits'         => $oc['opcache_statistics']['hits'] ?? 0,
+                    'misses'       => $oc['opcache_statistics']['misses'] ?? 0,
+                    'hit_rate'     => round($oc['opcache_statistics']['opcache_hit_rate'] ?? 0, 1),
+                    'enabled'      => $oc['opcache_enabled'] ?? false,
+                ] : null;
+            }
+
+            // ── صحة النظام ───────────────────────────────────────
+            $health = [];
+            // فحص الاتصال بقاعدة البيانات
+            $health['db_connection'] = $conn->ping() ? 'ok' : 'error';
+            // فحص مجلد uploads قابل للكتابة
+            $health['uploads_writable'] = is_writable($uploadsDir) ? 'ok' : 'warning';
+            // فحص الذاكرة
+            $memPct = $out['memory_limit_bytes'] > 0
+                ? round(($out['memory_usage'] / $out['memory_limit_bytes']) * 100, 1)
+                : 0;
+            $health['memory_status'] = $memPct > 80 ? 'warning' : 'ok';
+            $health['memory_pct']    = $memPct;
+            // PHP version check
+            $health['php_ok'] = version_compare(PHP_VERSION, '7.4', '>=') ? 'ok' : 'warning';
+            // Slow queries
+            $health['slow_queries'] = intval($out['db_slow_queries']) > 10 ? 'warning' : 'ok';
+            $out['health'] = $health;
+
+            jsonResponse(['success' => true, 'data' => $out]);
+            break;
+
+        case 'clear_cache':
+            // فحص الصلاحية — مدير النظام فقط
+            if (!isset($_SESSION['user_id'])) {
+                jsonResponse(['success' => false, 'message' => 'غير مصرح']);
+                exit;
+            }
+            $cleared = [];
+            // OPcache
+            if (function_exists('opcache_reset')) {
+                opcache_reset();
+                $cleared[] = 'opcache';
+            }
+            // Sessions القديمة (أكثر من ساعة)
+            $sessPath = session_save_path() ?: sys_get_temp_dir();
+            $sessCleared = 0;
+            if (is_dir($sessPath)) {
+                foreach (glob($sessPath . '/sess_*') ?: [] as $sf) {
+                    if (filemtime($sf) < time() - 3600) { @unlink($sf); $sessCleared++; }
+                }
+            }
+            $cleared[] = "sessions ({$sessCleared})";
+            // Temp files
+            $tmpCleared = 0;
+            foreach (glob(sys_get_temp_dir() . '/php*') ?: [] as $tf) {
+                if (is_file($tf) && filemtime($tf) < time() - 3600) { @unlink($tf); $tmpCleared++; }
+            }
+            $cleared[] = "tmp ({$tmpCleared})";
+            jsonResponse(['success' => true, 'cleared' => $cleared, 'message' => 'تم تفريغ الذاكرة المؤقتة']);
             break;
         
 

@@ -1,0 +1,151 @@
+/* =============================================
+   السجل اليومي
+   Daily Log & Balance Card Variants
+   ============================================= */
+
+/* رأس اليوم */
+.day-header {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1.25rem;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    margin-bottom: 0.25rem;
+}
+
+.day-badge {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* ألوان خاصة لكل بطاقة */
+.balance-card.bank1::before {
+    background: linear-gradient(90deg, #667eea, #764ba2);
+}
+
+.balance-card.bank2::before {
+    background: linear-gradient(90deg, #f093fb, #f5576c);
+}
+
+.balance-card.expenses::before {
+    background: linear-gradient(90deg, #ffa726, #ef6c00);
+}
+
+.balance-card.deposits::before {
+    background: linear-gradient(90deg, #66bb6a, #2e7d32);
+}
+
+.balance-card.available::before {
+    background: linear-gradient(90deg, #26c6da, #0097a7);
+}
+
+/* بطاقة الرصيد المتاح - ممتدة */
+.balance-card.available {
+    padding: 1.25rem 2rem;
+}
+
+.available-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.available-title {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.available-formula {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    font-family: 'Courier New', monospace;
+    font-size: 1rem;
+    color: var(--text-secondary);
+}
+
+.available-formula .op {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--text-muted);
+}
+
+.available-formula .result {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #26c6da;
+}
+
+/* قسم المصروفات */
+.expenses-section {
+    margin-top: 1.5rem;
+}
+
+.expenses-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--border-color);
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
+.expenses-empty {
+    text-align: center;
+    padding: 2rem;
+    color: var(--text-muted);
+}
+
+/* ════ سجل أوامر الدفع ════ */
+.dp-history-box {
+    max-width: 820px !important;
+}
+
+.dp-hist-filters {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1.5fr auto;
+    gap: .75rem;
+    align-items: flex-end;
+    margin-bottom: 1.25rem;
+    padding-bottom: 1.25rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.dp-hist-search-group {
+    min-width: 0;
+}
+
+.dp-hist-filters input[type="date"],
+.dp-hist-filters input[type="text"] {
+    width: 100%;
+    padding: .45rem .7rem;
+    background: var(--bg-surface, rgba(255, 255, 255, .05));
+    border: 1px solid var(--border-color);
+    border-radius: 9px;
+    color: var(--text-primary);
+    font-size: .82rem;
+    outline: none;
+}
+
+.dp-hist-filters input:focus {
+    border-color: var(--accent-blue);
+}
+
+@media (max-width: 640px) {
+    .dp-hist-filters {
+        grid-template-columns: 1fr 1fr;
+    }
+}

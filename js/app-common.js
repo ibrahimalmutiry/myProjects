@@ -906,6 +906,9 @@ function switchTab(tab) {
     } else if (tab === 'reservations') {
         if (typeof BudgetState !== 'undefined') BudgetState.activeTab = 'reservations';
         if (typeof loadBudgetReservationsPage === 'function') loadBudgetReservationsPage();
+    } else if (tab === 'archive') {
+        DOM.mainContent.innerHTML = '<div id="archive-root"></div>';
+        if (typeof ArchiveModule !== 'undefined') setTimeout(() => ArchiveModule.init(), 50);
     } else if (tab === 'settings') {
         loadSettingsPage();
     } else if (tab === 'profile') {
@@ -915,6 +918,8 @@ function switchTab(tab) {
             DOM.mainContent.innerHTML = '<div id="page-daily-payments"></div>';
             initDailyPayments();
         }
+    } else if (tab === 'ceo-approvals') {
+        if (typeof loadCeoApprovalsPage === 'function') loadCeoApprovalsPage();
     }
 }
 
@@ -932,6 +937,7 @@ const NAV_GROUP_MAP = {
     'bank-accounts': 'treasury',
     'bank-investments': 'treasury',
     'daily-payments': 'treasury',
+    'archive': 'archive',
 };
 
 // يُستدعى من onclick زر الطي/الفتح

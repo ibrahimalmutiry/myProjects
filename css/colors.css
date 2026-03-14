@@ -1,0 +1,175 @@
+/* =============================================
+   نظام الألوان المركزي
+   Centralized Color System
+   =============================================
+   هذا الملف يحتوي على جميع ألوان الموقع
+   لتسهيل التعديل والصيانة
+   ============================================= */
+
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@300;400;500;600;700&display=swap');
+
+/* =============================================
+   الوضع الليلي (Dark Mode) - الافتراضي
+   ============================================= */
+:root {
+    /* ── الخلفيات ── */
+    --bg-primary: #222831;
+    --bg-secondary: #393E46;
+    --bg-surface: #1B2026;
+    --bg-card: #2d343c;
+    --bg-hover: rgba(255, 255, 255, 0.05);
+    --bg-tertiary: rgba(30, 41, 59, 0.5);
+
+    /* ── النصوص ── */
+    --text-primary: #DFD0B8;
+    --text-secondary: #948979;
+    --text-muted: #7A6F63;
+
+    /* ── الأيقونات ── */
+    --icon-primary: #DFD0B8;
+    --icon-secondary: #948979;
+
+    /* ── الحدود والفواصل ── */
+    --border-color: #4A4F57;
+
+    /* ── الأزرار ── */
+    --btn-primary-bg: #948979;
+    --btn-primary-text: #222831;
+    --btn-secondary-bg: transparent;
+    --btn-secondary-text: #DFD0B8;
+    --btn-secondary-border: #948979;
+
+    /* ── الألوان المميزة (Accent) ── */
+    --accent-blue: #4dabf7;
+    --accent-cyan: #3bc9db;
+    --accent-green: #69db7c;
+    --accent-orange: #ffa94d;
+    --accent-purple: #b197fc;
+    --accent-red: #ff6b6b;
+    --accent-amber: #ffe066;
+    --accent-indigo: #818cf8;
+
+    /* ── الظلال ── */
+    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.15);
+    --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.25);
+    --shadow-lg: 0 20px 40px -15px rgba(0, 0, 0, 0.5);
+
+    /* ── ألوان الحالات ── */
+    --color-success: #69db7c;
+    --color-warning: #ffa94d;
+    --color-danger: #ff6b6b;
+    --color-info: #4dabf7;
+
+    /* ── ألوان المراحل (Stages) ── */
+    --stage-receiving: #69db7c;
+    --stage-budget: #3bc9db;
+    --stage-payment: #ffa94d;
+    --stage-invoice: #b197fc;
+    --stage-dispatch: #818cf8;
+
+    /* ── ألوان الشارات (Badges) - Dark ── */
+    --badge-green-bg: rgba(16, 185, 129, 0.2);
+    --badge-green-text: #34d399;
+    --badge-amber-bg: rgba(245, 158, 11, 0.2);
+    --badge-amber-text: #fbbf24;
+    --badge-red-bg: rgba(239, 68, 68, 0.2);
+    --badge-red-text: #f87171;
+    --badge-blue-bg: rgba(14, 165, 233, 0.2);
+    --badge-blue-text: #38bdf8;
+    --badge-slate-bg: rgba(100, 116, 139, 0.2);
+    --badge-slate-text: #94a3b8;
+
+    /* ── ألوان التنبيهات ── */
+    --alert-danger-bg: rgba(239, 68, 68, 0.15);
+    --alert-danger-text: #f87171;
+    --alert-danger-border: rgba(239, 68, 68, 0.3);
+    --alert-warning-bg: rgba(249, 115, 22, 0.15);
+    --alert-warning-text: #fb923c;
+    --alert-warning-border: rgba(249, 115, 22, 0.3);
+    --alert-info-bg: rgba(14, 165, 233, 0.15);
+    --alert-info-text: #38bdf8;
+    --alert-info-border: rgba(14, 165, 233, 0.3);
+}
+
+/* =============================================
+   الوضع النهاري (Light Mode)
+   ============================================= */
+[data-theme="light"] {
+    /* ── الخلفيات ── */
+    --bg-primary: #F5F1EB;
+    --bg-secondary: #DFD0B8;
+    --bg-surface: #E6DED3;
+    --bg-card: #FFFFFF;
+    --bg-hover: rgba(0, 0, 0, 0.04);
+    --bg-tertiary: rgba(0, 0, 0, 0.06);
+
+    /* ── النصوص ── */
+    --text-primary: #222831;
+    --text-secondary: #393E46;
+    --text-muted: #948979;
+
+    /* ── الأيقونات ── */
+    --icon-primary: #393E46;
+    --icon-secondary: #948979;
+
+    /* ── الحدود والفواصل ── */
+    --border-color: #CFC6B8;
+
+    /* ── الأزرار ── */
+    --btn-primary-bg: #222831;
+    --btn-primary-text: #DFD0B8;
+    --btn-secondary-bg: #393E46;
+    --btn-secondary-text: #DFD0B8;
+    --btn-secondary-border: transparent;
+
+    /* ── الألوان المميزة (Accent) ── */
+    --accent-blue: #228be6;
+    --accent-cyan: #15aabf;
+    --accent-green: #40c057;
+    --accent-orange: #fd7e14;
+    --accent-purple: #7950f2;
+    --accent-red: #fa5252;
+    --accent-amber: #fab005;
+    --accent-indigo: #5c6bc0;
+
+    /* ── الظلال ── */
+    --shadow-sm: 0 1px 4px rgba(0, 0, 0, 0.06);
+    --shadow-md: 0 2px 10px rgba(0, 0, 0, 0.08);
+    --shadow-lg: 0 10px 30px -10px rgba(0, 0, 0, 0.15);
+
+    /* ── ألوان الحالات ── */
+    --color-success: #40c057;
+    --color-warning: #fd7e14;
+    --color-danger: #fa5252;
+    --color-info: #228be6;
+
+    /* ── ألوان المراحل (Stages) ── */
+    --stage-receiving: #40c057;
+    --stage-budget: #15aabf;
+    --stage-payment: #fd7e14;
+    --stage-invoice: #7950f2;
+    --stage-dispatch: #5c6bc0;
+
+    /* ── ألوان الشارات (Badges) - Light ── */
+    --badge-green-bg: rgba(64, 192, 87, 0.1);
+    --badge-green-text: #2b8a3e;
+    --badge-amber-bg: rgba(250, 176, 5, 0.1);
+    --badge-amber-text: #e67700;
+    --badge-red-bg: rgba(250, 82, 82, 0.1);
+    --badge-red-text: #c92a2a;
+    --badge-blue-bg: rgba(34, 139, 230, 0.1);
+    --badge-blue-text: #1864ab;
+    --badge-slate-bg: rgba(148, 137, 121, 0.1);
+    --badge-slate-text: #948979;
+
+    /* ── ألوان التنبيهات ── */
+    --alert-danger-bg: rgba(250, 82, 82, 0.1);
+    --alert-danger-text: #c92a2a;
+    --alert-danger-border: rgba(250, 82, 82, 0.3);
+    --alert-warning-bg: rgba(253, 126, 20, 0.1);
+    --alert-warning-text: #d9480f;
+    --alert-warning-border: rgba(253, 126, 20, 0.3);
+    --alert-info-bg: rgba(34, 139, 230, 0.1);
+    --alert-info-text: #1864ab;
+    --alert-info-border: rgba(34, 139, 230, 0.3);
+}

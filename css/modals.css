@@ -1,0 +1,177 @@
+/* =============================================
+   المودال والنوافذ المنبثقة
+   Modals & Overlays
+   ============================================= */
+
+/* المودال */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    -webkit-backdrop-filter: blur(4px);
+    backdrop-filter: blur(4px);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s ease;
+}
+
+.modal-overlay.active {
+    opacity: 1;
+    visibility: visible;
+}
+
+.modal {
+    background: var(--bg-primary);
+    border-radius: 20px;
+    border: 1px solid var(--border-color);
+    width: 90%;
+    max-width: 600px;
+    max-height: 90vh;
+    overflow: hidden;
+    transform: scale(0.9) translateY(20px);
+    transition: transform 0.3s ease;
+}
+
+.modal.modal-lg {
+    max-width: 800px;
+}
+
+.modal.modal-xl {
+    max-width: 1000px;
+    width: 94%;
+}
+
+.modal-overlay.active .modal {
+    transform: scale(1) translateY(0);
+}
+
+.modal-header {
+    padding: 1.25rem 1.5rem;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.modal-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.modal-close {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+}
+
+.modal-close:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+.modal-body {
+    padding: 1.5rem;
+    overflow-y: auto;
+    max-height: calc(90vh - 140px);
+}
+
+.modal-footer {
+    padding: 1rem 1.5rem;
+    border-top: 1px solid var(--border-color);
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+}
+
+/* التبويبات في المودال */
+.modal-tabs {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 1rem;
+}
+
+.modal-tab {
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    font-family: inherit;
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.modal-tab:hover {
+    color: var(--text-primary);
+}
+
+.modal-tab.active {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+.modal-tab.green.active {
+    background: rgba(16, 185, 129, 0.2);
+    color: var(--accent-green);
+}
+
+.modal-tab.cyan.active {
+    background: rgba(6, 182, 212, 0.2);
+    color: var(--accent-cyan);
+}
+
+.modal-tab.orange.active {
+    background: rgba(249, 115, 22, 0.2);
+    color: var(--accent-orange);
+}
+
+.modal-tab.purple.active {
+    background: rgba(168, 85, 247, 0.2);
+    color: var(--accent-purple);
+}
+
+/* Light Mode */
+[data-theme="light"] .modal-overlay {
+    background: rgba(34, 40, 49, 0.6);
+}
+
+[data-theme="light"] .modal-content {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+}
+
+[data-theme="light"] .modal-header {
+    border-bottom: 1px solid var(--border-color);
+}
+
+[data-theme="light"] .modal-title {
+    color: var(--text-primary);
+}
+
+[data-theme="light"] .modal-tabs {
+    background: var(--bg-surface);
+}
+
+[data-theme="light"] .modal-tab {
+    color: var(--text-secondary);
+}
+
+[data-theme="light"] .modal-tab.active {
+    color: var(--bg-card);
+}
