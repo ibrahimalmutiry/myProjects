@@ -57,14 +57,21 @@ if (file_put_contents($tmpInput, $imgData) === false) {
 }
 
 function findPython(): string {
-    foreach (['/opt/homebrew/bin/python3','/usr/local/bin/python3','/usr/bin/python3','python3','python'] as $p) {
-        if (strpos($p,'/') === 0 && file_exists($p)) return $p;
-        $f = trim((string)shell_exec("which $p 2>/dev/null"));
-        if ($f) return $f;
+    // Python 3.9 مع cv2 في مسار المستخدم
+    $candidates = [
+        '/usr/bin/python3.9',
+        '/usr/local/bin/python3.9',
+        '/Library/Developer/CommandLineTools/usr/bin/python3',
+    ];
+    foreach ($candidates as $p) {
+        if (file_exists($p)) {
+            $test = shell_exec($p . " -c 'import cv2' 2>&1");
+            if (empty(trim($test))) return $p;
+        }
     }
-    return 'python3';
+    // fallback: python3 مع PYTHONPATH صريح
+    return '/usr/bin/python3';
 }
-
 $scriptPath = null;
 foreach ([__DIR__.'/extract_signature.py', __DIR__.'/../extract_signature.py', __DIR__.'/../scripts/extract_signature.py'] as $p)
     if (file_exists($p)) { $scriptPath = $p; break; }
@@ -75,7 +82,15 @@ if (!$scriptPath) {
 }
 
 $python = findPython();
-$cmd    = escapeshellarg($python).' '.escapeshellarg($scriptPath).' '.escapeshellarg($tmpInput).' '.escapeshellarg($tmpOutput).($doCrop?' --crop':'').' 2>&1';
+// أضف مسار cv2 لـ Python 3.9
+$pyPath = '/Users/' . get_current_user() . '/Library/Python/3.9/lib/python/site-packages';
+$cmd    = 'PYTHONPATH=' . escapeshellarg($pyPath)
+        . ' ' . escapeshellarg($python)
+        . ' ' . escapeshellarg($scriptPath)
+        . ' ' . escapeshellarg($tmpInput)
+        . ' ' . escapeshellarg($tmpOutput)
+        . ($doCrop ? ' --crop' : '')
+        . ' 2>&1';
 $stdout = shell_exec($cmd);
 @unlink($tmpInput);
 

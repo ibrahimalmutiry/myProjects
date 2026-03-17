@@ -38,6 +38,7 @@ function renderEmployeesSection() {
     // فلتر الأقسام
     html += '<div class="filter-tabs">';
     html += '<button class="filter-tab ' + (SettingsData.currentFilter === 'all' ? 'active' : '') + '" onclick="filterEmployees(\'all\', this)">الكل</button>';
+    html += '<button class="filter-tab ' + (SettingsData.currentFilter === 'CEO' ? 'active' : '') + '" onclick="filterEmployees(\'CEO\', this)">الرئيس التنفيذي</button>';
     html += '<button class="filter-tab ' + (SettingsData.currentFilter === 'admin' ? 'active' : '') + '" onclick="filterEmployees(\'admin\', this)">المديرين</button>';
     html += '<button class="filter-tab ' + (SettingsData.currentFilter === 'receiver' ? 'active' : '') + '" onclick="filterEmployees(\'receiver\', this)">الاستلام</button>';
     html += '<button class="filter-tab ' + (SettingsData.currentFilter === 'budget' ? 'active' : '') + '" onclick="filterEmployees(\'budget\', this)">الموازنة</button>';
@@ -172,6 +173,7 @@ function openAddEmployeeModal() {
                     <select class="form-select" name="role" id="empRole" required>
                         <option value="">اختر القسم</option>
                         <option value="admin">مدير النظام</option>
+                        <option value="CEO">الرئيس التنفيذي</option>
                         <option value="receiver">الاستلام</option>
                         <option value="budget">الموازنة</option>
                         <option value="payment">الدفع</option>
@@ -250,6 +252,7 @@ function editEmployee(id) {
                     <label class="form-label">القسم / الدور</label>
                     <select class="form-select" name="role" id="empRole" required>
                         <option value="admin" ${emp.role === 'admin' ? 'selected' : ''}>مدير النظام</option>
+                        <option value="CEO" ${emp.role === 'CEO' ? 'selected' : ''}>الرئيس التنفيذي</option>
                         <option value="receiver" ${emp.role === 'receiver' ? 'selected' : ''}>الاستلام</option>
                         <option value="budget" ${emp.role === 'budget' ? 'selected' : ''}>الموازنة</option>
                         <option value="payment" ${emp.role === 'payment' ? 'selected' : ''}>الدفع</option>

@@ -92,6 +92,11 @@ $newCols = [
     'show_date_in_stamp' => "TINYINT(1) DEFAULT 0",
     'stamp_org_name'     => "VARCHAR(200) DEFAULT NULL",
     'show_org_name'      => "TINYINT(1) DEFAULT 0",
+    'stamp_rotate'       => "INT DEFAULT 0",
+    'sig_pdf_size'       => "INT DEFAULT 130",
+    'sig_gap'            => "INT DEFAULT 0",
+    'sig_x'              => "INT DEFAULT 40",
+    'sig_y'              => "INT DEFAULT 40",
 ];
 foreach ($newCols as $col => $def) {
     $chkCol = $conn->query("SHOW COLUMNS FROM ceo_stamp_settings LIKE '$col'");
@@ -157,6 +162,7 @@ switch ($action) {
                 )
             $wSql
             ORDER BY
+                (ca.action_type IS NULL) DESC,
                 FIELD(br.status, 'قيد المراجعة', 'معتمد', 'منفذ', 'مرفوض') ASC,
                 br.created_at DESC
             LIMIT 500
@@ -213,14 +219,16 @@ switch ($action) {
     case 'do_action':
         if ($method !== 'POST') jsonResponse(['success' => false, 'message' => 'POST فقط']);
 
-        $body       = json_decode(file_get_contents('php://input'), true) ?? [];
-        $resId      = (int)($body['reservation_id'] ?? 0);
-        $actionType = $conn->real_escape_string($body['action_type'] ?? '');
-        $notes      = $conn->real_escape_string($body['notes']       ?? '');
+        $body          = json_decode(file_get_contents('php://input'), true) ?? [];
+        $resId         = (int)($body['reservation_id'] ?? 0);
+        $actionTypeRaw = $body['action_type'] ?? '';
+        $notes         = $conn->real_escape_string($body['notes'] ?? '');
 
-        if (!$resId || !in_array($actionType, ['اعتماد','مراجعة','توجيه','رفض'])) {
+        if (!$resId || !in_array($actionTypeRaw, ['اعتماد','مراجعة','توجيه','رفض'], true)) {
             jsonResponse(['success' => false, 'message' => 'بيانات غير صحيحة']);
         }
+
+        $actionType = $conn->real_escape_string($actionTypeRaw);
 
         // التحقق من عدم وجود إجراء سابق
         $chk2 = $conn->query("SELECT id FROM ceo_approval_actions WHERE reservation_id = $resId LIMIT 1");
@@ -265,11 +273,9 @@ switch ($action) {
         break;
 
     case 'get_stamp':
-        $res = $conn->query("SELECT id, stamp_text, stamp_sub_text, show_sub_text,
-            stamp_color, stamp_bg_color, stamp_shape, stamp_size, stamp_border_width,
-            show_inner_ring, show_date_in_stamp, stamp_org_name, show_org_name,
-            signature_name FROM ceo_stamp_settings LIMIT 1");
+        $res = $conn->query("SELECT * FROM ceo_stamp_settings LIMIT 1");
         $row = $res ? $res->fetch_assoc() : [];
+        unset($row['signature_image']); // لا نرسله هنا — يُجلب بـ get_signature_image
         jsonResponse(['success' => true, 'data' => $row]);
         break;
 
@@ -308,6 +314,9 @@ switch ($action) {
         $showDateInStamp = isset($body['show_date_in_stamp'])? (int)(bool)$body['show_date_in_stamp']: 0;
         $orgName         = $conn->real_escape_string($body['stamp_org_name']     ?? '');
         $showOrgName     = isset($body['show_org_name'])     ? (int)(bool)$body['show_org_name']     : 0;
+        $stampRotate     = (int)($body['stamp_rotate']       ?? 0);
+        $sigPdfSize      = max(60, min(250, (int)($body['sig_pdf_size']          ?? 130)));
+        $sigGap          = max(-100, min(60, (int)($body['sig_gap']              ?? 0)));
         $sigName         = $conn->real_escape_string($body['signature_name']     ?? '');
 
         $sigImageSql = '';
@@ -334,6 +343,9 @@ switch ($action) {
                 show_date_in_stamp= $showDateInStamp,
                 stamp_org_name    = '$orgName',
                 show_org_name     = $showOrgName,
+                stamp_rotate      = $stampRotate,
+                sig_pdf_size      = $sigPdfSize,
+                sig_gap           = $sigGap,
                 signature_name    = '$sigName',
                 updated_by        = $userId
                 $sigImageSql

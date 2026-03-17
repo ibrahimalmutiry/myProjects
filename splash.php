@@ -416,7 +416,7 @@ $userRole = $_SESSION['user_role'] ?? '';
         // الانتقال للصفحة الرئيسية بعد 5 ثواني
         setTimeout(() => {
             window.location.href = 'index.php';
-        }, 10000);
+        }, 7500);
     })();
     </script>
 </body>

@@ -401,6 +401,9 @@ $userRole = $_SESSION['user_role'] ?? '';
     <div class="toast" id="toast"></div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="js/pdf-engine.js"></script>
     <script src="js/app-common.js"></script>
     <script src="js/app-notifications.js"></script>
     <script src="js/app-dashboard.js"></script>
@@ -413,7 +416,12 @@ $userRole = $_SESSION['user_role'] ?? '';
     <script src="js/correspondence.js"></script>
     <script src="js/excel-import-ui.js"></script>
     <script src="js/app-archive.js"></script>
-
+    <script src="js/app-performance.js"></script>
+    <script src="js/app-settings-core.js"></script>
+    <script src="js/app-settings-budget.js"></script>
+    <script src="js/app-settings-employees.js"></script>
+    <script src="js/app-settings-system.js"></script>
+    <script src="js/app-settings-types.js"></script>
     <script>
     // معلومات المستخدم الحالي
     <?php

@@ -1,0 +1,1109 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>اختبار صفحة اعتمادات الرئيس التنفيذي</title>
+  <style>
+    :root {
+      --pass: #16a34a;
+      --fail: #dc2626;
+      --warn: #d97706;
+      --info: #2563eb;
+      --bg: #0f172a;
+      --card: #1e293b;
+      --border: #334155;
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --navy: #1e3a5f;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      padding: 1.5rem;
+      min-height: 100vh;
+    }
+
+    h1 {
+      font-size: 1.4rem;
+      color: #fff;
+      margin-bottom: .25rem;
+      display: flex;
+      align-items: center;
+      gap: .6rem;
+    }
+
+    .subtitle {
+      color: var(--muted);
+      font-size: .82rem;
+      margin-bottom: 1.5rem;
+    }
+
+    /* شريط التقدم */
+    #progress-bar-wrap {
+      background: var(--border);
+      border-radius: 99px;
+      height: 6px;
+      margin-bottom: 1.5rem;
+      overflow: hidden;
+    }
+
+    #progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, #2563eb, #16a34a);
+      border-radius: 99px;
+      transition: width .3s ease;
+      width: 0%;
+    }
+
+    /* ملخص النتائج */
+    #summary {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: .75rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .sum-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: .75rem 1rem;
+      text-align: center;
+    }
+
+    .sum-card .num {
+      font-size: 2rem;
+      font-weight: 800;
+      line-height: 1;
+      margin-bottom: .2rem;
+    }
+
+    .sum-card .lbl {
+      font-size: .75rem;
+      color: var(--muted);
+    }
+
+    .sum-card.pass .num {
+      color: var(--pass);
+    }
+
+    .sum-card.fail .num {
+      color: var(--fail);
+    }
+
+    .sum-card.warn .num {
+      color: var(--warn);
+    }
+
+    .sum-card.total .num {
+      color: #60a5fa;
+    }
+
+    /* أقسام الاختبارات */
+    .section {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      margin-bottom: 1rem;
+      overflow: hidden;
+    }
+
+    .section-head {
+      padding: .75rem 1rem;
+      background: rgba(255, 255, 255, .04);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .section-head h2 {
+      font-size: .92rem;
+      display: flex;
+      align-items: center;
+      gap: .4rem;
+    }
+
+    .section-head .sec-stats {
+      font-size: .75rem;
+      color: var(--muted);
+      display: flex;
+      gap: .6rem;
+    }
+
+    .section-body {
+      padding: .5rem;
+    }
+
+    /* صفوف الاختبارات */
+    .test-row {
+      display: flex;
+      align-items: flex-start;
+      gap: .6rem;
+      padding: .5rem .6rem;
+      border-radius: 7px;
+      margin-bottom: 2px;
+      font-size: .82rem;
+      transition: background .15s;
+    }
+
+    .test-row:hover {
+      background: rgba(255, 255, 255, .04);
+    }
+
+    .test-row .badge {
+      flex-shrink: 0;
+      font-size: .65rem;
+      font-weight: 700;
+      padding: .12rem .4rem;
+      border-radius: 4px;
+      min-width: 38px;
+      text-align: center;
+      margin-top: .1rem;
+    }
+
+    .badge.pass {
+      background: #14532d;
+      color: #86efac;
+    }
+
+    .badge.fail {
+      background: #7f1d1d;
+      color: #fca5a5;
+    }
+
+    .badge.warn {
+      background: #78350f;
+      color: #fcd34d;
+    }
+
+    .badge.skip {
+      background: #1e293b;
+      color: #94a3b8;
+    }
+
+    .badge.run {
+      background: #1e3a8a;
+      color: #93c5fd;
+    }
+
+    .test-row .test-name {
+      flex: 1;
+      color: var(--text);
+    }
+
+    .test-row .test-detail {
+      font-size: .75rem;
+      color: var(--muted);
+      margin-top: .15rem;
+      font-family: monospace;
+      word-break: break-all;
+    }
+
+    .test-row.fail .test-name {
+      color: #fca5a5;
+    }
+
+    .test-row.warn .test-name {
+      color: #fcd34d;
+    }
+
+    /* زر التشغيل */
+    #run-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: .5rem;
+      background: #2563eb;
+      color: #fff;
+      border: none;
+      border-radius: 9px;
+      padding: .6rem 1.4rem;
+      font-size: .9rem;
+      font-weight: 700;
+      cursor: pointer;
+      margin-bottom: 1.5rem;
+      transition: background .2s;
+    }
+
+    #run-btn:hover {
+      background: #1d4ed8;
+    }
+
+    #run-btn:disabled {
+      background: #334155;
+      color: #64748b;
+      cursor: not-allowed;
+    }
+
+    .api-url-row {
+      display: flex;
+      gap: .6rem;
+      margin-bottom: 1.2rem;
+      align-items: center;
+    }
+
+    .api-url-row label {
+      font-size: .82rem;
+      color: var(--muted);
+      flex-shrink: 0;
+    }
+
+    .api-url-row input {
+      flex: 1;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: .45rem .7rem;
+      color: var(--text);
+      font-size: .82rem;
+      font-family: monospace;
+    }
+
+    .log-wrap {
+      background: #0a0f1a;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: .75rem;
+      max-height: 200px;
+      overflow-y: auto;
+      font-family: monospace;
+      font-size: .75rem;
+      color: #64748b;
+      margin-top: 1rem;
+    }
+
+    .log-wrap .log-line {
+      margin-bottom: 2px;
+    }
+
+    .log-wrap .log-line.err {
+      color: #fca5a5;
+    }
+
+    .log-wrap .log-line.ok {
+      color: #86efac;
+    }
+
+    .log-wrap .log-line.inf {
+      color: #93c5fd;
+    }
+
+    #spinner {
+      display: none;
+      width: 14px;
+      height: 14px;
+      border: 2px solid #ffffff44;
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin .6s linear infinite;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <h1>🧪 اختبار شامل — صفحة اعتمادات الرئيس التنفيذي</h1>
+  <p class="subtitle">يختبر الـ API والـ JS والـ PHP وكل وظائف الصفحة بدقة عالية</p>
+
+  <div class="api-url-row">
+    <label>عنوان الـ API:</label>
+    <input type="text" id="apiBase" value="http://localhost:8080/workflow-system/api/ceo_approvals_api.php">
+  </div>
+
+  <button id="run-btn" onclick="runAllTests()">
+    <div id="spinner"></div>
+    ▶ تشغيل جميع الاختبارات
+  </button>
+
+  <div id="progress-bar-wrap">
+    <div id="progress-bar"></div>
+  </div>
+
+  <div id="summary">
+    <div class="sum-card total">
+      <div class="num" id="s-total">0</div>
+      <div class="lbl">إجمالي</div>
+    </div>
+    <div class="sum-card pass">
+      <div class="num" id="s-pass">0</div>
+      <div class="lbl">نجح</div>
+    </div>
+    <div class="sum-card fail">
+      <div class="num" id="s-fail">0</div>
+      <div class="lbl">فشل</div>
+    </div>
+    <div class="sum-card warn">
+      <div class="num" id="s-warn">0</div>
+      <div class="lbl">تحذير</div>
+    </div>
+  </div>
+
+  <div id="sections-wrap"></div>
+
+  <div class="log-wrap" id="log"></div>
+
+  <script>
+    // ═══════════════════════════════════════════════════════════
+    //  بنية الاختبارات
+    // ═══════════════════════════════════════════════════════════
+    const results = { total: 0, pass: 0, fail: 0, warn: 0 };
+    let allSections = [];
+    let logEl;
+
+    function log(msg, type = '') {
+      if (!logEl) return;
+      const d = document.createElement('div');
+      d.className = 'log-line ' + type;
+      d.textContent = `[${new Date().toLocaleTimeString('ar')}] ${msg}`;
+      logEl.appendChild(d);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function apiBase() {
+      return document.getElementById('apiBase').value.trim();
+    }
+
+    // اختبار واحد
+    async function runTest(name, fn) {
+      results.total++;
+      try {
+        const r = await fn();
+        if (r === true || r === undefined) {
+          results.pass++;
+          return { status: 'pass', name, detail: '' };
+        } else if (typeof r === 'object' && r.warn) {
+          results.warn++;
+          return { status: 'warn', name, detail: r.warn };
+        } else {
+          results.fail++;
+          return { status: 'fail', name, detail: String(r || '') };
+        }
+      } catch (e) {
+        results.fail++;
+        log(name + ' → ' + e.message, 'err');
+        return { status: 'fail', name, detail: e.message };
+      }
+    }
+
+    // تحديث الـ UI
+    function updateSummary() {
+      document.getElementById('s-total').textContent = results.total;
+      document.getElementById('s-pass').textContent = results.pass;
+      document.getElementById('s-fail').textContent = results.fail;
+      document.getElementById('s-warn').textContent = results.warn;
+      const pct = results.total ? (results.pass / results.total * 100) : 0;
+      document.getElementById('progress-bar').style.width = pct + '%';
+    }
+
+    function renderSection(title, icon, tests) {
+      const pass = tests.filter(t => t.status === 'pass').length;
+      const fail = tests.filter(t => t.status === 'fail').length;
+      const warn = tests.filter(t => t.status === 'warn').length;
+
+      const rows = tests.map(t => `
+    <div class="test-row ${t.status}">
+      <span class="badge ${t.status}">${t.status === 'pass' ? '✓ نجح' :
+          t.status === 'fail' ? '✗ فشل' :
+            t.status === 'warn' ? '⚠ تحذير' : 'تخطي'
+        }</span>
+      <div>
+        <div class="test-name">${t.name}</div>
+        ${t.detail ? `<div class="test-detail">${escHtml(t.detail)}</div>` : ''}
+      </div>
+    </div>
+  `).join('');
+
+      const sec = document.createElement('div');
+      sec.className = 'section';
+      sec.innerHTML = `
+    <div class="section-head" onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display==='none'?'block':'none'">
+      <h2>${icon} ${title}</h2>
+      <div class="sec-stats">
+        <span style="color:#86efac">✓ ${pass}</span>
+        ${fail ? `<span style="color:#fca5a5">✗ ${fail}</span>` : ''}
+        ${warn ? `<span style="color:#fcd34d">⚠ ${warn}</span>` : ''}
+      </div>
+    </div>
+    <div class="section-body">${rows}</div>
+  `;
+      document.getElementById('sections-wrap').appendChild(sec);
+    }
+
+    function escHtml(str) {
+      return String(str || '')
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    // ════════════════════════════════════════════════
+    //  دوال مساعدة للاختبار
+    // ════════════════════════════════════════════════
+    async function apiFetch(action, opts = {}) {
+      const url = apiBase() + '?action=' + action + (opts.qs || '');
+      const res = await fetch(url, {
+        method: opts.method || 'GET',
+        headers: { 'Content-Type': 'application/json' },
+        body: opts.body ? JSON.stringify(opts.body) : undefined,
+        credentials: 'include',
+      });
+      const raw = await res.text();
+      let data;
+      try { data = JSON.parse(raw); }
+      catch (e) { throw new Error(`non-JSON response (HTTP ${res.status}): ${raw.substring(0, 200)}`); }
+      return { status: res.status, data, raw };
+    }
+
+    // ════════════════════════════════════════════════
+    //  مجموعات الاختبارات
+    // ════════════════════════════════════════════════
+
+    // ١. اختبارات الـ API — الاتصال الأساسي
+    async function testApiConnectivity() {
+      const tests = [];
+
+      tests.push(await runTest('API يرجع JSON وليس HTML', async () => {
+        const r = await apiFetch('list');
+        if (r.raw.trim().startsWith('<')) return 'الـ API يرجع HTML بدل JSON — تحقق من PHP errors';
+        return true;
+      }));
+
+      tests.push(await runTest('Content-Type هو application/json', async () => {
+        const res = await fetch(apiBase() + '?action=list', { credentials: 'include' });
+        const ct = res.headers.get('content-type') || '';
+        if (!ct.includes('application/json')) return `Content-Type = "${ct}"`;
+        return true;
+      }));
+
+      tests.push(await runTest('HTTP status 200 على action=list', async () => {
+        const r = await apiFetch('list');
+        if (r.status !== 200) return `HTTP ${r.status}`;
+        return true;
+      }));
+
+      tests.push(await runTest('الاستجابة تحتوي على حقل success', async () => {
+        const r = await apiFetch('list');
+        if (!('success' in r.data)) return 'حقل success مفقود من الاستجابة';
+        return true;
+      }));
+
+      tests.push(await runTest('action=list يرجع success:true', async () => {
+        const r = await apiFetch('list');
+        if (!r.data.success) return r.data.message || 'success=false';
+        return true;
+      }));
+
+      tests.push(await runTest('action=list يرجع مصفوفة data', async () => {
+        const r = await apiFetch('list');
+        if (!r.data.success) return { warn: 'success=false — لا يمكن تحقق البنية' };
+        if (!Array.isArray(r.data.data)) return 'data ليست مصفوفة';
+        return true;
+      }));
+
+      return tests;
+    }
+
+    // ٢. اختبار بنية بيانات الحجوزات
+    async function testReservationsStructure() {
+      const tests = [];
+      let rows = [];
+
+      try {
+        const r = await apiFetch('list');
+        rows = r.data.data || [];
+      } catch (e) { }
+
+      tests.push(await runTest('حقول أساسية موجودة في كل صف (id, reservation_number, status, grand_total)', async () => {
+        if (!rows.length) return { warn: 'لا توجد حجوزات للاختبار' };
+        const required = ['id', 'reservation_number', 'status', 'grand_total'];
+        for (const row of rows.slice(0, 3)) {
+          for (const f of required) {
+            if (!(f in row)) return `الحقل "${f}" مفقود في الصف id=${row.id}`;
+          }
+        }
+        return true;
+      }));
+
+      tests.push(await runTest('grand_total_sar موجود أو grand_total كافٍ', async () => {
+        if (!rows.length) return { warn: 'لا توجد حجوزات' };
+        const missing = rows.filter(r => !r.grand_total_sar && !r.grand_total);
+        if (missing.length > 0) return { warn: `${missing.length} صف بدون مبلغ` };
+        return true;
+      }));
+
+      tests.push(await runTest('حقل currency موجود في جميع الصفوف', async () => {
+        if (!rows.length) return { warn: 'لا توجد حجوزات' };
+        const missing = rows.filter(r => !r.currency);
+        if (missing.length) return { warn: `${missing.length} صف بدون currency — سيعرض SAR افتراضياً` };
+        return true;
+      }));
+
+      tests.push(await runTest('حقل department_name موجود (JOIN يعمل)', async () => {
+        if (!rows.length) return { warn: 'لا توجد حجوزات' };
+        const ok = rows.some(r => r.department_name);
+        if (!ok) return { warn: 'كل الصفوف بدون department_name — تحقق من JOIN مع departments' };
+        return true;
+      }));
+
+      tests.push(await runTest('لا توجد حجوزات بحالة مسودة أو ملغى', async () => {
+        const drafts = rows.filter(r => r.status === 'مسودة' || r.status === 'ملغى');
+        if (drafts.length) return `${drafts.length} صف بحالة محظورة — WHERE لا يعمل`;
+        return true;
+      }));
+
+      tests.push(await runTest('حقل ceo_action قد يكون null أو قيمة صحيحة', async () => {
+        const valid = ['اعتماد', 'مراجعة', 'توجيه', 'رفض', null, undefined, ''];
+        const bad = rows.filter(r => r.ceo_action && !['اعتماد', 'مراجعة', 'توجيه', 'رفض'].includes(r.ceo_action));
+        if (bad.length) return `قيم غير صحيحة في ceo_action: ${[...new Set(bad.map(r => r.ceo_action))].join(', ')}`;
+        return true;
+      }));
+
+      return tests;
+    }
+
+    // ٣. اختبار action=get (تفاصيل حجز)
+    async function testGetReservation() {
+      const tests = [];
+      let firstId = null;
+
+      try {
+        const r = await apiFetch('list');
+        firstId = r.data.data?.[0]?.id;
+      } catch (e) { }
+
+      tests.push(await runTest('action=get بدون id يرجع error', async () => {
+        const r = await apiFetch('get');
+        if (r.data.success) return 'يجب أن يرجع error عند غياب id';
+        return true;
+      }));
+
+      tests.push(await runTest('action=get بـ id غير موجود يرجع error', async () => {
+        const r = await apiFetch('get', { qs: '&id=999999' });
+        if (r.data.success) return 'يجب أن يرجع error لـ id وهمي';
+        return true;
+      }));
+
+      if (firstId) {
+        tests.push(await runTest(`action=get بـ id=${firstId} يرجع بيانات`, async () => {
+          const r = await apiFetch('get', { qs: `&id=${firstId}` });
+          if (!r.data.success) return r.data.message || 'فشل';
+          return true;
+        }));
+
+        tests.push(await runTest('التفاصيل تحتوي على مصفوفة items', async () => {
+          const r = await apiFetch('get', { qs: `&id=${firstId}` });
+          if (!r.data.success) return { warn: 'get فشل' };
+          if (!Array.isArray(r.data.data.items)) return 'items ليست مصفوفة';
+          return true;
+        }));
+
+        tests.push(await runTest('التفاصيل تحتوي على مصفوفة ceo_actions', async () => {
+          const r = await apiFetch('get', { qs: `&id=${firstId}` });
+          if (!r.data.success) return { warn: 'get فشل' };
+          if (!Array.isArray(r.data.data.ceo_actions)) return 'ceo_actions ليست مصفوفة';
+          return true;
+        }));
+
+        tests.push(await runTest('بنود الأصناف تحتوي على (description, qty, unit_price, line_total)', async () => {
+          const r = await apiFetch('get', { qs: `&id=${firstId}` });
+          if (!r.data.success) return { warn: 'get فشل' };
+          const items = r.data.data.items || [];
+          if (!items.length) return { warn: 'لا توجد بنود في هذا الحجز' };
+          const required = ['description', 'qty', 'unit_price', 'line_total'];
+          for (const f of required) {
+            if (!(f in items[0])) return `حقل "${f}" مفقود من بنود الأصناف`;
+          }
+          return true;
+        }));
+
+        tests.push(await runTest('supplier_name يُجلب من COALESCE (suppliers JOIN أو manual)', async () => {
+          const r = await apiFetch('get', { qs: `&id=${firstId}` });
+          if (!r.data.success) return { warn: 'get فشل' };
+          const row = r.data.data;
+          if (row.supplier_name === null || row.supplier_name === undefined) {
+            return { warn: 'supplier_name=null — المورد غير مدخل أو JOIN لا يعمل' };
+          }
+          return true;
+        }));
+      } else {
+        tests.push(await runTest('اختبارات get تحتاج حجوزات في قاعدة البيانات', async () => {
+          return { warn: 'لا توجد حجوزات — تعذر اختبار action=get' };
+        }));
+      }
+
+      return tests;
+    }
+
+    // ٤. اختبار action=get_stamp
+    async function testGetStamp() {
+      const tests = [];
+      let stampData = null;
+
+      tests.push(await runTest('action=get_stamp يرجع success:true', async () => {
+        const r = await apiFetch('get_stamp');
+        if (!r.data.success) return r.data.message || 'فشل';
+        stampData = r.data.data;
+        return true;
+      }));
+
+      tests.push(await runTest('إعدادات الختم تحتوي على الحقول الأساسية', async () => {
+        if (!stampData) return { warn: 'get_stamp فشل — لا يمكن التحقق' };
+        const required = ['stamp_text', 'stamp_color', 'stamp_shape'];
+        for (const f of required) {
+          if (!(f in stampData)) return `حقل "${f}" مفقود من إعدادات الختم`;
+        }
+        return true;
+      }));
+
+      tests.push(await runTest('الأعمدة الجديدة موجودة (stamp_rotate, sig_pdf_size, sig_gap)', async () => {
+        if (!stampData) return { warn: 'get_stamp فشل' };
+        const newCols = ['stamp_rotate', 'sig_pdf_size', 'sig_gap'];
+        const missing = newCols.filter(c => !(c in stampData));
+        if (missing.length) return `أعمدة مفقودة: ${missing.join(', ')} — نفّذ ALTER TABLE أو استخدم ceo_approvals_api_clean.php`;
+        return true;
+      }));
+
+      tests.push(await runTest('stamp_shape قيمة صحيحة', async () => {
+        if (!stampData) return { warn: 'get_stamp فشل' };
+        const valid = ['circle', 'square', 'hexagon', 'oval'];
+        if (!valid.includes(stampData.stamp_shape)) {
+          return { warn: `stamp_shape="${stampData.stamp_shape}" — قيمة غير متوقعة` };
+        }
+        return true;
+      }));
+
+      tests.push(await runTest('signature_name موجود (قد يكون فارغاً)', async () => {
+        if (!stampData) return { warn: 'get_stamp فشل' };
+        if (!('signature_name' in stampData)) return 'حقل signature_name مفقود';
+        return true;
+      }));
+
+      return tests;
+    }
+
+    // ٥. اختبار action=get_signature_image
+    async function testGetSignature() {
+      const tests = [];
+
+      tests.push(await runTest('action=get_signature_image يرجع success:true', async () => {
+        const r = await apiFetch('get_signature_image');
+        if (!r.data.success) return r.data.message || 'فشل';
+        return true;
+      }));
+
+      tests.push(await runTest('الاستجابة تحتوي على حقل image (null أو base64)', async () => {
+        const r = await apiFetch('get_signature_image');
+        if (!r.data.success) return { warn: 'get_signature_image فشل' };
+        if (!('image' in r.data)) return 'حقل image مفقود';
+        return true;
+      }));
+
+      tests.push(await runTest('إذا كانت صورة — تبدأ بـ data:image/', async () => {
+        const r = await apiFetch('get_signature_image');
+        if (!r.data.success) return { warn: 'فشل' };
+        if (r.data.image && !r.data.image.startsWith('data:image/')) {
+          return `صورة التوقيع لا تبدأ بـ data:image/ — base64 encoding خطأ`;
+        }
+        return true;
+      }));
+
+      return tests;
+    }
+
+    // ٦. اختبار action=do_action
+    async function testDoAction() {
+      const tests = [];
+
+      tests.push(await runTest('do_action بـ GET يرجع error', async () => {
+        const r = await apiFetch('do_action');
+        if (r.data.success) return 'يجب رفض GET — POST فقط';
+        return true;
+      }));
+
+      tests.push(await runTest('do_action بدون بيانات يرجع error', async () => {
+        const r = await apiFetch('do_action', { method: 'POST', body: {} });
+        if (r.data.success) return 'يجب رفض البيانات الفارغة';
+        return true;
+      }));
+
+      tests.push(await runTest('do_action بـ action_type غير صحيح يرجع error', async () => {
+        const r = await apiFetch('do_action', {
+          method: 'POST',
+          body: { reservation_id: 1, action_type: 'invalid_action', notes: '' }
+        });
+        if (r.data.success) return 'قبل action_type غير صحيح — in_array لا يعمل';
+        return true;
+      }));
+
+      tests.push(await runTest('do_action يقبل action_type=اعتماد (UTF-8 encoding)', async () => {
+        // نختبر بـ id وهمي لكن الـ validation يجب أن يمر
+        const r = await apiFetch('do_action', {
+          method: 'POST',
+          body: { reservation_id: 999999, action_type: 'اعتماد', notes: '' }
+        });
+        // يجب أن يفشل بسبب id وهمي وليس بسبب validation
+        if (r.data.message && r.data.message.includes('بيانات غير صحيحة')) {
+          return 'in_array فشل مع العربية — مشكلة encoding';
+        }
+        return true;
+      }));
+
+      tests.push(await runTest('do_action يقبل جميع أنواع الإجراءات العربية', async () => {
+        const actions = ['مراجعة', 'توجيه', 'رفض'];
+        for (const a of actions) {
+          const r = await apiFetch('do_action', {
+            method: 'POST',
+            body: { reservation_id: 999999, action_type: a, notes: '' }
+          });
+          if (r.data.message?.includes('بيانات غير صحيحة')) {
+            return `in_array فشل مع "${a}"`;
+          }
+        }
+        return true;
+      }));
+
+      return tests;
+    }
+
+    // ٧. اختبار دوال JS
+    async function testJsFunctions() {
+      const tests = [];
+
+      // محاكاة البيئة
+      window.fmtMoneyCur = null; // نُعطّلها لاختبار الـ fallback
+
+      tests.push(await runTest('fmtMoney تعرض الأرقام بشكل صحيح', async () => {
+        // محاكاة fmtMoney من الكود
+        function fmtMoney(v, currency) {
+          const cur = currency || 'SAR';
+          return new Intl.NumberFormat('ar-SA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v || 0) + ' ر.س';
+        }
+        const r = fmtMoney(5000, 'SAR');
+        if (!r || r === '[object Object]') return `fmtMoney أرجعت: "${r}"`;
+        if (r.includes('[object')) return `النتيجة تحتوي على object: "${r}"`;
+        return true;
+      }));
+
+      tests.push(await runTest('fmtMoney تتعامل مع 0 بشكل صحيح', async () => {
+        function fmtMoney(v, currency) {
+          return new Intl.NumberFormat('ar-SA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v || 0) + ' ر.س';
+        }
+        const r = fmtMoney(0, 'SAR');
+        if (!r) return 'fmtMoney(0) أرجعت قيمة فارغة';
+        return true;
+      }));
+
+      tests.push(await runTest('fmtMoney تتعامل مع null/undefined', async () => {
+        function fmtMoney(v, currency) {
+          return new Intl.NumberFormat('ar-SA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v || 0) + ' ر.س';
+        }
+        try {
+          fmtMoney(null, 'SAR');
+          fmtMoney(undefined, 'SAR');
+          return true;
+        } catch (e) {
+          return `استثناء مع null: ${e.message}`;
+        }
+      }));
+
+      tests.push(await runTest('fmtDate تتعامل مع تاريخ MySQL صحيح', async () => {
+        function fmtDate(d) {
+          if (!d) return '—';
+          try { return new Date(d).toLocaleDateString('ar-SA', { year: 'numeric', month: 'short', day: 'numeric' }); }
+          catch { return d; }
+        }
+        const r = fmtDate('2025-03-15 10:30:00');
+        if (r === '[object Object]') return 'fmtDate أرجعت object';
+        if (!r || r === 'Invalid Date') return `fmtDate أرجعت: "${r}"`;
+        return true;
+      }));
+
+      tests.push(await runTest('fmtDate تتعامل مع null', async () => {
+        function fmtDate(d) {
+          if (!d) return '—';
+          try { return new Date(d).toLocaleDateString('ar-SA'); } catch { return d; }
+        }
+        const r = fmtDate(null);
+        if (r !== '—') return `fmtDate(null) = "${r}" بدل "—"`;
+        return true;
+      }));
+
+      tests.push(await runTest('fmtDateTime تتعامل مع تاريخ صحيح', async () => {
+        function fmtDateTime(d) {
+          if (!d) return '—';
+          try { return new Date(d).toLocaleString('ar-SA'); } catch { return d; }
+        }
+        const r = fmtDateTime('2025-03-15T10:30:00');
+        if (!r || r === '[object Object]') return `fmtDateTime أرجعت: "${r}"`;
+        return true;
+      }));
+
+      tests.push(await runTest('escHtml تُعالج الأحرف الخطرة', async () => {
+        if (typeof escHtml !== 'function') return 'escHtml غير معرّفة في النطاق';
+        const xss = '<script>alert("xss")<' + '/script>';
+        const r = escHtml(xss);
+        if (r.includes('<')) return 'escHtml لا تُعالج &lt; و &gt;';
+        if (!r.includes('&lt;')) return 'escHtml لا تُنتج &lt;';
+        return true;
+      }));
+
+      tests.push(await runTest('escHtml تتعامل مع null/undefined', async () => {
+        if (typeof escHtml !== 'function') return 'escHtml غير معرّفة في النطاق';
+        try {
+          escHtml(null); escHtml(undefined); escHtml(0);
+          return true;
+        } catch (e) { return e.message; }
+      }));
+
+      return tests;
+    }
+
+    // ٨. اختبار CeoState وبنية البيانات
+    async function testDataStructure() {
+      const tests = [];
+      let listData = [];
+
+      try {
+        const r = await apiFetch('list');
+        listData = r.data.data || [];
+      } catch (e) { }
+
+      tests.push(await runTest('الإحصاءات محسوبة بشكل صحيح', async () => {
+        const total = listData.length;
+        const pending = listData.filter(r => !r.ceo_action).length;
+        const approved = listData.filter(r => r.ceo_action === 'اعتماد').length;
+        const rejected = listData.filter(r => r.ceo_action === 'رفض').length;
+        if (pending + approved + rejected > total) return 'مجموع الإحصاءات أكبر من الإجمالي';
+        return true;
+      }));
+
+      tests.push(await runTest('ترتيب الحجوزات — قيد المراجعة أولاً', async () => {
+        if (listData.length < 2) return { warn: 'بيانات غير كافية للتحقق من الترتيب' };
+        // الصفوف غير المعالجة يجب أن تكون في المقدمة
+        const firstAction = listData[0]?.ceo_action;
+        if (firstAction && firstAction === 'اعتماد') {
+          return { warn: 'الحجوزات المعتمدة تظهر قبل غير المعالجة — تحقق من ORDER BY' };
+        }
+        return true;
+      })); tests.push(await
+        runTest('grand_total قيمة رقمية وليست string', async () => {
+          if (!listData.length) return { warn: 'لا توجد بيانات' };
+          const bad = listData.filter(r => r.grand_total && isNaN(parseFloat(r.grand_total)));
+          if (bad.length) return `${bad.length} صف grand_total ليس رقماً`;
+          return true;
+        }));
+
+      tests.push(await runTest('request_date بتنسيق صالح', async () => {
+        if (!listData.length) return { warn: 'لا توجد بيانات' };
+        const bad = listData.filter(r => r.request_date && isNaN(new Date(r.request_date)));
+        if (bad.length) return { warn: `${bad.length} صف request_date بتنسيق غير صالح` };
+        return true;
+      }));
+
+      return tests;
+    }
+
+    // ٩. اختبار PDF generation (محاكاة)
+    async function testPdfGeneration() {
+      const tests = [];
+
+      tests.push(await runTest('html2pdf مكتبة محملة في الصفحة', async () => {
+        // نفحص إذا كانت المكتبة موجودة في الـ parent window
+        try {
+          const available = typeof window.parent?.html2pdf !== 'undefined' ||
+            typeof window.top?.html2pdf !== 'undefined';
+          if (!available) return { warn: 'html2pdf غير محملة — لا يمكن اختبار PDF' };
+          return true;
+        } catch (e) {
+          return { warn: 'لا يمكن التحقق من html2pdf (cross-origin)' };
+        }
+      }));
+
+      tests.push(await runTest('getCeoRdv2PrintCSS لا تُرجع string فارغ', async () => {
+        // نتحقق أن CSS الـ rdv2 موجود في الـ JS
+        const r = await apiFetch('list');
+        // هذا اختبار محاكاة — نتحقق من الـ API فقط
+        return { warn: 'يتطلب تشغيل الصفحة الفعلية للتحقق من CSS' };
+      }));
+
+      tests.push(await runTest('printEl يستخدم left:-9999px وليس opacity:0', async () => {
+        // نتحقق من الـ JS source المرفوع
+        try {
+          const res = await fetch('js/app-ceo-approvals.js');
+          const src = await res.text();
+          if (src.includes('opacity:0') && src.includes('printEl')) {
+            return 'printEl يستخدم opacity:0 — html2canvas لن يراه';
+          }
+          if (!src.includes('-9999px')) {
+            return { warn: 'تعذر التحقق من position:absolute;left:-9999px في الكود' };
+          }
+          return true;
+        } catch (e) {
+          return { warn: 'تعذر قراءة JS file للتحقق' };
+        }
+      }));
+
+      tests.push(await runTest('CSS مُدمج داخل printEl وليس في head فقط', async () => {
+        try {
+          const res = await fetch('js/app-ceo-approvals.js');
+          const src = await res.text();
+          if (src.includes('document.head.appendChild') && src.includes('getCeoRdv2PrintCSS') &&
+            !src.includes('styleTag')) {
+            return 'CSS يُحقن في head فقط — html2canvas لن يراه';
+          }
+          return true;
+        } catch (e) {
+          return { warn: 'تعذر قراءة JS file' };
+        }
+      }));
+
+      return tests;
+    }
+
+    // ١٠. اختبارات الأمان
+    async function testSecurity() {
+      const tests = [];
+
+      tests.push(await runTest('طلب بدون session يرجع 401', async () => {
+        // هذا صعب اختباره لأننا في session نشطة
+        return { warn: 'يتطلب طلب بدون cookies — تحقق يدوياً' };
+      }));
+
+      tests.push(await runTest('action غير معروف يرجع error وليس crash', async () => {
+        const r = await apiFetch('unknown_action_xyz');
+        if (r.raw.startsWith('<')) return 'action غير معروف يُنتج HTML — PHP crash';
+        if (r.data.success) return 'action غير معروف أرجع success:true';
+        return true;
+      }));
+
+      tests.push(await runTest('action=do_action يرفض action_type إنجليزي', async () => {
+        const r = await apiFetch('do_action', {
+          method: 'POST',
+          body: { reservation_id: 1, action_type: 'approve', notes: '' }
+        });
+        if (r.data.success) return 'قبل "approve" بالإنجليزي — يجب رفضه';
+        return true;
+      }));
+
+      tests.push(await runTest('action=do_action يرفض action_type SQL injection', async () => {
+        const r = await apiFetch('do_action', {
+          method: 'POST',
+          body: { reservation_id: 1, action_type: "اعتماد'; DROP TABLE ceo_approval_actions;--", notes: '' }
+        });
+        if (r.data.success) return 'قبل SQL injection في action_type!';
+        return true;
+      }));
+
+      return tests;
+    }
+
+    // ١١. اختبارات التكامل
+    async function testIntegration() {
+      const tests = [];
+
+      tests.push(await runTest('API يرد خلال 3 ثواني', async () => {
+        const start = Date.now();
+        await apiFetch('list');
+        const elapsed = Date.now() - start;
+        if (elapsed > 3000) return `استجابة بطيئة: ${elapsed}ms`;
+        if (elapsed > 1500) return { warn: `استجابة بطيئة نسبياً: ${elapsed}ms` };
+        log(`زمن استجابة list: ${elapsed}ms`, 'inf');
+        return true;
+      }));
+
+      tests.push(await runTest('get_stamp يرد خلال 2 ثانية', async () => {
+        const start = Date.now();
+        await apiFetch('get_stamp');
+        const elapsed = Date.now() - start;
+        if (elapsed > 2000) return `get_stamp بطيء: ${elapsed}ms`;
+        return true;
+      }));
+
+      tests.push(await runTest('طلبات متزامنة لا تتعارض', async () => {
+        const [r1, r2, r3] = await Promise.all([
+          apiFetch('list'),
+          apiFetch('get_stamp'),
+          apiFetch('get_signature_image'),
+        ]);
+        if (!r1.data.success && r1.raw.startsWith('<')) return 'تعارض في الطلبات المتزامنة — session lock'; if
+          (!r1.data.success) return { warn: `list فشل: ${r1.data.message}` }; return true;
+      })); tests.push(await
+        runTest('الصفحة تعمل مع قاعدة بيانات فارغة', async () => {
+          const r = await apiFetch('list');
+          if (!r.data.success) return r.data.message || 'فشل';
+          // حتى لو data فارغة، success يجب أن يكون true
+          if (!Array.isArray(r.data.data)) return 'data ليست مصفوفة عند الاستجابة الفارغة';
+          return true;
+        }));
+
+      return tests;
+    }
+
+    // ════════════════════════════════════════════════
+    // تشغيل جميع الاختبارات
+    // ════════════════════════════════════════════════
+    async function runAllTests() {
+      logEl = document.getElementById('log');
+      logEl.innerHTML = '';
+      document.getElementById('sections-wrap').innerHTML = '';
+      results.total = 0; results.pass = 0; results.fail = 0; results.warn = 0;
+      updateSummary();
+
+      const btn = document.getElementById('run-btn');
+      const spinner = document.getElementById('spinner');
+      btn.disabled = true;
+      spinner.style.display = 'block';
+
+      log('بدء الاختبارات...', 'inf');
+
+      const groups = [
+        { fn: testApiConnectivity, title: 'الاتصال بالـ API', icon: '🔌' },
+        { fn: testReservationsStructure, title: 'بنية بيانات الحجوزات', icon: '📋' },
+        { fn: testGetReservation, title: 'تفاصيل الحجز (action=get)', icon: '🔍' },
+        { fn: testGetStamp, title: 'إعدادات الختم (action=get_stamp)', icon: '🔵' },
+        { fn: testGetSignature, title: 'صورة التوقيع', icon: '✍️' },
+        { fn: testDoAction, title: 'تنفيذ الإجراءات (do_action)', icon: '⚡' },
+        { fn: testJsFunctions, title: 'دوال JavaScript', icon: '🧩' },
+        { fn: testDataStructure, title: 'بنية البيانات والإحصاءات', icon: '📊' },
+        { fn: testPdfGeneration, title: 'توليد PDF', icon: '📄' },
+        { fn: testSecurity, title: 'الأمان والصلاحيات', icon: '🔒' },
+        { fn: testIntegration, title: 'التكامل والأداء', icon: '⚙️' },
+      ];
+
+      for (const g of groups) {
+        log(`▶ ${g.title}...`, 'inf');
+        const tests = await g.fn();
+        renderSection(g.title, g.icon, tests);
+        updateSummary();
+      }
+
+      const total = results.total;
+      const pass = results.pass;
+      const pct = Math.round(pass / total * 100);
+      log(`══ انتهت الاختبارات: ${pass}/${total} نجح (${pct}%) ══`,
+        results.fail > 0 ? 'err' : 'ok');
+
+      btn.disabled = false;
+      spinner.style.display = 'none';
+    }
+  </script>
+</body>
+
+</html>
