@@ -15,6 +15,22 @@ if (!isset($_SESSION['user_id'])) {
 
 require_once __DIR__ . '/includes/functions.php';
 
+// ── كشف Bundle JS المضغوط ──────────────────────────────────
+// إذا وُجد js/dist/manifest.json وكان الملف المشار إليه موجوداً
+// يُحمَّل ملف bundle واحد بدلاً من 21 ملفاً منفردة
+$jsBundleFile = null;
+$_manifestPath = __DIR__ . '/js/dist/manifest.json';
+if (file_exists($_manifestPath)) {
+    $_manifest = json_decode(file_get_contents($_manifestPath), true);
+    if (!empty($_manifest['bundle'])) {
+        $_bundleFull = __DIR__ . '/js/dist/' . $_manifest['bundle'];
+        if (file_exists($_bundleFull)) {
+            $jsBundleFile = 'js/dist/' . $_manifest['bundle'];
+        }
+    }
+}
+// ──────────────────────────────────────────────────────────
+
 // الحصول على الإحصائيات للشارة
 $stats = getStats();
 $userName = $_SESSION['user_name'] ?? 'المستخدم';
@@ -403,6 +419,12 @@ $userRole = $_SESSION['user_role'] ?? '';
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <?php if ($jsBundleFile): ?>
+    <!-- ✅ Bundle مضغوط: 21 ملف → ملف واحد (أُنشئ بـ: node build.js) -->
+    <script src="<?= htmlspecialchars($jsBundleFile) ?>"></script>
+    <?php else: ?>
+    <!-- ⚡ Fallback: الملفات الفردية — تُستخدم عند غياب الـ bundle أو أثناء التطوير -->
+    <!-- لإنشاء الـ bundle: npm install -g terser && node build.js -->
     <script src="js/pdf-engine.js"></script>
     <script src="js/app-common.js"></script>
     <script src="js/app-notifications.js"></script>
@@ -422,6 +444,9 @@ $userRole = $_SESSION['user_role'] ?? '';
     <script src="js/app-settings-employees.js"></script>
     <script src="js/app-settings-system.js"></script>
     <script src="js/app-settings-types.js"></script>
+    <script src="js/sidebar-init.js"></script>
+    <script src="js/app-profile.js"></script>
+    <?php endif; ?>
     <script>
     // معلومات المستخدم الحالي
     <?php
@@ -465,8 +490,6 @@ if (isset($_SESSION['user_id'])) {
         };
     })();
     </script>
-    <script src="js/sidebar-init.js"></script>
-    <script src="js/app-profile.js"></script>
 </body>
 
 </html>

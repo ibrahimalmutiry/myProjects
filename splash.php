@@ -1,17 +1,11 @@
 <?php
-/**
- * صفحة البداية (Splash Screen)
- */
 session_start();
-
 // إذا لم يكن مسجل دخول، أرسله لتسجيل الدخول
 if (!isset($_SESSION['user_id'])) {
     header('Location: login.php');
     exit;
 }
-
 require_once __DIR__ . '/includes/functions.php';
-
 $userName = $_SESSION['user_name'] ?? 'المستخدم';
 $userRole = $_SESSION['user_role'] ?? '';
 ?>
@@ -350,7 +344,6 @@ $userRole = $_SESSION['user_role'] ?? '';
 
 <body>
     <div class="splash-inner">
-
         <div class="splash-logo-ring">
             <div class="ring-inner"></div>
             <div class="ring-outer"></div>
@@ -359,10 +352,8 @@ $userRole = $_SESSION['user_role'] ?? '';
                 onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" alt="شعار النظام">
             <div class="logo-fallback">⚡</div>
         </div>
-
         <div class="splash-title">نظام إدارة المعاملات المالية</div>
         <div class="splash-subtitle">مصنع الملابس والتجهيزات العسكرية</div>
-
         <div class="splash-welcome">
             <span class="welcome-label">مرحباً بك</span>
             <span class="welcome-name"><?= htmlspecialchars($userName) ?></span>
@@ -370,7 +361,6 @@ $userRole = $_SESSION['user_role'] ?? '';
             <span class="welcome-role"><?= htmlspecialchars(getRoleName($userRole)) ?></span>
             <?php endif; ?>
         </div>
-
         <div class="loader-wrap">
             <div class="progress-track">
                 <div class="progress-fill"></div>
@@ -382,7 +372,6 @@ $userRole = $_SESSION['user_role'] ?? '';
                 <div class="dot"></div>
             </div>
         </div>
-
     </div>
 
     <script>
@@ -416,7 +405,7 @@ $userRole = $_SESSION['user_role'] ?? '';
         // الانتقال للصفحة الرئيسية بعد 5 ثواني
         setTimeout(() => {
             window.location.href = 'index.php';
-        }, 7500);
+        }, 6000);
     })();
     </script>
 </body>

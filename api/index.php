@@ -90,17 +90,36 @@ try {
             break;
 
         // ─── جميع المعاملات ────────────────────────────────────
+        // case 'transactions':
+        //     $filters = [
+        //         'search'    => $_GET['search']    ?? '',
+        //         'status'    => $_GET['status']    ?? '',
+        //         'date_from' => $_GET['date_from'] ?? '',
+        //         'date_to'   => $_GET['date_to']   ?? ''
+        //     ];
+        //     $transactions = getAllTransactions($filters);
+        //     jsonResponse(['success' => true, 'data' => $transactions]);
+        //     break;
         case 'transactions':
             $filters = [
-                'search'    => $_GET['search']    ?? '',
-                'status'    => $_GET['status']    ?? '',
-                'date_from' => $_GET['date_from'] ?? '',
-                'date_to'   => $_GET['date_to']   ?? ''
+                'search'   => $_GET['search']   ?? '',
+                'status'   => $_GET['status']   ?? '',
+                'date_from'=> $_GET['date_from']?? '',
+                'date_to'  => $_GET['date_to']  ?? '',
             ];
-            $transactions = getAllTransactions($filters);
-            jsonResponse(['success' => true, 'data' => $transactions]);
-            break;
 
+            // إذا طُلب pagination
+            if (isset($_GET['page'])) {
+                $filters['page']     = (int)$_GET['page'];
+                $filters['per_page'] = (int)($_GET['per_page'] ?? 25);
+                $result = getAllTransactions($filters);
+                jsonResponse(['success' => true, 'data' => $result['data'], 'pagination' => $result['pagination']]);
+            } else {
+                // سلوك قديم محفوظ
+                $transactions = getAllTransactions($filters);
+                jsonResponse(['success' => true, 'data' => $transactions]);
+            }
+            break;
         // ─── معاملة واحدة ──────────────────────────────────────
         case 'transaction':
             $id = (int)($_GET['id'] ?? 0);

@@ -365,6 +365,7 @@ async function deleteEmployee(id, name) {
 // ═══════════════════════════════════════════════════════════════
 
 var ACTIONS_CONFIG = [
+    // البنك
     { key: 'bank.record_balance', label: 'تسجيل رصيد اليوم', icon: '📊', group: 'البنك' },
     { key: 'bank.edit_balance', label: 'تعديل الرصيد', icon: '✏️', group: 'البنك' },
     { key: 'bank.edit_account', label: 'تعديل بيانات الحساب', icon: '⚙️', group: 'البنك' },
@@ -372,10 +373,20 @@ var ACTIONS_CONFIG = [
     { key: 'bank.add_deposit', label: 'إضافة وديعة', icon: '💵', group: 'البنك' },
     { key: 'bank.confirm_deposit', label: 'تأكيد الوديعة', icon: '✅', group: 'البنك' },
     { key: 'bank.delete_deposit', label: 'حذف وديعة', icon: '🗑', group: 'البنك' },
+    { key: 'bank.add_investment', label: 'إضافة وديعة استثمارية', icon: '📈', group: 'البنك' },
+    { key: 'bank.edit_investment', label: 'تعديل وديعة استثمارية', icon: '✏️', group: 'البنك' },
+    { key: 'bank.delete_investment', label: 'حذف وديعة استثمارية', icon: '🗑', group: 'البنك' },
+    // المدفوعات اليومية
+    { key: 'payments.add', label: 'إضافة دفعة يومية', icon: '➕', group: 'المدفوعات اليومية' },
+    { key: 'payments.edit', label: 'تعديل دفعة', icon: '✏️', group: 'المدفوعات اليومية' },
+    { key: 'payments.delete', label: 'حذف دفعة', icon: '🗑', group: 'المدفوعات اليومية' },
+    { key: 'payments.approve', label: 'اعتماد دفعة', icon: '✅', group: 'المدفوعات اليومية' },
+    // المعاملات المالية
     { key: 'transaction.add', label: 'إضافة معاملة', icon: '➕', group: 'المعاملات' },
     { key: 'transaction.edit', label: 'تعديل معاملة', icon: '✏️', group: 'المعاملات' },
     { key: 'transaction.delete', label: 'حذف معاملة', icon: '🗑', group: 'المعاملات' },
     { key: 'transaction.export', label: 'تصدير البيانات', icon: '📤', group: 'المعاملات' },
+    // الخطابات
     { key: 'correspondence.add', label: 'إضافة خطاب', icon: '✉️', group: 'الخطابات' },
     { key: 'correspondence.edit', label: 'تعديل خطاب', icon: '✏️', group: 'الخطابات' },
     { key: 'correspondence.delete', label: 'حذف خطاب', icon: '🗑', group: 'الخطابات' },
@@ -386,30 +397,50 @@ var ACTIONS_CONFIG = [
     { key: 'correspondence.stage_return', label: 'إعادة المرحلة', icon: '↩️', group: 'الخطابات' },
     { key: 'correspondence.stage_edit_completed', label: 'تعديل مرحلة مكتملة', icon: '🔓', group: 'الخطابات' },
     { key: 'correspondence.stage_override', label: 'التصرف في مراحل الآخرين', icon: '🛡️', group: 'الخطابات' },
-    { key: 'employee.add', label: 'إضافة موظف', icon: '👤', group: 'الموظفين' },
-    { key: 'employee.edit', label: 'تعديل موظف', icon: '✏️', group: 'الموظفين' },
-    { key: 'employee.delete', label: 'حذف موظف', icon: '🗑', group: 'الموظفين' },
-    { key: 'employee.permissions', label: 'إدارة الصلاحيات', icon: '🔒', group: 'الموظفين' },
+    // الموازنة
     { key: 'budget.review', label: 'مراجعة واعتماد الموازنة', icon: '⚖️', group: 'الموازنة' },
     { key: 'budget.link_transaction', label: 'ربط بمعاملة مالية', icon: '🔗', group: 'الموازنة' },
     { key: 'budget.edit_code', label: 'تعديل رمز الموازنة', icon: '🏷️', group: 'الموازنة' },
+    { key: 'budget.edit_plans', label: 'تعديل الموازنة التقديرية', icon: '📊', group: 'الموازنة' },
+    { key: 'budget.delete_plan', label: 'حذف خطة موازنة', icon: '🗑', group: 'الموازنة' },
+    // الحجوزات
     { key: 'reservation.add', label: 'إضافة حجز جديد', icon: '📋', group: 'الحجوزات' },
+    { key: 'reservation.edit', label: 'تعديل حجز', icon: '✏️', group: 'الحجوزات' },
     { key: 'reservation.view_own', label: 'عرض حجوزات القسم', icon: '👁', group: 'الحجوزات' },
     { key: 'reservation.view_all', label: 'عرض كل الحجوزات', icon: '📑', group: 'الحجوزات' },
     { key: 'reservation.review', label: 'مراجعة الحجوزات', icon: '🔍', group: 'الحجوزات' },
     { key: 'reservation.approve', label: 'اعتماد / رفض حجز', icon: '✅', group: 'الحجوزات' },
     { key: 'reservation.delete', label: 'حذف حجز', icon: '🗑', group: 'الحجوزات' },
+    // اعتمادات CEO
+    { key: 'ceo.view', label: 'عرض طلبات الاعتماد', icon: '👁', group: 'اعتمادات CEO' },
+    { key: 'ceo.approve', label: 'اعتماد / رفض الطلب', icon: '✅', group: 'اعتمادات CEO' },
+    { key: 'ceo.delegate', label: 'تفويض الاعتماد', icon: '🔀', group: 'اعتمادات CEO' },
+    // الأرشيف
+    { key: 'archive.upload', label: 'رفع مستند', icon: '📤', group: 'الأرشيف' },
+    { key: 'archive.delete', label: 'حذف مستند', icon: '🗑', group: 'الأرشيف' },
+    { key: 'archive.view_all', label: 'عرض كل المستندات', icon: '📋', group: 'الأرشيف' },
+    // الموظفين
+    { key: 'employee.add', label: 'إضافة موظف', icon: '👤', group: 'الموظفين' },
+    { key: 'employee.edit', label: 'تعديل موظف', icon: '✏️', group: 'الموظفين' },
+    { key: 'employee.delete', label: 'حذف موظف', icon: '🗑', group: 'الموظفين' },
+    { key: 'employee.permissions', label: 'إدارة الصلاحيات', icon: '🔒', group: 'الموظفين' },
 ];
 
 var PAGES_CONFIG = [
     { key: 'dashboard', label: 'لوحة التحكم', icon: '📊', group: 'رئيسية' },
     { key: 'notifications', label: 'التنبيهات', icon: '🔔', group: 'رئيسية' },
     { key: 'transactions', label: 'المعاملات المالية', icon: '💰', group: 'معاملات' },
-    { key: 'reservations', label: 'الحجوزات', icon: '📅', group: 'رئيسية' },
-    { key: 'bank-deposits', label: 'الودائع البنكية', icon: '🏦', group: 'معاملات' },
     { key: 'correspondence', label: 'الخطابات', icon: '📨', group: 'معاملات' },
-    { key: 'sla', label: 'SLA / OLA', icon: '⏱', group: 'متابعة' },
-    { key: 'performance', label: 'متابعة الأداء', icon: '📈', group: 'متابعة' },
+    { key: 'reservations', label: 'حجوزات الموازنة', icon: '📅', group: 'التخطيط المالي' },
+    { key: 'budget-plans', label: 'الموازنة التقديرية', icon: '📊', group: 'التخطيط المالي' },
+    { key: 'bank-overview', label: 'نظرة عامة (الخزينة)', icon: '🏦', group: 'الخزينة' },
+    { key: 'bank-accounts', label: 'الحسابات البنكية', icon: '💳', group: 'الخزينة' },
+    { key: 'bank-investments', label: 'الودائع الاستثمارية', icon: '📈', group: 'الخزينة' },
+    { key: 'daily-payments', label: 'المدفوعات اليومية', icon: '💵', group: 'الخزينة' },
+    { key: 'archive', label: 'الأرشيف المالي', icon: '🗂️', group: 'الأرشيف' },
+    { key: 'ceo-approvals', label: 'اعتمادات الرئيس التنفيذي', icon: '✅', group: 'المتابعة' },
+    { key: 'sla', label: 'SLA / OLA', icon: '⏱', group: 'المتابعة' },
+    { key: 'performance', label: 'متابعة الأداء', icon: '📈', group: 'المتابعة' },
     { key: 'settings', label: 'الإعدادات', icon: '⚙️', group: 'نظام' },
 ];
 
@@ -420,9 +451,9 @@ var PERMISSION_LEVELS = [
 ];
 
 var DEFAULT_PAGES = {
-    system_admin: { dashboard: 1, notifications: 1, transactions: 1, 'bank-deposits': 1, correspondence: 1, sla: 1, performance: 1, settings: 1, reservations: 1 },
-    manager: { dashboard: 1, notifications: 1, transactions: 1, 'bank-deposits': 1, correspondence: 1, sla: 1, performance: 1, settings: 0, reservations: 1 },
-    employee: { dashboard: 0, notifications: 1, transactions: 1, 'bank-deposits': 1, correspondence: 1, sla: 0, performance: 0, settings: 0, reservations: 1 },
+    system_admin: { dashboard: 1, notifications: 1, transactions: 1, correspondence: 1, reservations: 1, 'budget-plans': 1, 'bank-overview': 1, 'bank-accounts': 1, 'bank-investments': 1, 'daily-payments': 1, archive: 1, 'ceo-approvals': 1, sla: 1, performance: 1, settings: 1 },
+    manager: { dashboard: 1, notifications: 1, transactions: 1, correspondence: 1, reservations: 1, 'budget-plans': 1, 'bank-overview': 1, 'bank-accounts': 1, 'bank-investments': 1, 'daily-payments': 1, archive: 1, 'ceo-approvals': 1, sla: 1, performance: 1, settings: 0 },
+    employee: { dashboard: 0, notifications: 1, transactions: 1, correspondence: 1, reservations: 1, 'budget-plans': 0, 'bank-overview': 0, 'bank-accounts': 0, 'bank-investments': 0, 'daily-payments': 0, archive: 0, 'ceo-approvals': 0, sla: 0, performance: 0, settings: 0 },
 };
 
 /** فتح modal صلاحيات الموظف */

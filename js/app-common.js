@@ -1075,13 +1075,20 @@ document.addEventListener('DOMContentLoaded', function () {
  *   أحمر: مرفوض / ملغاة
  */
 function getStatusBadge(status) {
-    if (!status) return '<span class="status-badge status-pending">—</span>';
+    if (!status || status === 'null') {
+        return '<span class="status-badge status-pending status-empty">—</span>';
+    }
 
     let cls = 'status-pending';
-    if (status === 'مستلم' || status === 'تم الدفع' || status === 'صدرت الفاتورة' || status === 'معتمد') cls = 'status-completed';
-    else if (status === 'قيد المراجعة' || status === 'بدون فاتورة' || status === 'معلق') cls = 'status-review';
-    else if (status === 'قيد المعالجة' || status === 'قيد الإصدار') cls = 'status-processing';
-    else if (status === 'مرفوض' || status === 'ملغاة') cls = 'status-cancelled';
+    if (status === 'مستلم' || status === 'تم الدفع' || status === 'صدرت الفاتورة' || status === 'معتمد') {
+        cls = 'status-completed';
+    } else if (status === 'قيد المراجعة' || status === 'بدون فاتورة' || status === 'معلق') {
+        cls = 'status-review';
+    } else if (status === 'قيد المعالجة' || status === 'قيد الإصدار') {
+        cls = 'status-processing';
+    } else if (status === 'مرفوض' || status === 'ملغاة') {
+        cls = 'status-cancelled';
+    }
 
     return '<span class="status-badge ' + cls + '">' + status + '</span>';
 }
@@ -1092,16 +1099,17 @@ function getStatusBadge(status) {
  * @returns {string} HTML للـ badge مع أيقونة مناسبة
  */
 function getAlertBadge(alert) {
-    if (!alert) return '<span class="badge badge-slate"></span>—</span>';
+    if (!alert) return '<span class="status-badge status-pending status-empty">—</span>';
 
-    let color = 'slate';
-    let icon = '⏳';
+    const map = {
+        'عاجل': ['status-cancelled', 'عاجل'],
+        'متابعة': ['status-review', 'متابعة'],
+        'مكتمل': ['status-completed', 'مكتمل'],
+        'انتظار': ['status-pending', 'انتظار'],
+    };
 
-    if (alert === 'عاجل') { color = 'red'; icon = '🔴'; }
-    else if (alert === 'متابعة') { color = 'amber'; icon = '⚠️'; }
-    else if (alert === 'مكتمل') { color = 'green'; icon = '✅'; }
-
-    return '<span class="badge badge-' + color + '">' + icon + ' ' + alert + '</span>';
+    const [cls, label] = map[alert] || ['status-pending', alert];
+    return '<span class="status-badge ' + cls + '">' + label + '</span>';
 }
 
 // ════════════════════════════════════════════════════════════
@@ -1247,6 +1255,7 @@ function _ssSelectOption(opt) {
         // نتجاهل — نعتمد على dispatchEvent فقط
     }
     if (id === 'rf_cost_center' && typeof onCostCenterChange === 'function') onCostCenterChange(val);
+    if (id === 'rf_budget_category' && typeof autoLinkBudgetPlan === 'function') { _budgetFormData['rf_budget_category'] = val; autoLinkBudgetPlan(); }
     if (id === 'rf_supplier_id' && typeof onSupplierChange === 'function') onSupplierChange(hidden);
     if (id === 'rf_budget_plan_id' && typeof onBudgetPlanChange === 'function') onBudgetPlanChange(val);
     if (id === 'rf_currency' && typeof _onCurrencyChange === 'function') _onCurrencyChange(val);

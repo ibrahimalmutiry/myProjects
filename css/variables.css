@@ -1,5 +1,48 @@
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@300;400;500;600;700&display=swap');
 
+/* ═══════════════════════════════════════════════════════════════
+   TYPOGRAPHY — متغيرات الخط الموحدة
+   جميع إعدادات الخط في المشروع تُرجع إلى هذه المتغيرات
+   ═══════════════════════════════════════════════════════════════ */
+:root {
+    /* Font Families */
+    --font-primary: 'Noto Sans Arabic', 'Segoe UI', Arial, sans-serif;
+    --font-mono: 'IBM Plex Mono', 'Consolas', 'Courier New', monospace;
+
+    /* Font Sizes — Scale */
+    --text-xs: 0.65rem;
+    /* ~10px  — تسميات صغيرة جداً  */
+    --text-sm: 0.75rem;
+    /* ~12px  — تسميات ثانوية       */
+    --text-base: 0.875rem;
+    /* ~14px  — النص الأساسي        */
+    --text-md: 1rem;
+    /* ~16px  — نص متوسط            */
+    --text-lg: 1.125rem;
+    /* ~18px  — عناوين فرعية        */
+    --text-xl: 1.35rem;
+    /* ~22px  — عناوين              */
+    --text-2xl: 1.75rem;
+    /* ~28px  — عناوين كبيرة        */
+    --text-3xl: 2.25rem;
+    /* ~36px  — أرقام بارزة         */
+
+    /* Font Weights */
+    --fw-light: 300;
+    --fw-regular: 400;
+    --fw-medium: 500;
+    --fw-semibold: 600;
+    --fw-bold: 700;
+    --fw-extrabold: 800;
+    --fw-black: 900;
+
+    /* Line Heights */
+    --lh-tight: 1.2;
+    --lh-snug: 1.4;
+    --lh-normal: 1.6;
+    --lh-relaxed: 1.8;
+}
+
 /* 🌙 الوضع الليلي (Dark Mode) - الافتراضي */
 :root {
     /* Backgrounds */

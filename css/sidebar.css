@@ -20,15 +20,9 @@
 }
 
 /* ══════════════════════════════════════════════════════════════
-   هيكل الصفحة الرئيسي
+   هيكل الصفحة الرئيسي — layout يُعرَّف في base.css
    ══════════════════════════════════════════════════════════════ */
-body {
-    display: flex;
-    flex-direction: row-reverse;
-    /* RTL: sidebar يمين، content يسار */
-    min-height: 100vh;
-    overflow-x: hidden;
-}
+/* body { display:flex; flex-direction:row-reverse; ... }  ← موجود في base.css */
 
 /* ── السايدبار الثابت ─────────────────────────────────────── */
 .sidebar {

@@ -7,7 +7,7 @@ const PdfEngine = (() => {
 
     async function _render(sourceEl, filename) {
         const overlay = document.createElement('div');
-        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(255,255,255,.92);z-index:2147483646;display:flex;align-items:center;justify-content:center;';
+        overlay.style.cssText = 'position:fixed;inset:0;background:#fff;z-index:2147483646;display:flex;align-items:center;justify-content:center;';
         overlay.innerHTML = `<div style="background:#fff;border-radius:12px;padding:1.5rem 2.5rem;box-shadow:0 4px 24px rgba(0,0,0,.15);text-align:center;font-family:sans-serif;direction:rtl;">
             <div style="font-size:2rem;margin-bottom:.4rem">📄</div>
             <div style="font-weight:600;color:#1e293b;font-size:.95rem">جاري تصدير PDF...</div>
@@ -16,6 +16,7 @@ const PdfEngine = (() => {
         const wrapper = document.createElement('div');
         wrapper.style.cssText = 'direction:rtl;unicode-bidi:embed;position:fixed;top:0;left:0;width:794px;min-height:10px;background:#fff;direction:rtl;z-index:2147483645;overflow:visible;max-height:none;padding:0;margin:0;';
         wrapper.innerHTML = sourceEl.innerHTML || '';
+
         wrapper.querySelectorAll('.no-print').forEach(e => e.style.setProperty('display', 'none', 'important'));
 
         document.body.appendChild(overlay);

@@ -45,16 +45,23 @@ try {
                     GROUP BY plan_id
                 ) alloc ON alloc.plan_id = bp.id
                 LEFT JOIN (
-                    SELECT br.budget_plan_id, bc2.id AS cat_id,
+                    SELECT bp3.id AS plan_id,
                            SUM(CASE WHEN br.currency='SAR' THEN br.grand_total
                                     ELSE br.grand_total * COALESCE(br.exchange_rate,1) END) AS total_reserved
                     FROM budget_reservations br
-                    LEFT JOIN budget_categories bc2
-                        ON bc2.name = br.budget_category OR bc2.code = br.budget_category
+                    JOIN budget_plans bp3 ON bp3.fiscal_year = $year
+                    JOIN budget_categories bc2 ON bc2.id = bp3.category_id
                     WHERE (br.fiscal_year = $year OR br.fiscal_year = $year % 100)
                       AND br.status NOT IN ('مسودة','مرفوض','ملغى')
-                    GROUP BY br.budget_plan_id, bc2.id
-                ) res ON (res.budget_plan_id = bp.id OR (res.budget_plan_id IS NULL AND res.cat_id = bp.category_id))
+                      AND (
+                          br.budget_plan_id = bp3.id
+                          OR (
+                              br.budget_plan_id IS NULL
+                              AND (br.budget_category = bc2.code OR br.budget_category = bc2.name)
+                          )
+                      )
+                    GROUP BY bp3.id
+                ) res ON res.plan_id = bp.id
                 WHERE bp.fiscal_year = $year
                 ORDER BY bc.code ASC
             ";
@@ -90,13 +97,23 @@ try {
                 FROM budget_plan_cost_centers bpcc
                 JOIN cost_centers cc ON cc.id = bpcc.cost_center_id
                 LEFT JOIN (
-                    SELECT cost_center,
-                           SUM(CASE WHEN currency='SAR' THEN grand_total
-                                    ELSE grand_total * COALESCE(exchange_rate,1) END) AS reserved
-                    FROM budget_reservations
-                    WHERE budget_plan_id = $id
-                      AND status NOT IN ('مسودة','مرفوض','ملغى')
-                    GROUP BY cost_center
+                    SELECT
+                        br.cost_center,
+                        SUM(CASE WHEN br.currency='SAR' THEN br.grand_total
+                                 ELSE br.grand_total * COALESCE(br.exchange_rate,1) END) AS reserved
+                    FROM budget_reservations br
+                    JOIN budget_plans bp2 ON bp2.id = $id
+                    JOIN budget_categories bc3 ON bc3.id = bp2.category_id
+                    WHERE (
+                        br.budget_plan_id = $id
+                        OR (
+                            br.budget_plan_id IS NULL
+                            AND (br.budget_category = bc3.code OR br.budget_category = bc3.name)
+                            AND (br.fiscal_year = bp2.fiscal_year OR br.fiscal_year = bp2.fiscal_year % 100)
+                        )
+                    )
+                    AND br.status NOT IN ('مسودة','مرفوض','ملغى')
+                    GROUP BY br.cost_center
                 ) res ON res.cost_center = cc.code
                 WHERE bpcc.plan_id = $id
                 ORDER BY cc.code ASC
@@ -300,10 +317,13 @@ try {
             break;
 
         case 'cc_budget':
-            $planId    = (int)($_GET['plan_id']        ?? 0);
+            $planId    = (int)($_GET['plan_id']  ?? 0);
             $ccCode    = $conn->real_escape_string($_GET['cc_code'] ?? '');
+            $excludeId = (int)($_GET['exclude_id'] ?? 0);
             if (!$planId || !$ccCode)
                 jsonResponse(['success' => false, 'message' => 'plan_id و cc_code مطلوبان'], 400);
+
+            $exSql = $excludeId > 0 ? "AND br.id != $excludeId" : '';
 
             $r = $conn->query("
                 SELECT
@@ -313,13 +333,25 @@ try {
                 FROM budget_plan_cost_centers bpcc
                 JOIN cost_centers cc ON cc.id = bpcc.cost_center_id AND cc.code = '$ccCode'
                 LEFT JOIN (
-                    SELECT cost_center,
-                           SUM(CASE WHEN currency='SAR' THEN grand_total
-                                    ELSE grand_total * COALESCE(exchange_rate,1) END) AS reserved
-                    FROM budget_reservations
-                    WHERE budget_plan_id = $planId
-                      AND cost_center    = '$ccCode'
-                      AND status NOT IN ('مسودة','مرفوض','ملغى')
+                    SELECT
+                        br.cost_center,
+                        SUM(CASE WHEN br.currency='SAR' THEN br.grand_total
+                                 ELSE br.grand_total * COALESCE(br.exchange_rate,1) END) AS reserved
+                    FROM budget_reservations br
+                    JOIN budget_plans bp2 ON bp2.id = $planId
+                    JOIN budget_categories bc3 ON bc3.id = bp2.category_id
+                    WHERE (
+                        br.budget_plan_id = $planId
+                        OR (
+                            br.budget_plan_id IS NULL
+                            AND (br.budget_category = bc3.code OR br.budget_category = bc3.name)
+                            AND (br.fiscal_year = bp2.fiscal_year OR br.fiscal_year = bp2.fiscal_year % 100)
+                        )
+                    )
+                    AND br.cost_center = '$ccCode'
+                    AND br.status NOT IN ('مسودة','مرفوض','ملغى')
+                    $exSql
+                    GROUP BY br.cost_center
                 ) res ON 1=1
                 WHERE bpcc.plan_id = $planId
                 LIMIT 1
@@ -329,6 +361,52 @@ try {
             } else {
                 jsonResponse(['success' => true, 'data' => ['allocated' => 0, 'reserved' => 0, 'remaining' => 0]]);
             }
+
+        // ══════════════════════════════════════════
+        //  الحجوزات المرتبطة بنفس البند ومركز التكلفة
+        // ══════════════════════════════════════════
+        case 'related_reservations':
+            $catCode3   = $conn->real_escape_string($_GET['cat_code']    ?? '');
+            $ccCode3    = $conn->real_escape_string($_GET['cc_code']     ?? '');
+            $fyRaw3     = (int)($_GET['fiscal_year'] ?? date('Y'));
+            $fyear3     = $fyRaw3 < 100 ? 2000 + $fyRaw3 : $fyRaw3;
+            $excludeId3 = (int)($_GET['exclude_id'] ?? 0);
+
+            if (!$catCode3) jsonResponse(['success' => false, 'message' => 'cat_code مطلوب'], 400);
+
+            // نفس منطق cc_budget_by_category — يطابق نتائج المبالغ بالضبط
+            $catNameRow = $conn->query("SELECT name FROM budget_categories WHERE code='$catCode3' LIMIT 1");
+            $catName3   = ($catNameRow && ($cn = $catNameRow->fetch_assoc())) ? $conn->real_escape_string($cn['name']) : $catCode3;
+
+            $ccFilter3  = ($ccCode3 && $ccCode3 !== '__all__') ? "AND br.cost_center = '$ccCode3'" : '';
+            $exFilter3  = $excludeId3 > 0 ? "AND br.id != $excludeId3" : '';
+
+            $relRes = $conn->query("
+                SELECT
+                    br.id,
+                    br.reservation_number,
+                    br.purpose,
+                    d.name   AS department_name,
+                    br.cost_center,
+                    br.grand_total,
+                    br.grand_total_sar,
+                    br.currency,
+                    br.status,
+                    br.priority,
+                    br.request_date
+                FROM budget_reservations br
+                LEFT JOIN departments d ON d.id = br.department_id
+                WHERE (br.budget_category = '$catCode3' OR br.budget_category = '$catName3')
+                  AND (br.fiscal_year = $fyear3 OR br.fiscal_year = $fyear3 % 100)
+                  AND br.status NOT IN ('مسودة','مرفوض','ملغى')
+                  $ccFilter3 $exFilter3
+                ORDER BY br.id DESC
+                LIMIT 50
+            ");
+            $related = [];
+            if ($relRes) while ($rr = $relRes->fetch_assoc()) $related[] = $rr;
+            jsonResponse(['success' => true, 'data' => $related]);
+            break;
 
         default:
             jsonResponse(['success' => false, 'message' => 'action غير معروف'], 404);

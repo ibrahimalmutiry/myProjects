@@ -126,7 +126,8 @@ try {
             }
 
             $wSql = $where ? 'WHERE '.implode(' AND ', $where) : '';
-            $result = $conn->query("
+
+            $baseSql = "
                 SELECT br.*,
                        d.name  AS department_name,
                        e.name  AS requested_by_name,
@@ -150,12 +151,51 @@ try {
                 LEFT JOIN dispatch_data dd ON t.id = dd.transaction_id
                 LEFT JOIN employees    ed ON dd.employee_id        = ed.id
                 $wSql
-                ORDER BY br.created_at DESC
-                LIMIT 200
-            ");
-            $rows = [];
-            if ($result) while ($r = $result->fetch_assoc()) $rows[] = $r;
-            jsonResponse(['success' => true, 'data' => $rows]);
+                ORDER BY br.id DESC";
+
+            // ── Pagination ──────────────────────────────────
+            if (isset($_GET['page'])) {
+                $perPage = max(1, min(200, (int)($_GET['per_page'] ?? 25)));
+                $page    = max(1, (int)$_GET['page']);
+                $offset  = ($page - 1) * $perPage;
+
+                $countRes = $conn->query("SELECT COUNT(*) AS total FROM budget_reservations br $wSql");
+                $total    = ($countRes && ($cr = $countRes->fetch_assoc())) ? (int)$cr['total'] : 0;
+
+                // ── إحصائيات إجمالية (على كل السجلات لا على الصفحة الحالية فقط) ──
+                $statsRes = $conn->query("
+                    SELECT
+                        COUNT(*) AS total_all,
+                        SUM(status = 'قيد المراجعة') AS pending,
+                        SUM(status = 'معتمد')        AS approved,
+                        SUM(status = 'مرفوض')        AS rejected,
+                        SUM(grand_total_sar)          AS total_amount
+                    FROM budget_reservations br $wSql
+                ");
+                $summary = ($statsRes && ($sr = $statsRes->fetch_assoc())) ? $sr : [];
+
+                $result = $conn->query($baseSql . " LIMIT $perPage OFFSET $offset");
+                $rows = [];
+                if ($result) while ($r = $result->fetch_assoc()) $rows[] = $r;
+
+                jsonResponse([
+                    'success' => true,
+                    'data'    => $rows,
+                    'summary' => $summary,
+                    'pagination' => [
+                        'total'    => $total,
+                        'page'     => $page,
+                        'per_page' => $perPage,
+                        'pages'    => (int)ceil($total / max(1, $perPage)),
+                    ],
+                ]);
+            } else {
+                // سلوك قديم — بدون pagination
+                $result = $conn->query($baseSql . " LIMIT 200");
+                $rows = [];
+                if ($result) while ($r = $result->fetch_assoc()) $rows[] = $r;
+                jsonResponse(['success' => true, 'data' => $rows]);
+            }
             break;
 
         // ── تفاصيل حجز ──────────────────────────────────────
@@ -257,11 +297,20 @@ try {
             $qty         = (float)($body['quantity'] ?? 1);
             $unit        = $conn->real_escape_string($body['unit'] ?? '');
             $unitPrice   = (float)($body['unit_price'] ?? 0);
-            $totalAmount = (float)($body['total_amount'] ?? 0);
-            $vatAmount   = (float)($body['vat_amount'] ?? 0);
-            $grandTotal  = (float)($body['grand_total'] ?? 0);
             $currency    = strtoupper($conn->real_escape_string($body['currency'] ?? 'SAR'));
             $reqDate     = $conn->real_escape_string($body['request_date'] ?? date('Y-m-d'));
+
+            // ── الإجماليات تُحسب من الأصناف — ليس من الـ body ────────
+            $totalAmount = 0;
+            if ($itemsJsonRaw && count($itemsJsonRaw)) {
+                foreach ($itemsJsonRaw as $it) {
+                    $totalAmount += round((float)($it['qty'] ?? 1) * (float)($it['price'] ?? $it['unit_price'] ?? 0), 2);
+                }
+            } else {
+                $totalAmount = (float)($body['total_amount'] ?? $unitPrice);
+            }
+            $vatAmount  = 0;
+            $grandTotal = $totalAmount;
 
             // ── سعر الصرف: يدوي من المستخدم أو من الجدول ────────
             $exchangeRate = 1.0;
@@ -354,11 +403,23 @@ try {
             // تحديث الإجماليات في الحجز الرئيسي
             $iDescAll = $conn->real_escape_string(implode('\n', array_map(fn($it) =>
                 ($it['description']??'') . ' (' . ($it['qty']??1) . ' ' . ($it['unit']??'') . ')', $items)));
+
+            // جلب سعر الصرف الحالي للحجز
+            $rRate  = $conn->query("SELECT exchange_rate_sar FROM budget_reservations WHERE id=$rid LIMIT 1");
+            $exRate = ($rRate && ($rr = $rRate->fetch_assoc())) ? (float)($rr['exchange_rate_sar'] ?: 1) : 1.0;
+            $grandSar = round($grand * $exRate, 2);
+
             $conn->query("UPDATE budget_reservations
-                SET items_description='$iDescAll', total_amount=$grand, grand_total=$grand,
-                    quantity=" . count($items) . ", updated_at=NOW()
+                SET items_description='$iDescAll',
+                    total_amount=$grand,
+                    vat_amount=0,
+                    grand_total=$grand,
+                    grand_total_sar=$grandSar,
+                    amount_sar=$grandSar,
+                    quantity=" . count($items) . ",
+                    updated_at=NOW()
                 WHERE id=$rid");
-            jsonResponse(['success'=>true, 'grand_total'=>$grand]);
+            jsonResponse(['success'=>true, 'grand_total'=>$grand, 'total_amount'=>$grand, 'vat_amount'=>0]);
             break;
 
         case 'review':

@@ -5,12 +5,18 @@
 }
 
 body {
-    font-family: 'Noto Sans Arabic', 'Segoe UI', sans-serif;
+    font-family: var(--font-primary);
+    font-size: var(--text-base);
+    font-weight: var(--fw-regular);
+    line-height: var(--lh-normal);
     background: var(--bg-primary);
     color: var(--text-primary);
     min-height: 100vh;
     direction: rtl;
-    line-height: 1.6;
+    /* Layout يُعرَّف في sidebar.css */
+    display: flex;
+    flex-direction: row-reverse;
+    overflow-x: hidden;
 }
 
 /* الخلفية المتدرجة */

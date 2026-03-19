@@ -6,206 +6,281 @@
 
 require_once __DIR__ . '/config.php';
 
-/**
- * التحقق من وجود View وإنشائه إذا لم يكن موجوداً
- */
-function ensureViewExists() {
+// ═══════════════════════════════════════════════════════════════
+//  إصدار هيكل قاعدة البيانات
+//  ⚠️  غيّر هذا الرقم عند أي تعديل على الجداول أو الأعمدة
+//  هذا يجبر النظام على إعادة تشغيل الـ Migrations مرة واحدة
+// ═══════════════════════════════════════════════════════════════
+define('SCHEMA_VERSION', '1.3');
+
+// ═══════════════════════════════════════════════════════════════
+//  bootstrapSystem() — نقطة الدخول الوحيدة لضمان جاهزية الهيكل
+//  تُستدعى من getAllTransactions() وأي دالة تحتاج التأكد من الهيكل
+//  • تعمل مرة واحدة فقط في كل طلب HTTP (static flag)
+//  • تشغّل الـ Migrations فقط عند تغيير SCHEMA_VERSION
+//  • تضمن وجود الـ View بتكلفة استعلام واحد فقط
+// ═══════════════════════════════════════════════════════════════
+function bootstrapSystem(): void {
+    static $booted = false;
+    if ($booted) return;
+    $booted = true;
+
     $conn = db();
-    
-    // التحقق من وجود أعمدة المرفقات (للتوافق مع النظام القديم)
-    $result = $conn->query("SHOW COLUMNS FROM transactions LIKE 'attachment'");
-    $hasAttachment = ($result && $result->num_rows > 0);
-    
-    if (!$hasAttachment) {
+
+    // هل أكملنا الـ Migration لهذا الإصدار من قبل؟
+    $res           = $conn->query("SELECT setting_value FROM system_settings
+                                   WHERE setting_key = 'schema_version' LIMIT 1");
+    $storedVersion = ($res && ($row = $res->fetch_assoc())) ? $row['setting_value'] : '';
+
+    if ($storedVersion !== SCHEMA_VERSION) {
+        // إصدار جديد أو أول تشغيل → شغّل كل الـ Migrations
+        _runSchemaMigrations($conn);
+        // احفظ الإصدار الجديد حتى لا يتكرر
+        $v = $conn->real_escape_string(SCHEMA_VERSION);
+        $conn->query("INSERT INTO system_settings (setting_key, setting_value)
+                      VALUES ('schema_version', '$v')
+                      ON DUPLICATE KEY UPDATE setting_value = '$v'");
+    }
+
+    // تأكد من وجود الـ View — استعلام واحد للفحص فقط
+    _ensureViewCreated($conn);
+}
+
+// ───────────────────────────────────────────────────────────────
+//  _runSchemaMigrations — تعمل مرة واحدة فقط عند تغيير SCHEMA_VERSION
+// ───────────────────────────────────────────────────────────────
+function _runSchemaMigrations(\mysqli $conn): void {
+
+    // ① عمود attachment
+    $r = $conn->query("SHOW COLUMNS FROM transactions LIKE 'attachment'");
+    if (!$r || $r->num_rows === 0) {
         $conn->query("ALTER TABLE transactions ADD COLUMN attachment VARCHAR(255) DEFAULT NULL");
         $conn->query("ALTER TABLE transactions ADD COLUMN attachment_name VARCHAR(255) DEFAULT NULL");
     }
 
-    // ── جدول المرفقات المتعددة ────────────────────────────────
+    // ② جدول المرفقات المتعددة
     $conn->query("CREATE TABLE IF NOT EXISTS transaction_attachments (
-        id            INT AUTO_INCREMENT PRIMARY KEY,
+        id             INT AUTO_INCREMENT PRIMARY KEY,
         transaction_id INT NOT NULL,
-        file_path     VARCHAR(255) NOT NULL,
-        file_name     VARCHAR(255) NOT NULL,
-        display_name  VARCHAR(255) DEFAULT NULL  COMMENT 'الاسم الذي أدخله المستخدم',
-        file_size     INT DEFAULT NULL,
-        uploaded_by   INT DEFAULT NULL,
-        created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+        file_path      VARCHAR(255) NOT NULL,
+        file_name      VARCHAR(255) NOT NULL,
+        display_name   VARCHAR(255) DEFAULT NULL COMMENT 'الاسم الذي أدخله المستخدم',
+        file_size      INT DEFAULT NULL,
+        uploaded_by    INT DEFAULT NULL,
+        created_at     DATETIME DEFAULT CURRENT_TIMESTAMP,
         INDEX idx_tx (transaction_id),
         FOREIGN KEY (transaction_id) REFERENCES transactions(id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-    
-    // التحقق من وجود جدول الموازنة
-    $result = $conn->query("SHOW TABLES LIKE 'budget_data'");
-    if (!$result || $result->num_rows == 0) {
-        // إنشاء جدول الموازنة
-        $conn->query("
-            CREATE TABLE IF NOT EXISTS budget_data (
-                id INT PRIMARY KEY AUTO_INCREMENT,
-                transaction_id INT UNIQUE NOT NULL,
-                employee_id INT,
-                review_date DATE,
-                budget_status ENUM('معتمد', 'قيد المراجعة', 'مرفوض', 'معلق') DEFAULT 'معلق',
-                budget_code VARCHAR(50),
-                notes TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                FOREIGN KEY (transaction_id) REFERENCES transactions(id) ON DELETE CASCADE
-            ) ENGINE=InnoDB
-        ");
-        
-        // إضافة سجلات للمعاملات الموجودة
-        $conn->query("INSERT IGNORE INTO budget_data (transaction_id) SELECT id FROM transactions");
-    }
-    
-    // ضمان وجود أعمدة العملة قبل إنشاء الـ View
-    $chkCur = $conn->query("SHOW COLUMNS FROM transactions LIKE 'currency'");
-    if (!$chkCur || $chkCur->num_rows === 0) {
+
+    // ③ جدول الموازنة
+    $conn->query("CREATE TABLE IF NOT EXISTS budget_data (
+        id             INT PRIMARY KEY AUTO_INCREMENT,
+        transaction_id INT UNIQUE NOT NULL,
+        employee_id    INT,
+        review_date    DATE,
+        budget_status  ENUM('معتمد','قيد المراجعة','مرفوض','معلق') DEFAULT 'معلق',
+        budget_code    VARCHAR(50),
+        notes          TEXT,
+        created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (transaction_id) REFERENCES transactions(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB");
+    $conn->query("INSERT IGNORE INTO budget_data (transaction_id) SELECT id FROM transactions");
+
+    // ④ أعمدة العملة
+    $r = $conn->query("SHOW COLUMNS FROM transactions LIKE 'currency'");
+    if (!$r || $r->num_rows === 0) {
         $conn->query("ALTER TABLE transactions ADD COLUMN currency VARCHAR(10) NOT NULL DEFAULT 'SAR'");
         $conn->query("ALTER TABLE transactions ADD COLUMN exchange_rate DECIMAL(10,4) NOT NULL DEFAULT 1.0000");
         $conn->query("ALTER TABLE transactions ADD COLUMN amount_sar DECIMAL(15,2) DEFAULT NULL");
     }
 
-    // حذف View القديم وإنشاء جديد
-    $conn->query("DROP VIEW IF EXISTS v_full_transactions");
-    
-    // التأكد من وجود أعمدة المنشئ
-    ensureCreatorColumns();
-    
-    // إنشاء View مع الموازنة ومعلومات المنشئ
-    $sql = "
-    CREATE VIEW v_full_transactions AS
-    SELECT 
-        t.id,
-        t.transaction_number,
-        t.transaction_date,
+    // ⑤ أعمدة المنشئ
+    $r = $conn->query("SHOW COLUMNS FROM transactions LIKE 'created_by'");
+    if (!$r || $r->num_rows === 0) {
+        $conn->query("ALTER TABLE transactions ADD COLUMN created_by INT DEFAULT NULL");
+        $conn->query("ALTER TABLE transactions ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP");
+    }
+    $r = $conn->query("SHOW COLUMNS FROM transactions LIKE 'updated_at'");
+    if (!$r || $r->num_rows === 0) {
+        $conn->query("ALTER TABLE transactions ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
+    }
+
+    // ⑥ sub_type_id
+    $r = $conn->query("SHOW COLUMNS FROM transactions LIKE 'sub_type_id'");
+    if (!$r || $r->num_rows === 0)
+        $conn->query("ALTER TABLE transactions ADD COLUMN sub_type_id INT DEFAULT NULL");
+
+    // ⑦ أعمدة الأنواع الهرمية
+    $r = $conn->query("SHOW COLUMNS FROM transaction_types LIKE 'parent_id'");
+    if (!$r || $r->num_rows === 0)
+        $conn->query("ALTER TABLE transaction_types ADD COLUMN parent_id INT DEFAULT NULL");
+    $r = $conn->query("SHOW COLUMNS FROM transaction_types LIKE 'sort_order'");
+    if (!$r || $r->num_rows === 0)
+        $conn->query("ALTER TABLE transaction_types ADD COLUMN sort_order INT DEFAULT 0");
+
+    // ⑧ أعمدة الأولوية
+    $r = $conn->query("SHOW COLUMNS FROM transactions LIKE 'priority'");
+    if (!$r || $r->num_rows === 0) {
+        $conn->query("ALTER TABLE transactions ADD COLUMN priority ENUM('normal','high','urgent') DEFAULT 'normal'");
+        $conn->query("ALTER TABLE transactions ADD COLUMN priority_set_by INT DEFAULT NULL");
+        $conn->query("ALTER TABLE transactions ADD COLUMN priority_set_at DATETIME DEFAULT NULL");
+        $conn->query("ALTER TABLE transactions ADD COLUMN priority_note VARCHAR(255) DEFAULT NULL");
+    }
+
+    // ⑨ إصلاح الأرقام المكررة + UNIQUE KEY — مرة واحدة هنا فقط
+    $idx = $conn->query("SHOW INDEX FROM transactions WHERE Key_name = 'uq_transaction_number'");
+    if (!$idx || $idx->num_rows === 0) {
+        fixDuplicateTransactionNumbers($conn);
+    }
+}
+
+// ───────────────────────────────────────────────────────────────
+//  _ensureViewCreated — استعلام واحد للفحص، ينشئ الـ View فقط إذا غاب
+// ───────────────────────────────────────────────────────────────
+function _ensureViewCreated(\mysqli $conn): void {
+    $r = $conn->query("SELECT 1 FROM information_schema.VIEWS
+                       WHERE TABLE_SCHEMA = DATABASE()
+                         AND TABLE_NAME   = 'v_full_transactions'
+                       LIMIT 1");
+    if ($r && $r->num_rows > 0) return; // الـ View موجود ← لا شيء
+    _createView($conn);
+}
+
+function _createView(\mysqli $conn): void {
+    $conn->query("CREATE OR REPLACE VIEW v_full_transactions AS
+    SELECT
+        t.id, t.transaction_number, t.transaction_date,
         tt.name as transaction_type,
         ts.name as transaction_sub_type,
-        t.description,
-        t.amount,
-        IFNULL(t.currency, 'SAR') as currency,
-        IFNULL(t.exchange_rate, 1) as exchange_rate,
-        IFNULL(t.amount_sar, t.amount) as amount_sar,
-        IFNULL(t.attachment, '') as attachment,
-        IFNULL(t.attachment_name, '') as attachment_name,
-        
+        t.description, t.amount,
+        IFNULL(t.currency, 'SAR')         as currency,
+        IFNULL(t.exchange_rate, 1)         as exchange_rate,
+        IFNULL(t.amount_sar, t.amount)     as amount_sar,
+        IFNULL(t.attachment, '')           as attachment,
+        IFNULL(t.attachment_name, '')      as attachment_name,
         t.created_by,
-        ec.name as created_by_name,
+        ec.name  as created_by_name,
         t.created_at as creation_time,
-        
-        r.status as receive_status,
-        r.receive_date,
-        r.notes as receive_notes,
-        er.name as receiver_name,
-        
-        b.budget_status,
-        b.review_date as budget_date,
-        b.budget_code,
-        b.notes as budget_notes,
-        eb.name as budget_employee_name,
-        
-        d.status         as dispatch_status,
-        d.dispatch_type,
-        d.routed_to,
-        d.notes          as dispatch_notes,
-        d.ola_active     as dispatch_ola_active,
-        d.ola_paused_at  as dispatch_paused_at,
-        d.dispatched_at,
+        r.status as receive_status,  r.receive_date,  r.notes as receive_notes,
+        er.name  as receiver_name,
+        b.budget_status, b.review_date as budget_date,
+        b.budget_code,   b.notes as budget_notes,
+        eb.name  as budget_employee_name,
+        d.status         as dispatch_status, d.dispatch_type, d.routed_to,
+        d.notes          as dispatch_notes,  d.ola_active as dispatch_ola_active,
+        d.ola_paused_at  as dispatch_paused_at, d.dispatched_at,
         ed.name          as dispatch_employee_name,
-        
-        p.status as payment_status,
-        p.payment_date,
-        p.payment_method,
-        p.reference_number,
-        p.notes as payment_notes,
-        ep.name as payment_employee_name,
-        
-        i.status as invoice_status,
-        i.invoice_number,
-        i.invoice_date,
-        i.alert_type,
-        i.notes as invoice_notes,
-        ei.name as invoice_employee_name,
-        
-        t.created_at,
-        t.updated_at
+        p.status         as payment_status,  p.payment_date,
+        p.payment_method, p.reference_number, p.notes as payment_notes,
+        ep.name          as payment_employee_name,
+        i.status         as invoice_status,  i.invoice_number, i.invoice_date,
+        i.alert_type,    i.notes as invoice_notes,
+        ei.name          as invoice_employee_name,
+        t.created_at,    t.updated_at
     FROM transactions t
     LEFT JOIN transaction_types tt ON t.type_id     = tt.id
-    LEFT JOIN transaction_types ts ON t.sub_type_id = ts.id
-    LEFT JOIN employees ec         ON t.created_by = ec.id
+    LEFT JOIN transaction_types ts ON t.sub_type_id = tt.id
+    LEFT JOIN employees ec         ON t.created_by  = ec.id
     LEFT JOIN receiving_data r     ON t.id = r.transaction_id
-    LEFT JOIN employees er         ON r.employee_id = er.id
+    LEFT JOIN employees er         ON r.employee_id  = er.id
     LEFT JOIN budget_data b        ON t.id = b.transaction_id
-    LEFT JOIN employees eb         ON b.employee_id = eb.id
+    LEFT JOIN employees eb         ON b.employee_id  = eb.id
     LEFT JOIN dispatch_data d      ON t.id = d.transaction_id
-    LEFT JOIN employees ed         ON d.employee_id = ed.id
+    LEFT JOIN employees ed         ON d.employee_id  = ed.id
     LEFT JOIN payment_data p       ON t.id = p.transaction_id
-    LEFT JOIN employees ep         ON p.employee_id = ep.id
+    LEFT JOIN employees ep         ON p.employee_id  = ep.id
     LEFT JOIN invoice_data i       ON t.id = i.transaction_id
-    LEFT JOIN employees ei         ON i.employee_id = ei.id
-    ";
-    
-    return $conn->query($sql);
+    LEFT JOIN employees ei         ON i.employee_id  = ei.id");
 }
 
 /**
- * الحصول على جميع المعاملات
+ * الحصول على المعاملات — مع دعم Pagination اختياري
+ *
+ * الاستخدام الجديد (مع pagination):
+ *   getAllTransactions(['page'=>1, 'per_page'=>25, 'search'=>'...'])
+ *   → ['data'=>[...], 'pagination'=>['total'=>N,'page'=>1,'per_page'=>25,'pages'=>M]]
+ *
+ * الاستخدام القديم (بدون pagination) — متوافق تماماً:
+ *   getAllTransactions(['search'=>'...'])
+ *   → [...] ← مصفوفة مباشرة كما كانت
  */
 function getAllTransactions($filters = []) {
     $conn = db();
-    
-    // التأكد من وجود View
-    ensureViewExists();
-    
-    $sql = "SELECT * FROM v_full_transactions WHERE 1=1";
-    
-    // فلترة حسب الحالة
+
+    // ── جاهزية الهيكل (مرة واحدة لكل طلب HTTP) ──────────────
+    bootstrapSystem();
+
+    // ── بناء شرط WHERE ────────────────────────────────────────
+    $where = "WHERE 1=1";
+
     if (!empty($filters['status'])) {
         $status = $conn->real_escape_string($filters['status']);
-        $sql .= " AND (receive_status = '$status' OR payment_status = '$status' OR alert_type = '$status')";
+        $where .= " AND (receive_status = '$status' OR payment_status = '$status' OR alert_type = '$status')";
     }
-    
-    // فلترة حسب البحث
     if (!empty($filters['search'])) {
         $search = $conn->real_escape_string($filters['search']);
-        $sql .= " AND (transaction_number LIKE '%$search%' OR description LIKE '%$search%' OR transaction_type LIKE '%$search%')";
+        $where .= " AND (transaction_number LIKE '%$search%' OR description LIKE '%$search%' OR transaction_type LIKE '%$search%')";
     }
-    
-    // فلترة حسب التاريخ
     if (!empty($filters['date_from'])) {
         $dateFrom = $conn->real_escape_string($filters['date_from']);
-        $sql .= " AND transaction_date >= '$dateFrom'";
+        $where .= " AND transaction_date >= '$dateFrom'";
     }
-    
     if (!empty($filters['date_to'])) {
         $dateTo = $conn->real_escape_string($filters['date_to']);
-        $sql .= " AND transaction_date <= '$dateTo'";
-    }
-    
-    $sql .= " ORDER BY transaction_date DESC, id DESC";
-    
-    $result = $conn->query($sql);
-    $transactions = [];
-    
-    if ($result && $result->num_rows > 0) {
-        while ($row = $result->fetch_assoc()) {
-            $transactions[] = $row;
-        }
+        $where .= " AND transaction_date <= '$dateTo'";
     }
 
-    // إضافة المرفقات لكل معاملة دفعةً واحدة
+    $orderBy   = "ORDER BY CAST(SUBSTRING_INDEX(transaction_number, '-', -1) AS UNSIGNED) DESC";
+    $paginated = isset($filters['page']);
+
+    // ── Pagination ─────────────────────────────────────────────
+    if ($paginated) {
+        $perPage = max(1, min(200, (int)($filters['per_page'] ?? 25)));
+        $page    = max(1, (int)$filters['page']);
+        $offset  = ($page - 1) * $perPage;
+
+        // عدد السجلات الكلي بشرط الفلتر (بدون LIMIT)
+        $countRes = $conn->query("SELECT COUNT(*) AS total FROM v_full_transactions $where");
+        $total    = ($countRes && ($cr = $countRes->fetch_assoc())) ? (int)$cr['total'] : 0;
+
+        $sql = "SELECT * FROM v_full_transactions $where $orderBy LIMIT $perPage OFFSET $offset";
+    } else {
+        // ── سلوك قديم بدون تغيير ────────────────────────────────
+        $sql = "SELECT * FROM v_full_transactions $where $orderBy";
+    }
+    // ──────────────────────────────────────────────────────────
+
+    $result      = $conn->query($sql);
+    $transactions = [];
+    if ($result && $result->num_rows > 0) {
+        while ($row = $result->fetch_assoc()) $transactions[] = $row;
+    }
+
+    // ── إضافة المرفقات دفعةً واحدة ────────────────────────────
     if (!empty($transactions)) {
-        $ids = implode(',', array_column($transactions, 'id'));
-        $ar = $conn->query("SELECT * FROM transaction_attachments WHERE transaction_id IN ($ids) ORDER BY created_at ASC");
+        $ids    = implode(',', array_column($transactions, 'id'));
+        $ar     = $conn->query("SELECT * FROM transaction_attachments WHERE transaction_id IN ($ids) ORDER BY created_at ASC");
         $attMap = [];
         if ($ar) while ($aRow = $ar->fetch_assoc()) $attMap[$aRow['transaction_id']][] = $aRow;
-        foreach ($transactions as &$tx) {
-            $tx['attachments'] = $attMap[$tx['id']] ?? [];
-        }
+        foreach ($transactions as &$tx) $tx['attachments'] = $attMap[$tx['id']] ?? [];
         unset($tx);
     }
-    
-    return $transactions;
+
+    // ── الإرجاع ────────────────────────────────────────────────
+    if ($paginated) {
+        return [
+            'data'       => $transactions,
+            'pagination' => [
+                'total'    => $total,
+                'page'     => $page,
+                'per_page' => $perPage,
+                'pages'    => (int)ceil($total / max(1, $perPage)),
+            ],
+        ];
+    }
+
+    return $transactions; // ← سلوك قديم بدون تغيير
 }
 
 /**
@@ -346,14 +421,7 @@ function getChartData() {
 function getUrgentTransactions() {
     $conn = db();
 
-    // ضمان وجود أعمدة priority في جدول transactions
-    $_chk_pri = $conn->query("SHOW COLUMNS FROM transactions LIKE 'priority'");
-    if (!$_chk_pri || $_chk_pri->num_rows === 0) {
-        $conn->query("ALTER TABLE transactions ADD COLUMN priority ENUM('normal','high','urgent') DEFAULT 'normal'");
-        $conn->query("ALTER TABLE transactions ADD COLUMN priority_set_by INT DEFAULT NULL");
-        $conn->query("ALTER TABLE transactions ADD COLUMN priority_set_at DATETIME DEFAULT NULL");
-        $conn->query("ALTER TABLE transactions ADD COLUMN priority_note VARCHAR(255) DEFAULT NULL");
-    }
+    // أعمدة priority مضمونة الوجود عبر bootstrapSystem() في _runSchemaMigrations()
 
     // جلب المعاملات العاجلة: join بين transactions (للأولوية اليدوية) والـ View (لبقية البيانات)
     $sql = "
@@ -404,14 +472,7 @@ function getUrgentTransactions() {
 function setTransactionPriority($transactionId, $priority, $note = null) {
     $conn = db();
 
-    // ضمان وجود الأعمدة
-    $_chk_pri = $conn->query("SHOW COLUMNS FROM transactions LIKE 'priority'");
-    if (!$_chk_pri || $_chk_pri->num_rows === 0) {
-        $conn->query("ALTER TABLE transactions ADD COLUMN priority ENUM('normal','high','urgent') DEFAULT 'normal'");
-        $conn->query("ALTER TABLE transactions ADD COLUMN priority_set_by INT DEFAULT NULL");
-        $conn->query("ALTER TABLE transactions ADD COLUMN priority_set_at DATETIME DEFAULT NULL");
-        $conn->query("ALTER TABLE transactions ADD COLUMN priority_note VARCHAR(255) DEFAULT NULL");
-    }
+    // أعمدة priority مضمونة الوجود عبر bootstrapSystem() في _runSchemaMigrations()
 
     $transactionId = (int)$transactionId;
     $priority = $conn->real_escape_string($priority);
@@ -566,21 +627,9 @@ function generateTransactionNumber() {
  */
 function addTransaction($data, $file = null) {
     $conn = db();
-    ensureCreatorColumns();
 
-    // ضمان وجود عمود sub_type_id
-    $chk = $conn->query("SHOW COLUMNS FROM transactions LIKE 'sub_type_id'");
-    if (!$chk || $chk->num_rows === 0) {
-        $conn->query("ALTER TABLE transactions ADD COLUMN sub_type_id INT DEFAULT NULL");
-    }
-
-    // ضمان وجود عمودي currency و exchange_rate
-    $chkCur = $conn->query("SHOW COLUMNS FROM transactions LIKE 'currency'");
-    if (!$chkCur || $chkCur->num_rows === 0) {
-        $conn->query("ALTER TABLE transactions ADD COLUMN currency VARCHAR(10) NOT NULL DEFAULT 'SAR'");
-        $conn->query("ALTER TABLE transactions ADD COLUMN exchange_rate DECIMAL(10,4) NOT NULL DEFAULT 1.0000");
-        $conn->query("ALTER TABLE transactions ADD COLUMN amount_sar DECIMAL(15,2) DEFAULT NULL");
-    }
+    // كل الأعمدة مضمونة الوجود عبر bootstrapSystem() في _runSchemaMigrations()
+    bootstrapSystem();
 
     $transactionNumber = generateTransactionNumber();
 
@@ -1942,7 +1991,7 @@ function getEmployeePerformanceDetails($employeeId, $dateFrom = null, $dateTo = 
 function getRecentNotifications($limit = 5) {
     $conn = db();
     
-    ensureViewExists();
+    bootstrapSystem();
     
     $notifications = [];
     
@@ -2049,7 +2098,7 @@ function loadPermissionsForSession($userId) {
             $_SESSION['permission_level'] = 'employee';
             $_SESSION['can_delete'] = false;
         }
-        $allPages = ['dashboard','transactions','correspondence','bank-deposits','sla','performance','settings','notifications','reservations','budget-plans'];
+        $allPages = ['dashboard','transactions','correspondence','bank-overview','bank-accounts','bank-investments','daily-payments','sla','performance','settings','notifications','reservations','budget-plans','archive','ceo-approvals'];
         $_SESSION['page_permissions'] = array_fill_keys($allPages, ($_SESSION['permission_level'] === 'system_admin'));
         return;
     }
@@ -2066,7 +2115,7 @@ function loadPermissionsForSession($userId) {
     $_SESSION['permission_level'] = $row['permission_level'];
     $_SESSION['can_delete'] = (bool)$row['can_delete'];
     
-    $allPages = ['dashboard','transactions','correspondence','bank-deposits','sla','performance','settings','notifications','reservations','budget-plans'];
+    $allPages = ['dashboard','transactions','correspondence','bank-overview','bank-accounts','bank-investments','daily-payments','sla','performance','settings','notifications','reservations','budget-plans','archive','ceo-approvals'];
     
     if ($row['permission_level'] === 'system_admin') {
         $_SESSION['page_permissions']   = array_fill_keys($allPages, true);

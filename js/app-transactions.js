@@ -29,22 +29,60 @@ var SettingsData = {
 };
 
 // ═══════════════════════════════════════════════════════════
+//  حالة الـ Pagination
+// ═══════════════════════════════════════════════════════════
+var TxState = {
+    page: 1,
+    perPage: 10,
+    total: 0,
+    pages: 0,
+    search: '',
+    status: ''
+};
+
+// ═══════════════════════════════════════════════════════════
 //  تحميل وعرض المعاملات
 // ═══════════════════════════════════════════════════════════
 
 /**
- * تحميل قائمة المعاملات من الخادم
- * تُنشئ الجدول الرئيسي للمعاملات مع الفلاتر
+ * تحميل المعاملات من الخادم مع دعم Pagination
+ * @param {number|null} page — رقم الصفحة (null = الصفحة الحالية)
  */
-async function loadTransactions() {
+async function loadTransactions(page) {
+    if (page != null) TxState.page = page;
     showLoading();
 
     try {
-        const res = await fetch('api/?action=transactions');
+        const params = new URLSearchParams({
+            action: 'transactions',
+            page: TxState.page,
+            per_page: TxState.perPage,
+            search: TxState.search,
+            status: TxState.status,
+        });
+
+        const res = await fetch('api/?' + params);
         const data = await res.json();
 
         if (data.success) {
-            App.transactions = data.data;
+            App.transactions = data.data ?? data.data;
+
+            // إذا رجع pagination من الـ API استخدمه، وإلا احسب من المصفوفة
+            if (data.pagination) {
+                TxState.total = data.pagination.total;
+                TxState.pages = data.pagination.pages;
+                TxState.page = data.pagination.page;
+            } else {
+                // fallback: الـ API لم يدعم pagination بعد — حساب محلي
+                const allTx = Array.isArray(data.data) ? data.data : [];
+                // ترتيب تنازلي حسب id (الأحدث أولاً)
+                allTx.sort((a, b) => (parseInt(b.id) || 0) - (parseInt(a.id) || 0));
+                TxState.total = allTx.length;
+                TxState.pages = Math.max(1, Math.ceil(allTx.length / TxState.perPage));
+                const from = (TxState.page - 1) * TxState.perPage;
+                App.transactions = allTx.slice(from, from + TxState.perPage);
+            }
+
             renderTransactions();
         } else {
             showToast('خطأ في تحميل المعاملات', 'error');
@@ -55,7 +93,7 @@ async function loadTransactions() {
     }
 }
 
-// عرض المعاملات
+// ─── عرض المعاملات ──────────────────────────────────────────
 function renderTransactions() {
     const html = `
         <div class="toolbar">
@@ -65,15 +103,17 @@ function renderTransactions() {
                         <circle cx="11" cy="11" r="8"></circle>
                         <path d="m21 21-4.35-4.35"></path>
                     </svg>
-                    <input type="text" id="searchInput" placeholder="بحث في المعاملات..." oninput="filterTransactions()">
+                    <input type="text" id="searchInput" placeholder="بحث في المعاملات..."
+                           value="${TxState.search}"
+                           oninput="filterTransactions()">
                 </div>
                 <select id="statusFilter" class="filter-select" onchange="filterTransactions()">
                     <option value="">جميع الحالات</option>
-                    <option value="عاجل">عاجل</option>
-                    <option value="متابعة">يحتاج متابعة</option>
-                    <option value="مكتمل">مكتمل</option>
-                    <option value="تم الدفع">تم الدفع</option>
-                    <option value="معلق">معلق</option>
+                    <option value="عاجل"    ${TxState.status === 'عاجل' ? 'selected' : ''}>عاجل</option>
+                    <option value="متابعة"  ${TxState.status === 'متابعة' ? 'selected' : ''}>يحتاج متابعة</option>
+                    <option value="مكتمل"   ${TxState.status === 'مكتمل' ? 'selected' : ''}>مكتمل</option>
+                    <option value="تم الدفع"${TxState.status === 'تم الدفع' ? 'selected' : ''}>تم الدفع</option>
+                    <option value="معلق"    ${TxState.status === 'معلق' ? 'selected' : ''}>معلق</option>
                 </select>
             </div>
             <button class="btn btn-primary" onclick="openAddModal()">
@@ -83,8 +123,23 @@ function renderTransactions() {
                 معاملة جديدة
             </button>
         </div>
-        
+
         <div class="card">
+            <div class="tx-pipeline-legend">
+                <span class="tx-legend-title">مسار المعاملة:</span>
+                <span class="tx-legend-item">
+                    <span class="tx-legend-dot tx-legend-done"></span>مكتملة
+                </span>
+                <span class="tx-legend-item">
+                    <span class="tx-legend-dot tx-legend-active"></span>جارية
+                </span>
+                <span class="tx-legend-item">
+                    <span class="tx-legend-dot tx-legend-pending"></span>لم تبدأ
+                </span>
+                <span class="tx-legend-item">
+                    <span class="tx-legend-dot tx-legend-rejected"></span>مرفوضة
+                </span>
+            </div>
             <div class="table-container">
                 <table class="data-table">
                     <thead>
@@ -94,10 +149,7 @@ function renderTransactions() {
                             <th>النوع</th>
                             <th>الوصف</th>
                             <th>المبلغ</th>
-                            <th class="th-green">الاستلام</th>
-                            <th class="th-cyan">الموازنة</th>
-                            <th class="th-orange">الدفع</th>
-                            <th class="th-purple">الفوترة</th>
+                            <th>مسار المعاملة</th>
                             <th>التنبيه</th>
                             <th>المرفقات</th>
                             <th>تعديل</th>
@@ -108,16 +160,206 @@ function renderTransactions() {
                     </tbody>
                 </table>
             </div>
+            ${renderPagination()}
         </div>
     `;
 
     DOM.mainContent.innerHTML = html;
 }
 
+// ─── شريط Pagination ────────────────────────────────────────
+function renderPagination() {
+    if (!TxState.total) return '';
+
+    const p = TxState.page;
+    const total = TxState.pages;
+    const perPage = TxState.perPage;
+    const from = Math.min(TxState.total, (p - 1) * perPage + 1);
+    const to = Math.min(TxState.total, p * perPage);
+    const isFirst = p === 1;
+    const isLast = p === total;
+
+    // ── بناء أرقام الصفحات مع ... ──────────────────────────────
+    // المنطق: أول صفحة، آخر صفحة، والصفحات المحيطة بالحالية (window=2)
+    function buildPageNumbers() {
+        if (total <= 7) {
+            // قليلة — اعرضها كلها
+            return Array.from({ length: total }, (_, i) => i + 1);
+        }
+        const pages = [];
+        const left = Math.max(2, p - 2);
+        const right = Math.min(total - 1, p + 2);
+
+        pages.push(1);
+        if (left > 2) pages.push('...');
+        for (let i = left; i <= right; i++) pages.push(i);
+        if (right < total - 1) pages.push('...');
+        pages.push(total);
+        return pages;
+    }
+
+    const pageNums = buildPageNumbers();
+
+    const pageButtons = pageNums.map(n => {
+        if (n === '...') {
+            return `<span class="tx-pag-dots">…</span>`;
+        }
+        const isActive = n === p;
+        return `<button class="tx-pag-btn ${isActive ? 'tx-pag-btn--active' : ''}"
+                        onclick="loadTransactions(${n})">${n}</button>`;
+    }).join('');
+
+    // ── خيارات عدد الصفوف ─────────────────────────────────────
+    const perPageOptions = [10, 20, 30, 40].map(n =>
+        `<option value="${n}" ${n === perPage ? 'selected' : ''}>${n}</option>`
+    ).join('');
+
+    return `
+    <div class="tx-pagination">
+
+        <!-- يمين: عرض X-Y من Z -->
+        <span class="tx-pag-info">عرض ${from}–${to} من ${TxState.total}</span>
+
+        <!-- وسط: أزرار التنقل + أرقام الصفحات -->
+        <div class="tx-pag-nav">
+
+            <!-- أول صفحة «« -->
+            <button class="tx-pag-btn tx-pag-arrow ${isFirst ? 'tx-pag-disabled' : ''}"
+                    onclick="${isFirst ? '' : 'loadTransactions(1)'}" title="الأولى">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <polyline points="11 17 6 12 11 7"/><polyline points="18 17 13 12 18 7"/>
+                </svg>
+            </button>
+
+            <!-- السابقة ‹ -->
+            <button class="tx-pag-btn tx-pag-arrow ${isFirst ? 'tx-pag-disabled' : ''}"
+                    onclick="${isFirst ? '' : `loadTransactions(${p - 1})`}" title="السابقة">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <polyline points="15 18 9 12 15 6"/>
+                </svg>
+            </button>
+
+            <!-- أرقام الصفحات -->
+            ${pageButtons}
+
+            <!-- التالية › -->
+            <button class="tx-pag-btn tx-pag-arrow ${isLast ? 'tx-pag-disabled' : ''}"
+                    onclick="${isLast ? '' : `loadTransactions(${p + 1})`}" title="التالية">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <polyline points="9 18 15 12 9 6"/>
+                </svg>
+            </button>
+
+            <!-- آخر صفحة »» -->
+            <button class="tx-pag-btn tx-pag-arrow ${isLast ? 'tx-pag-disabled' : ''}"
+                    onclick="${isLast ? '' : `loadTransactions(${total})`}" title="الأخيرة">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/>
+                </svg>
+            </button>
+
+        </div>
+
+        <!-- يسار: عدد الصفوف -->
+        <div class="tx-pag-perpage">
+            <span>صفوف في الصفحة:</span>
+            <div class="tx-pag-perpage-wrap">
+                <select onchange="txChangePerPage(this.value)">${perPageOptions}</select>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <polyline points="6 9 12 15 18 9"/>
+                </svg>
+            </div>
+        </div>
+
+    </div>`;
+}
+
+// الانتقال لصفحة محددة عبر حقل الإدخال
+function txGoToPage(val) {
+    const p = Math.max(1, Math.min(TxState.pages, parseInt(val) || 1));
+    loadTransactions(p);
+}
+
+// تغيير عدد الصفوف لكل صفحة
+function txChangePerPage(val) {
+    TxState.perPage = parseInt(val) || 10;
+    TxState.page = 1;
+    loadTransactions(1);
+}
+
+// ─── فلترة — ترسل للسيرفر (أو تفلتر محلياً كـ fallback) ─────
+function filterTransactions() {
+    TxState.search = document.getElementById('searchInput')?.value || '';
+    TxState.status = document.getElementById('statusFilter')?.value || '';
+    TxState.page = 1;
+    loadTransactions(1);
+}
+
+// ========== مسار المعاملة — عمود موحد للمراحل الأربع ==========
+function renderStagePipeline(tx) {
+    // تحديد حالة كل مرحلة: done | active | pending
+    function stageState(status, doneValues) {
+        if (!status) return 'pending';
+        if (doneValues.includes(status)) return 'done';
+        if (['مرفوض', 'ملغاة'].includes(status)) return 'rejected';
+        return 'active';
+    }
+
+    const states = [
+        stageState(tx.receive_status, ['مستلم']),
+        stageState(tx.budget_status, ['معتمد']),
+        stageState(tx.payment_status, ['تم الدفع']),
+        stageState(tx.invoice_status, ['صدرت الفاتورة']),
+    ];
+
+    const labels = ['استلام', 'موازنة', 'دفع', 'فوترة'];
+
+    const colorMap = {
+        done: { dot: 'var(--accent-green)', line: 'var(--accent-green)' },
+        active: { dot: 'var(--accent-blue)', line: 'var(--border-color)' },
+        pending: { dot: 'var(--border-color)', line: 'var(--border-color)' },
+        rejected: { dot: '#ff6b6b', line: 'var(--border-color)' },
+    };
+
+    let html = '<div class="tx-pipeline">';
+
+    for (let i = 0; i < 4; i++) {
+        const s = states[i];
+        const c = colorMap[s];
+        const isLast = i === 3;
+
+        // الخط الواصل بين النقاط
+        const lineColor = (states[i] === 'done' && !isLast) ? colorMap.done.line : colorMap.pending.line;
+
+        // أيقونة النقطة
+        let dotInner = '';
+        if (s === 'done') dotInner = '<svg width="8" height="8" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="2 6 5 9 10 3"/></svg>';
+        else if (s === 'rejected') dotInner = '✕';
+
+        html += '<div class="tx-pip-step">';
+
+        // النقطة
+        html += `<div class="tx-pip-dot tx-pip-${s}" title="${labels[i]}: ${tx[['receive_status', 'budget_status', 'payment_status', 'invoice_status'][i]] || '—'}">${dotInner}</div>`;
+
+        // التسمية
+        html += `<span class="tx-pip-label">${labels[i]}</span>`;
+
+        // الخط الواصل (ما عدا الأخير)
+        if (!isLast) {
+            html += `<div class="tx-pip-line" style="background:${lineColor}"></div>`;
+        }
+
+        html += '</div>';
+    }
+
+    html += '</div>';
+    return html;
+}
+
 // ========== دالة عرض صفوف المعاملات ==========
 function renderTransactionRows(transactions) {
     if (!transactions || !transactions.length) {
-        return '<tr><td colspan="11" style="text-align: center; padding: 3rem; color: var(--text-muted);">لا توجد معاملات</td></tr>';
+        return '<tr><td colspan="8" style="text-align: center; padding: 3rem; color: var(--text-muted);">لا توجد معاملات</td></tr>';
     }
 
     let html = '';
@@ -129,16 +371,14 @@ function renderTransactionRows(transactions) {
         // صف المعاملة الرئيسي
         html += '<tr class="transaction-row ' + (isExpanded ? 'expanded' : '') + '" data-id="' + tx.id + '" onclick="toggleRow(' + tx.id + ')">';
         html += '<td><span class="tx-number">' + tx.transaction_number + '</span></td>';
-        html += '<td>' + tx.transaction_date + '</td>';
-        html += '<td><span class="tx-type">' + (tx.transaction_type || '—') + '</span>'
+        html += '<td><span class="tx-date-cell">' + (tx.transaction_date ? tx.transaction_date.slice(0, 10) : '—') + '</span></td>';
+        html += '<td>'
+            + '<span class="tx-type">' + (tx.transaction_type || '—') + '</span>'
             + (tx.transaction_sub_type ? '<br><span class="tx-sub-type-tag">' + tx.transaction_sub_type + '</span>' : '')
             + '</td>';
-        html += '<td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">' + tx.description + '</td>';
+        html += '<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-secondary);font-size:.82rem">' + (tx.description || '—') + '</td>';
         html += '<td><span class="tx-amount">' + fmtMoneyCur(tx.amount, tx.currency) + '</span></td>';
-        html += '<td>' + getStatusBadge(tx.receive_status) + '</td>';
-        html += '<td>' + getStatusBadge(tx.budget_status) + '</td>';
-        html += '<td>' + getStatusBadge(tx.payment_status) + '</td>';
-        html += '<td>' + getStatusBadge(tx.invoice_status) + '</td>';
+        html += '<td>' + renderStagePipeline(tx) + '</td>';
         html += '<td>' + getAlertBadge(tx.alert_type) + '</td>';
 
         // ── عمود المرفقات ──
@@ -338,29 +578,6 @@ function toggleRow(id) {
     if (tbody) {
         tbody.innerHTML = renderTransactionRows(App.transactions);
     }
-}
-
-// فلترة المعاملات
-function filterTransactions() {
-    const search = document.getElementById('searchInput')?.value.toLowerCase() || '';
-    const status = document.getElementById('statusFilter')?.value || '';
-
-    const filtered = App.transactions.filter(tx => {
-        const matchSearch = !search ||
-            tx.transaction_number.toLowerCase().includes(search) ||
-            tx.description.toLowerCase().includes(search) ||
-            (tx.transaction_type && tx.transaction_type.toLowerCase().includes(search));
-
-        const matchStatus = !status ||
-            tx.alert_type === status ||
-            tx.payment_status === status ||
-            tx.receive_status === status;
-
-        return matchSearch && matchStatus;
-    });
-
-    App.expandedRow = null;
-    document.getElementById('transactionsBody').innerHTML = renderTransactionRows(filtered);
 }
 
 // فتح مودال إضافة معاملة
@@ -1423,5 +1640,3 @@ function viewTransaction(id) {
         }
     }, 150);
 }
-
-

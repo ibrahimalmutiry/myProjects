@@ -532,7 +532,7 @@ async function openCeoReservation(id) {
       <thead>
         <tr style="background:#1e3a8a !important;color:#fff !important">
           <th style="padding:.5rem .6rem;font-weight:700;font-size:.75rem;text-align:center;width:32px">#</th>
-          <th style="padding:.5rem .6rem;font-weight:700;font-size:.75rem;text-align:right">الوصف</th>
+          <th style="padding:.5rem .6rem;font-weight:700;font-size:.75rem;text-align:right;width:35%">الوصف</th>
           <th style="padding:.5rem .6rem;font-weight:700;font-size:.75rem;text-align:center;width:60px">الكمية</th>
           <th style="padding:.5rem .6rem;font-weight:700;font-size:.75rem;text-align:center;width:60px">الوحدة</th>
           <th style="padding:.5rem .6rem;font-weight:700;font-size:.75rem;text-align:left;width:100px">سعر الوحدة</th>
