@@ -362,7 +362,7 @@
 }
 
 .notif-number {
-    font-family: 'Courier New', monospace;
+    font-family: var(--font-primary);
     color: var(--accent-blue);
 }
 

@@ -1347,37 +1347,27 @@ async function openReservationDetails(id) {
 function printReservation() {
     const content = document.getElementById('rdv2_printable');
     if (!content) return;
-    const win = window.open('', '_blank', 'width=900,height=700');
-    win.document.write(`<!DOCTYPE html><html dir="rtl" lang="ar"><head>
-        <meta charset="utf-8"><title>وثيقة حجز ميزانية</title>
-        <style>
-            @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&display=swap');
-            * { box-sizing:border-box; margin:0; padding:0; }
-            body { font-family:'IBM Plex Sans Arabic',sans-serif; color:#1e293b; background:#fff; }
-            .rdv2-toolbar,.no-print { display:none !important; }
-            ${getRdv2PrintCSS()}
-        </style></head><body>
-        ${content.innerHTML}
-        <script>
-            window.onload = function() {
-                setTimeout(function(){ window.print(); }, 800);
-            };
-        <\/script>
-        </body></html>`);
-    win.document.close();
+    PdfEngine.fromHTML(content.innerHTML, 'وثيقة-حجز-ميزانية.pdf', getRdv2PrintCSS());
 }
 
 // ── تنزيل PDF ───────────────────────────────────────────────
 async function downloadReservationPDF(id) {
     const btn = document.querySelector('.rdv2-pdf-btn');
+    const origHTML = btn ? btn.innerHTML : '';
     if (btn) { btn.disabled = true; btn.innerHTML = '⏳ جاري التحضير...'; }
     try {
-        await downloadAsPDF('rdv2_printable', `حجز-ميزانية-${id}.pdf`);
-    } finally {
-        if (btn) {
-            btn.disabled = false;
-            btn.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><polyline points="9 15 12 18 15 15"/></svg> تنزيل PDF';
+        const el = document.getElementById('rdv2_printable');
+        if (!el) return;
+        const ok = PdfEngine.fromHTML(el.innerHTML, 'حجز-ميزانية-' + id + '.pdf', getRdv2PrintCSS());
+        if (btn && ok) {
+            btn.innerHTML = '✅ تم فتح نافذة الطباعة';
+            setTimeout(() => { btn.innerHTML = origHTML; btn.disabled = false; }, 2500);
+        } else if (btn) {
+            btn.innerHTML = origHTML; btn.disabled = false;
         }
+    } catch (e) {
+        console.error('[budget] downloadReservationPDF:', e);
+        if (btn) { btn.innerHTML = origHTML; btn.disabled = false; }
     }
 }
 

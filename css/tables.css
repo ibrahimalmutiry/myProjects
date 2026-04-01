@@ -113,7 +113,7 @@
 }
 
 .tx-number {
-    font-family: 'Consolas', monospace;
+    font-family: var(--font-primary);
     color: var(--accent-blue);
     font-size: .82rem;
     font-weight: 600;

@@ -258,6 +258,7 @@ async function escalateStage(txId, stage, stageLabel, btn) {
     btn.disabled = true;
     btn.textContent = '⏳ جارٍ...';
     btn.style.opacity = '0.6';
+
     try {
         const res = await fetch('api/?action=sla_manual_escalate', {
             method: 'POST',
@@ -265,23 +266,32 @@ async function escalateStage(txId, stage, stageLabel, btn) {
             body: JSON.stringify({ transaction_id: txId, stage })
         });
         const data = await res.json();
+
         if (data.success) {
-            btn.style.display = 'none';
+            // إخفاء الزر واستبداله بـ "تم التصعيد"
             const wrap = btn.closest('.sla-breach-actions') || btn.parentElement;
             const ok = document.createElement('div');
             ok.className = 'sla-escalated-ok';
-            ok.textContent = '✅ تم التصعيد للمشرف';
+            ok.textContent = `✅ تم التصعيد لـ: ${data.escalated_to_name ?? 'المشرف'}`;
             wrap.replaceWith(ok);
-            showToast(`✅ تم تصعيد "${stageLabel}" للمشرف`, 'success');
+
+            // toast يذكر اسم المشرف
+            const channels = [];
+            if (data.notification_sent) channels.push('إشعار النظام');
+            if (data.email_sent) channels.push('البريد الإلكتروني');
+            const via = channels.length ? ` عبر: ${channels.join(' و')}` : '';
+            showToast(`✅ تم تصعيد "${stageLabel}" لـ ${data.escalated_to_name ?? 'المشرف'}${via}`, 'success');
+
         } else {
             btn.disabled = false;
-            btn.textContent = '🔔 تصعيد للمشرف';
             btn.style.opacity = '1';
+
             if (data.error === 'تم التصعيد مسبقاً') {
                 btn.textContent = '✅ مُصعَّد';
                 btn.style.background = 'var(--accent-green)';
                 btn.disabled = true;
             } else {
+                btn.textContent = '🔔 تصعيد للمشرف';
                 showToast('خطأ: ' + (data.error || 'فشل التصعيد'), 'error');
             }
         }
@@ -304,7 +314,7 @@ function renderSlaDetailModal(d) {
 
     const fmtMin = m => {
         if (!m && m !== 0) return '—';
-        if (m === 0) return 'أقل من دقيقة';
+        if (m === 0) return '&lt; دقيقة';
         if (m < 60) return m + ' د';
         const dy = Math.floor(m / 1440), hr = Math.floor((m % 1440) / 60), mn = m % 60;
         if (dy > 0) return dy + ' يوم' + (hr > 0 ? ' و' + hr + 'س' : '');
@@ -395,7 +405,7 @@ function renderSlaDetailModal(d) {
         if (st.waiting_min > 0)
             chipsHtml += `<div class="sla-time-chip"><span class="sla-time-chip-lbl">⏳ انتظار</span><span class="sla-time-chip-val" style="color:var(--text-muted)">${fmtMin(st.waiting_min)}</span></div>`;
         if (st.elapsed_min > 0 || isAct)
-            chipsHtml += `<div class="sla-time-chip"><span class="sla-time-chip-lbl">⚙ معالجة OLA</span><span class="sla-time-chip-val" style="color:${dotColor}">${fmtMin(st.elapsed_min)}</span></div>`;
+            chipsHtml += `<div class="sla-time-chip"><span class="sla-time-chip-lbl">⚙ OLA</span><span class="sla-time-chip-val" style="color:${dotColor}">${st.elapsed_min === 0 && isAct ? 'جارية' : fmtMin(st.elapsed_min)}</span></div>`;
         if (st.post_escalation_min > 0)
             chipsHtml += `<div class="sla-time-chip"><span class="sla-time-chip-lbl">🔔 بعد التصعيد</span><span class="sla-time-chip-val" style="color:var(--accent-orange)">${fmtMin(st.post_escalation_min)}</span></div>`;
 
@@ -1185,7 +1195,7 @@ function renderSlaEmailEscalationsTable(rows) {
     /* ── Wrapper ── */
     .sla-detail-wrap {
         direction: rtl;
-        font-family: 'Noto Sans Arabic', 'Segoe UI', sans-serif;
+        font-family:var(--font-primary);
         padding: .25rem 0;
     }
 

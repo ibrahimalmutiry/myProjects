@@ -615,7 +615,7 @@
 .account-card-number {
     font-size: 0.75rem;
     color: var(--text-secondary);
-    font-family: 'Courier New', monospace;
+    font-family: var(--font-primary);
     margin-bottom: 0.8rem;
 }
 
@@ -969,7 +969,7 @@
 }
 
 .dep-number {
-    font-family: 'Courier New', monospace;
+    font-family: var(--font-primary);
     font-size: 0.8rem;
     color: var(--text-secondary);
 }

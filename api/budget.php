@@ -215,7 +215,19 @@ try {
                        dd.ola_active   AS dispatch_ola_active,
                        dd.dispatched_at,
                        dd.notes        AS dispatch_notes,
-                       ed.name         AS dispatch_employee_name
+                       ed.name         AS dispatch_employee_name,
+                       -- هل اعتمده الرئيس التنفيذي؟
+                       (SELECT COUNT(*) FROM ceo_approval_actions caa
+                        WHERE caa.reservation_id = br.id
+                          AND caa.action_type = 'اعتماد') AS ceo_approved_count,
+                       (SELECT caa2.actor_name FROM ceo_approval_actions caa2
+                        WHERE caa2.reservation_id = br.id
+                          AND caa2.action_type = 'اعتماد'
+                        ORDER BY caa2.id DESC LIMIT 1) AS ceo_actor_name,
+                       (SELECT caa3.created_at FROM ceo_approval_actions caa3
+                        WHERE caa3.reservation_id = br.id
+                          AND caa3.action_type = 'اعتماد'
+                        ORDER BY caa3.id DESC LIMIT 1) AS ceo_actioned_at_date
                 FROM budget_reservations br
                 LEFT JOIN departments  d  ON br.department_id      = d.id
                 LEFT JOIN employees    e  ON br.requested_by       = e.id
@@ -473,6 +485,20 @@ try {
                 // ✅ تحديث OLA — تسجيل وقت المرحلة حسب الحالة الجديدة
                 // هذا يضمن أن اعتماد الحجز يُسجَّل في stage_times تماماً كما لو تم من صفحة المعاملات
                 recordStageTimeFromLastUpdate($txId, 'budget', $userId, $newStatus);
+
+                // ✅ تسجيل الحدث في transaction_events (يظهر في سجل الأحداث + OLA)
+                logTransactionEvent(
+                    $txId,
+                    'budget',
+                    'تغيير الحالة',
+                    $oldSt,
+                    $newStatus,
+                    $budgetNotes ?: "تم تحديث الموازنة من صفحة حجوزات الموازنة — رمز الحجز: $budgetCode"
+                );
+
+                // ✅ تسجيل في activity_log (يظهر في سجل الأحداث والتغييرات)
+                $employeeName = $_SESSION['user_name'] ?? 'موظف الموازنة';
+                logActivity($txId, 'تحديث الموازنة', "تم تحديث حالة الموازنة إلى: $newStatus بواسطة: $employeeName — رمز الحجز: $budgetCode");
             }
 
             logReservation($conn, $id, $userId, 'review', $oldSt, $newStatus, $budgetNotes);

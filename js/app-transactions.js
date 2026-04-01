@@ -469,7 +469,7 @@ function renderTransactionRows(transactions) {
                 </div>
                 <div class="xstage-body">
                     ${drow('الموظف', tx.budget_employee_name)}
-                    ${tx.budget_code ? drow('رمز الموازنة', tx.budget_code, 'font-family:monospace;color:var(--accent-cyan)') : ''}
+                    ${tx.budget_code ? drow('رمز الموازنة', tx.budget_code, 'font-family:var(--font-primary);color:var(--accent-cyan)') : ''}
                     ${drow('التاريخ', tx.budget_date)}
                     ${tx.budget_notes ? drow('ملاحظات', tx.budget_notes) : ''}
                 </div>
@@ -516,7 +516,7 @@ function renderTransactionRows(transactions) {
                 </div>
                 <div class="xstage-body">
                     ${drow('الموظف', tx.payment_employee_name)}
-                    ${tx.reference_number ? drow('المرجع', tx.reference_number, 'font-family:monospace;color:var(--accent-blue)') : ''}
+                    ${tx.reference_number ? drow('المرجع', tx.reference_number, 'font-family:var(--font-primary);color:var(--accent-blue)') : ''}
                     ${drow('التاريخ', tx.payment_date)}
                     ${tx.payment_notes ? drow('ملاحظات', tx.payment_notes) : ''}
                 </div>
@@ -534,7 +534,7 @@ function renderTransactionRows(transactions) {
                 </div>
                 <div class="xstage-body">
                     ${drow('الموظف', tx.invoice_employee_name)}
-                    ${tx.invoice_number ? drow('رقم الفاتورة', tx.invoice_number, 'font-family:monospace;color:var(--accent-blue)') : ''}
+                    ${tx.invoice_number ? drow('رقم الفاتورة', tx.invoice_number, 'font-family:var(--font-primary);color:var(--accent-blue)') : ''}
                     ${drow('التاريخ', tx.invoice_date)}
                     ${tx.alert_type ? `<div class="xrow"><span class="xrow-lbl">التنبيه</span><span class="xrow-val">${getAlertBadge(tx.alert_type)}</span></div>` : ''}
                     ${tx.invoice_notes ? drow('ملاحظات', tx.invoice_notes) : ''}
@@ -566,18 +566,10 @@ function renderTransactionRows(transactions) {
     return html;
 }
 
-// ========== دالة تبديل الصف الموسع ==========
+// ========== دالة تبديل الصف — تفتح مودال التفاصيل ==========
 function toggleRow(id) {
-    if (App.expandedRow == id) {
-        App.expandedRow = null;
-    } else {
-        App.expandedRow = id;
-    }
-
-    const tbody = document.getElementById('transactionsBody');
-    if (tbody) {
-        tbody.innerHTML = renderTransactionRows(App.transactions);
-    }
+    const tx = App.transactions && App.transactions.find(function (t) { return t.id == id; });
+    if (tx) { openTxDetailModal(tx); }
 }
 
 // فتح مودال إضافة معاملة
@@ -1183,10 +1175,8 @@ async function editTransaction(id) {
                 <div class="edit-field-group">
                   <label class="edit-field-label">الحالة</label>
                   <select class="edit-field-select" name="status">
-                    <option value="معلق"         ${tx.receive_status === 'معلق' ? 'selected' : ''}>⏸ معلق</option>
+                    <option value="تم الإنشاء"   ${(!tx.receive_status || tx.receive_status === 'تم الإنشاء' || tx.receive_status === 'في الانتظار') ? 'selected' : ''} disabled>📋 تم الإنشاء</option>
                     <option value="مستلم"        ${tx.receive_status === 'مستلم' ? 'selected' : ''}>✅ مستلم</option>
-                    <option value="قيد المراجعة" ${tx.receive_status === 'قيد المراجعة' ? 'selected' : ''}>🔄 قيد المراجعة</option>
-                    <option value="مرفوض"        ${tx.receive_status === 'مرفوض' ? 'selected' : ''}>❌ مرفوض</option>
                   </select>
                 </div>
                 <div class="edit-field-group">
@@ -1219,7 +1209,7 @@ async function editTransaction(id) {
                     ${tx.budget_code
                     ? `<div style="min-height:38px;padding:.45rem .75rem;background:rgba(30,64,175,.06);
                               border:1.5px solid rgba(30,64,175,.25);border-radius:8px;
-                              font-family:monospace;font-weight:700;color:#1e40af;font-size:.88rem;
+                              font-family:var(--font-primary);font-weight:700;color:#1e40af;font-size:.88rem;
                               display:flex;align-items:center;letter-spacing:.5px">
                               ${esc(tx.budget_code)}
                            </div>
@@ -1639,4 +1629,238 @@ function viewTransaction(id) {
             }, 100);
         }
     }, 150);
+}
+// ═══════════════════════════════════════════════════════════════
+//  مودال تفاصيل المعاملة الاحترافي
+// ═══════════════════════════════════════════════════════════════
+
+function openTxDetailModal(tx) {
+    // إزالة أي مودال سابق
+    var old = document.getElementById('tx-detail-overlay');
+    if (old) old.remove();
+
+    var esc = function (v) { return (v || '').toString().replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); };
+    var drow = function (lbl, val, style) {
+        return '<div class="tdm-row"><span class="tdm-lbl">' + lbl + '</span><span class="tdm-val"' + (style ? ' style="' + style + '"' : '') + '>' + (val || '—') + '</span></div>';
+    };
+
+    // حالة المعاملة الكلية
+    var overallStatus = 'لم تبدأ';
+    var statusCls = 'tdm-badge-pending';
+    if (tx.invoice_status === 'صدرت الفاتورة') { overallStatus = 'مكتملة'; statusCls = 'tdm-badge-done'; }
+    else if (tx.payment_status === 'تم الدفع') { overallStatus = 'جارية'; statusCls = 'tdm-badge-active'; }
+    else if (tx.budget_status === 'معتمد') { overallStatus = 'جارية'; statusCls = 'tdm-badge-active'; }
+    else if (tx.receive_status === 'مستلم') { overallStatus = 'جارية'; statusCls = 'tdm-badge-active'; }
+    else if (tx.receive_status === 'تم الإنشاء' || tx.receive_status === 'في الانتظار' || !tx.receive_status) { overallStatus = 'لم تبدأ'; statusCls = 'tdm-badge-pending'; }
+
+    // أيقونة النوع
+    var typeIcon = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>';
+
+    // مراحل pipeline
+    var dtLabels = { 'to_payment': 'دفع مباشر', 'to_purchase_order': 'أمر شراء', 'to_requester': 'جهة طالبة' };
+    var dtColors = { 'to_payment': 'var(--accent-green)', 'to_purchase_order': 'var(--accent-amber)', 'to_requester': 'var(--accent-purple)' };
+    var hasDispatch = !!tx.dispatch_type;
+    var dispatchPaused = tx.dispatch_ola_active == 0;
+
+    var pipelineHtml = [
+        {
+            cls: 'tdm-stage-green', color: 'var(--accent-green)',
+            icon: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>',
+            label: 'الاستلام', badge: getStatusBadge(tx.receive_status),
+            body: drow('الموظف', tx.receiver_name) + drow('التاريخ', tx.receive_date) + (tx.receive_notes ? drow('ملاحظات', tx.receive_notes) : '')
+        },
+        {
+            cls: 'tdm-stage-cyan', color: 'var(--accent-cyan)',
+            icon: '<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>',
+            label: 'الموازنة', badge: getStatusBadge(tx.budget_status),
+            body: drow('الموظف', tx.budget_employee_name) + (tx.budget_code ? drow('الرمز', tx.budget_code, 'color:var(--accent-cyan)') : drow('الرمز', '')) + drow('التاريخ', tx.budget_date) + (tx.budget_notes ? drow('ملاحظات', tx.budget_notes) : '')
+        },
+        {
+            cls: 'tdm-stage-indigo', color: '#818cf8',
+            icon: '<polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>',
+            label: 'التوجيه', badge: hasDispatch ? getStatusBadge(tx.dispatch_status) : '',
+            body: hasDispatch ? (drow('الموظف', tx.dispatch_employee_name) + '<div class="tdm-row"><span class="tdm-lbl">المسار</span><span class="tdm-val" style="color:' + (dtColors[tx.dispatch_type] || 'var(--text-muted)') + ';font-weight:600">' + (dtLabels[tx.dispatch_type] || tx.dispatch_type || '—') + '</span></div>' + (tx.routed_to ? drow('الجهة', tx.routed_to) : '') + (dispatchPaused ? '<div class="tdm-paused-badge">⏸ OLA معلّق</div>' : '') + (tx.dispatch_notes ? drow('ملاحظات', tx.dispatch_notes) : '')) : '<div class="tdm-empty">لم يتم بعد</div>'
+        },
+        {
+            cls: 'tdm-stage-orange', color: 'var(--accent-orange)',
+            icon: '<rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/>',
+            label: 'الدفع', badge: getStatusBadge(tx.payment_status),
+            body: drow('الموظف', tx.payment_employee_name) + (tx.reference_number ? drow('المرجع', tx.reference_number, 'color:var(--accent-blue)') : '') + drow('التاريخ', tx.payment_date) + (tx.payment_notes ? drow('ملاحظات', tx.payment_notes) : '')
+        },
+        {
+            cls: 'tdm-stage-purple', color: 'var(--accent-purple)',
+            icon: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>',
+            label: 'الفوترة', badge: getStatusBadge(tx.invoice_status),
+            body: drow('الموظف', tx.invoice_employee_name) + (tx.invoice_number ? drow('رقم الفاتورة', tx.invoice_number, 'color:var(--accent-blue)') : '') + drow('التاريخ', tx.invoice_date) + (tx.alert_type ? '<div class="tdm-row"><span class="tdm-lbl">التنبيه</span><span class="tdm-val">' + getAlertBadge(tx.alert_type) + '</span></div>' : '') + (tx.invoice_notes ? drow('ملاحظات', tx.invoice_notes) : '')
+        }
+    ].map(function (s) {
+        return '<div class="tdm-stage ' + s.cls + '">' +
+            '<div class="tdm-stage-head">' +
+            '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' + s.icon + '</svg>' +
+            '<span class="tdm-stage-label">' + s.label + '</span>' +
+            (s.badge ? '<span class="tdm-stage-badge-wrap">' + s.badge + '</span>' : '') +
+            '</div>' +
+            '<div class="tdm-stage-body">' + s.body + '</div>' +
+            '</div>';
+    }).join('');
+
+    // المرفقات
+    var txAtts = tx.attachments || (tx.attachment ? [{ id: 'legacy', file_path: tx.attachment, display_name: tx.attachment_name || 'مستند', file_size: null, created_at: null }] : []);
+    var attsHtml = txAtts.length === 0
+        ? '<div class="tdm-empty">لا توجد مرفقات</div>'
+        : txAtts.map(function (a) {
+            return '<div class="tdm-att-item">' +
+                '<div class="tdm-att-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#e53935" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>' +
+                '<div class="tdm-att-info"><div class="tdm-att-name">' + esc(a.display_name || a.file_name || 'مستند') + '</div>' +
+                '<div class="tdm-att-size">' + (a.file_size ? Math.round(a.file_size / 1024) + ' KB' : '') + (a.created_at ? ' — ' + a.created_at.slice(0, 10) : '') + '</div></div>' +
+                '<button class="tdm-att-btn" onclick="openPDF(\'' + esc(a.file_path) + '\')" title="فتح">' +
+                '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>' +
+                '</button></div>';
+        }).join('');
+
+    var attTabLabel = 'المرفقات' + (txAtts.length ? ' (' + txAtts.length + ')' : '');
+
+    // الهيكل الكامل للمودال
+    var html = '<div id="tx-detail-overlay" class="tdm-overlay" onclick="closeTxDetailModal(event)">' +
+        '<div class="tdm-modal" onclick="event.stopPropagation()">' +
+
+        // Header
+        '<div class="tdm-head">' +
+        '<div class="tdm-head-icon">' + typeIcon + '</div>' +
+        '<div class="tdm-head-info">' +
+        '<div class="tdm-head-num">' + esc(tx.transaction_number) + '</div>' +
+        '<div class="tdm-head-desc">' + esc(tx.transaction_type || '') + (tx.transaction_sub_type ? ' — ' + esc(tx.transaction_sub_type) : '') + (tx.description ? ' • ' + esc(tx.description) : '') + '</div>' +
+        '</div>' +
+        '<div class="tdm-head-right">' +
+        '<span class="tdm-amount">' + fmtMoneyCur(tx.amount, tx.currency) + '</span>' +
+        '<span class="tdm-overall-badge ' + statusCls + '">' + overallStatus + '</span>' +
+        '</div>' +
+        '<button class="tdm-close" onclick="closeTxDetailModal(null)" title="إغلاق">✕</button>' +
+        '</div>' +
+
+        // Meta bar
+        '<div class="tdm-meta-bar">' +
+        '<div class="tdm-meta-item"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/></svg>أنشأ بواسطة <strong>' + esc(tx.created_by_name || 'النظام') + '</strong></div>' +
+        '<div class="tdm-meta-dot"></div>' +
+        '<div class="tdm-meta-item"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>' + formatCreationTime(tx.creation_time) + '</div>' +
+        '<div class="tdm-meta-dot"></div>' +
+        '<div class="tdm-meta-item"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 10c-.83 0-1.5-.67-1.5-1.5v-5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5v5c0 .83-.67 1.5-1.5 1.5z"/><path d="M20.5 10H19V8.5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg>أولوية <strong>' + (tx.priority === 'urgent' ? 'عاجلة' : tx.priority === 'high' ? 'مرتفعة' : 'عادية') + '</strong></div>' +
+        '</div>' +
+
+        // Pipeline
+        '<div class="tdm-pipeline">' + pipelineHtml + '</div>' +
+
+        // Tabs
+        '<div class="tdm-tabs">' +
+        '<button class="tdm-tab tdm-tab-active" onclick="tdmSwitchTab(this,\'tdm-events\')">سجل الأحداث</button>' +
+        '<button class="tdm-tab" onclick="tdmSwitchTab(this,\'tdm-atts\')">' + attTabLabel + '</button>' +
+        '</div>' +
+
+        // Tab: سجل الأحداث
+        '<div id="tdm-events" class="tdm-tab-body">' +
+        '<div id="tdm-events-inner" class="tdm-events-list">' +
+        '<div class="tdm-events-loading">جاري تحميل الأحداث...</div>' +
+        '</div></div>' +
+
+        // Tab: المرفقات
+        '<div id="tdm-atts" class="tdm-tab-body" style="display:none">' +
+        '<div class="tdm-att-grid">' + attsHtml + '</div>' +
+        '</div>' +
+
+        // Footer
+        '<div class="tdm-footer">' +
+        '<div class="tdm-footer-left">' +
+        '<button class="tdm-btn" onclick="event.stopPropagation();editTransaction(' + tx.id + ');closeTxDetailModal(null)">' +
+        '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>تعديل' +
+        '</button>' +
+        '</div>' +
+        '<button class="tdm-btn tdm-btn-primary" onclick="closeTxDetailModal(null)">إغلاق</button>' +
+        '</div>' +
+
+        '</div></div>';
+
+    document.body.insertAdjacentHTML('beforeend', html);
+
+    // أنيميشن فتح
+    setTimeout(function () {
+        var el = document.getElementById('tx-detail-overlay');
+        if (el) el.classList.add('tdm-active');
+    }, 10);
+
+    // تحميل الأحداث
+    loadTxDetailEvents(tx.id);
+}
+
+function closeTxDetailModal(event) {
+    if (event && event.target && !event.target.classList.contains('tdm-overlay')) return;
+    var el = document.getElementById('tx-detail-overlay');
+    if (!el) return;
+    el.classList.remove('tdm-active');
+    setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 280);
+}
+
+function tdmSwitchTab(btn, tabId) {
+    var modal = document.getElementById('tx-detail-overlay');
+    if (!modal) return;
+    modal.querySelectorAll('.tdm-tab').forEach(function (t) { t.classList.remove('tdm-tab-active'); });
+    modal.querySelectorAll('.tdm-tab-body').forEach(function (t) { t.style.display = 'none'; });
+    btn.classList.add('tdm-tab-active');
+    var panel = document.getElementById(tabId);
+    if (panel) panel.style.display = 'block';
+}
+
+async function loadTxDetailEvents(txId) {
+    var container = document.getElementById('tdm-events-inner');
+    if (!container) return;
+    try {
+        var res = await fetch('api/?action=transaction_events&transaction_id=' + txId);
+        var result = await res.json();
+        if (!result.success || !result.data || !result.data.length) {
+            container.innerHTML = '<div class="tdm-empty">لا توجد أحداث مسجلة</div>';
+            return;
+        }
+        var stageNames = { creation: 'الإنشاء', receiving: 'الاستلام', budget: 'الموازنة', dispatch: 'التوجيه', payment: 'الدفع', invoice: 'الفوترة' };
+        var stageColors = { creation: 'var(--text-muted)', receiving: 'var(--accent-green)', budget: 'var(--accent-cyan)', dispatch: '#818cf8', payment: 'var(--accent-orange)', invoice: 'var(--accent-purple)' };
+        var stageBg = { creation: 'rgba(148,163,184,.08)', receiving: 'rgba(105,219,124,.1)', budget: 'rgba(59,201,219,.1)', dispatch: 'rgba(129,140,248,.1)', payment: 'rgba(255,169,77,.1)', invoice: 'rgba(177,151,252,.1)' };
+
+        var html = result.data.map(function (ev, idx) {
+            var isLast = idx === result.data.length - 1;
+            var color = stageColors[ev.stage] || 'var(--text-muted)';
+            var bg = stageBg[ev.stage] || 'rgba(148,163,184,.08)';
+            var name = stageNames[ev.stage] || ev.stage;
+            var changeHtml = '';
+            if (ev.old_status && ev.new_status) {
+                changeHtml = '<div class="tdm-ev-change">' +
+                    '<span class="tdm-ev-old">' + ev.old_status + '</span>' +
+                    '<span class="tdm-ev-arr">←</span>' +
+                    '<span class="tdm-ev-new">' + ev.new_status + '</span>' +
+                    '</div>';
+            } else if (ev.new_status) {
+                changeHtml = '<div class="tdm-ev-change"><span class="tdm-ev-new">' + ev.new_status + '</span></div>';
+            }
+            if (ev.notes) changeHtml += '<div class="tdm-ev-notes">' + ev.notes + '</div>';
+            var duration = ev.duration_from_previous ? formatEventDuration(ev.duration_from_previous) : '';
+
+            return '<div class="tdm-ev-item">' +
+                '<div class="tdm-ev-dot-wrap">' +
+                '<div class="tdm-ev-dot" style="background:' + bg + '">' +
+                '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="' + color + '" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>' +
+                '</div>' +
+                (!isLast ? '<div class="tdm-ev-line"></div>' : '') +
+                '</div>' +
+                '<div class="tdm-ev-content">' +
+                '<div class="tdm-ev-header">' +
+                '<span class="tdm-ev-tag" style="background:' + bg + ';color:' + color + '">' + name + '</span>' +
+                '<span class="tdm-ev-action">' + (ev.action || '') + '</span>' +
+                (duration ? '<span class="tdm-ev-dur">' + duration + '</span>' : '') +
+                '<span class="tdm-ev-time">' + (ev.event_time || '').slice(0, 16).replace('T', ' ') + '</span>' +
+                '</div>' +
+                changeHtml +
+                '</div></div>';
+        }).join('');
+
+        container.innerHTML = html;
+    } catch (e) {
+        container.innerHTML = '<div class="tdm-empty">تعذر تحميل الأحداث</div>';
+    }
 }

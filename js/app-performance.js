@@ -512,7 +512,7 @@ function renderPerformanceTable(data) {
         var durationClass = item.duration_minutes <= 10 ? 'excellent' : (item.duration_minutes <= 30 ? 'good' : 'slow');
 
         html += '<tr>';
-        html += '<td><span style="color: var(--accent-blue); font-family: monospace;">' + (item.transaction_number || '-') + '</span></td>';
+        html += '<td><span style="color: var(--accent-blue); font-family:var(--font-primary);">' + (item.transaction_number || '-') + '</span></td>';
         html += '<td>' + (item.employee_name || '-') + '</td>';
         html += '<td>' + getStageName(item.stage) + '</td>';
         html += '<td style="font-size: 0.85rem;">' + formatDateTime(item.started_at) + '</td>';
@@ -611,7 +611,7 @@ async function loadEventsLog() {
                 var duration = event.duration_from_previous;
 
                 html += '<tr>';
-                html += '<td><span style="color: var(--accent-blue); font-family: monospace;">' + (event.transaction_number || '-') + '</span></td>';
+                html += '<td><span style="color: var(--accent-blue); font-family:var(--font-primary);">' + (event.transaction_number || '-') + '</span></td>';
                 html += '<td><span style="background: ' + stageColor + '; color: #000; padding: 2px 8px; border-radius: 10px; font-size: 0.8rem;">' + stageName + '</span></td>';
                 html += '<td style="color: var(--text-muted); text-decoration: line-through;">' + (event.old_status || '-') + '</td>';
                 html += '<td style="color: var(--accent-green); font-weight: 600;">' + (event.new_status || '-') + '</td>';

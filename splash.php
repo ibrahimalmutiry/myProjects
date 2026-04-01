@@ -68,7 +68,7 @@ $userRole = $_SESSION['user_role'] ?? '';
         align-items: center;
         justify-content: center;
         background: var(--bg);
-        font-family: 'Noto Sans Arabic', 'Segoe UI', sans-serif;
+        font-family:var(--font-primary);
         overflow: hidden;
         transition: background .3s;
     }

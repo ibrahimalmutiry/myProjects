@@ -2161,7 +2161,7 @@ function renderInvestmentRows(list) {
         html += `<tr class="${rowCls}" data-inv-id="${inv.id}" onclick="toggleInvestment(${inv.id})">
             <td>
                 <div style="font-weight:600;overflow:hidden;text-overflow:ellipsis">${inv.deposit_name || inv.reference_number}</div>
-                <div style="font-size:.71rem;color:var(--text-muted);font-family:monospace">${inv.reference_number}</div>
+                <div style="font-size:.71rem;color:var(--text-muted);font-family:var(--font-primary)">${inv.reference_number}</div>
             </td>
             <td>
                 <div style="font-size:.83rem;font-weight:500;overflow:hidden;text-overflow:ellipsis">${inv.bank_name || '—'}</div>
@@ -2268,8 +2268,8 @@ function openInvDetailModal(inv) {
                     <div class="idm-section-title">الحساب</div>
                     <div class="idm-row"><span>البنك</span><strong>${inv.bank_name || '—'}</strong></div>
                     <div class="idm-row"><span>الحساب</span><strong>${inv.account_name || '—'}</strong></div>
-                    <div class="idm-row"><span>الرقم</span><strong style="font-family:monospace;color:var(--accent-blue);font-size:.8rem">${inv.account_number || '—'}</strong></div>
-                    <div class="idm-row"><span>المرجع</span><strong style="font-family:monospace;color:#ffa94d;font-size:.8rem">${inv.reference_number}</strong></div>
+                    <div class="idm-row"><span>الرقم</span><strong style="font-family:var(--font-primary);color:var(--accent-blue);font-size:.8rem">${inv.account_number || '—'}</strong></div>
+                    <div class="idm-row"><span>المرجع</span><strong style="font-family:var(--font-primary);color:#ffa94d;font-size:.8rem">${inv.reference_number}</strong></div>
                     ${inv.return_account_name && inv.return_account_name !== inv.account_name
             ? `<div class="idm-row"><span>إعادة لـ</span><strong>${inv.return_account_name}</strong></div>` : ''}
                 </div>

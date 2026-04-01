@@ -353,7 +353,7 @@
 }
 
 .timeline-tx {
-    font-family: monospace;
+    font-family: var(--font-primary);
     color: var(--accent-blue);
     font-weight: 600;
 }
@@ -1210,7 +1210,7 @@
 }
 
 .dash-event-tx {
-    font-family: monospace;
+    font-family: var(--font-primary);
     font-size: 0.8rem;
     color: var(--accent-blue);
     font-weight: 600;

@@ -284,10 +284,40 @@ function renderDailyPaymentsPage() {
 // ────────────────────────────────────────────
 async function loadDailyPayments() {
     try {
+        // ── المعاملات التقليدية ──────────────────────────────
         const res = await fetch('api/?action=get_pending_payments');
         const data = await res.json();
         if (!data.success) throw new Error(data.message);
-        dpTransactions = (data.data || []).map(t => ({ ...t, id: parseInt(t.id) }));
+        let txList = (data.data || []).map(t => ({ ...t, id: parseInt(t.id), source: 'transaction' }));
+
+        // ── طلبات الشراء الجاهزة للدفع ───────────────────────
+        try {
+            const prRes = await fetch('api/purchase_requests_api.php?action=payment_queue');
+            const prData = await prRes.json();
+            if (prData.success && prData.data?.length) {
+                const prItems = prData.data.map(pr => ({
+                    id: 'PR-' + pr.id,
+                    transaction_number: pr.request_number,
+                    description: pr.title + (pr.po_number ? ' — PO: ' + pr.po_number : ''),
+                    amount: parseFloat(pr.final_amount || 0),
+                    currency: pr.currency,
+                    amount_sar: parseFloat(pr.final_amount_sar || 0),
+                    supplier_name: pr.supplier_name,
+                    department_name: pr.department_name,
+                    priority: pr.priority,
+                    sla_pct: 0,
+                    ola_pct: 0,
+                    source: 'purchase_request',
+                    pr_id: pr.id,
+                    reservation_number: pr.reservation_number,
+                }));
+                txList = [...txList, ...prItems];
+            }
+        } catch (e) {
+            console.warn('تعذّر تحميل طلبات الشراء للدفع:', e);
+        }
+
+        dpTransactions = txList;
         dpSelected.clear();
         updateDpStats();
         renderDpRows(dpTransactions);
@@ -782,58 +812,38 @@ function closeOrderModal() {
     setTimeout(() => modal.style.display = 'none', 200);
 }
 
-function buildPrintHTML(content) {
+
+// ── CSS مشترك لأوامر الدفع ───────────────────────────────────
+function _getDpPrintCSS() {
     return `
-        <!DOCTYPE html><html dir="rtl" lang="ar">
-        <head>
-        <meta charset="UTF-8">
-        <title>أمر دفع</title>
-        <style>
-            * { box-sizing:border-box; margin:0; padding:0; }
-            body {
-                font-family: 'Segoe UI', Tahoma, 'Arial', sans-serif;
-                font-size: 12px; color: #111;
-                padding: 28px 32px;
-                direction: rtl;
-            }
-            table { width:100%; border-collapse:collapse; direction:rtl; unicode-bidi:embed; }
-            th, td { border:1px solid #ddd; padding:8px 10px; text-align:right; direction:rtl; }
-            th { background:#1a1a2e !important; color:#fff !important; font-weight:600; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-            div, span, p { direction:rtl; unicode-bidi:embed; }
-            td[style*="text-align:left"], th[style*="text-align:left"] { text-align:left; }
-            @media print {
-                body { padding:16px 20px; }
-                th { background:#1a1a2e !important; color:#fff !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-            }
-            /* رمز SAR */
-            @font-face {
-                font-family: 'saudi_riyal';
-                src: url('https://cdn.jsdelivr.net/npm/@emran-alhaddad/saudi-riyal-font/fonts/saudi_riyal.woff2') format('woff2');
-            }
-            .sar-symbol::before { content:"\e900"; font-family:'saudi_riyal' !important; font-style:normal; }
-        </style>
-        </head><body>${content}</body></html>
+        @font-face {
+            font-family: 'saudi_riyal';
+            src: url('https://cdn.jsdelivr.net/npm/@emran-alhaddad/saudi-riyal-font/fonts/saudi_riyal.woff2') format('woff2');
+        }
+        .sar-symbol::before { content:"\\e900"; font-family:'saudi_riyal' !important; font-style:normal; }
+        body { padding: 24px 28px; font-size: 12px; color: #111; }
+        table { width:100%; border-collapse:collapse; }
+        th, td { border:1px solid #ddd; padding:8px 10px; text-align:right; }
+        th { background:#1a1a2e !important; color:#fff !important; font-weight:600; }
+        td[style*="text-align:left"] { text-align:left; }
     `;
 }
 
 function printOrder() {
-    const content = document.getElementById('dp-printable-content').innerHTML;
-    const win = window.open('', '_blank');
-    win.document.write(buildPrintHTML(content));
-    win.document.close();
-    win.focus();
-    setTimeout(() => { win.print(); win.close(); }, 800);
+    const el = document.getElementById('dp-printable-content');
+    if (!el || !el.innerHTML.trim()) return;
+    PdfEngine.fromHTML(el.innerHTML, 'امر-دفع.pdf', _getDpPrintCSS());
 }
 
 function downloadOrderPDF() {
-    // نستخدم نفس printOrder لكن مع تعليمات حفظ PDF
-    const content = document.getElementById('dp-printable-content').innerHTML;
-    const win = window.open('', '_blank');
-    win.document.write(buildPrintHTML(content));
-    win.document.close();
-    win.focus();
-    // نعطي المتصفح وقت لتحميل الخط ثم نطبع
-    setTimeout(() => { win.print(); }, 800);
+    const el = document.getElementById('dp-printable-content');
+    if (!el || !el.innerHTML.trim()) {
+        if (typeof showToast === 'function') showToast('لا يوجد محتوى للتحميل', 'error');
+        return;
+    }
+    const orderRef = (typeof dpLastOrder !== 'undefined' && dpLastOrder && dpLastOrder.order_ref)
+        ? dpLastOrder.order_ref : 'order';
+    PdfEngine.fromHTML(el.innerHTML, 'امر-دفع-' + orderRef + '.pdf', _getDpPrintCSS());
 }
 
 // ────────────────────────────────────────────

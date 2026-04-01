@@ -1490,7 +1490,7 @@ input:checked+.toggle-slider:before {
     color: var(--text-primary);
     font-size: .88rem;
     font-weight: 700;
-    font-family: monospace;
+    font-family: var(--font-primary);
     text-align: center;
     text-transform: uppercase;
     outline: none;
@@ -1599,7 +1599,7 @@ input:checked+.toggle-slider:before {
 .sh-hdr-sub {
     font-size: .72rem;
     color: var(--text-muted);
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--font-primary);
 }
 
 .sh-hdr-actions {
@@ -1735,7 +1735,7 @@ input:checked+.toggle-slider:before {
 .sh-val {
     font-weight: 600;
     color: var(--text-primary);
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--font-primary);
     font-size: .77rem;
 }
 
@@ -1796,7 +1796,7 @@ input:checked+.toggle-slider:before {
 }
 
 .sh-td-mono {
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--font-primary);
     font-size: .75rem;
     color: var(--accent-blue);
 }
@@ -1870,7 +1870,7 @@ input:checked+.toggle-slider:before {
 }
 
 .sd-mono {
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--font-primary);
     font-size: .75rem;
     font-weight: 600;
     color: var(--text-primary);
@@ -1921,7 +1921,7 @@ input:checked+.toggle-slider:before {
 }
 
 .sdi-extra {
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--font-primary);
     font-size: .72rem;
     opacity: .7;
 }
@@ -1971,7 +1971,7 @@ input:checked+.toggle-slider:before {
 .sd-kpi-val {
     font-size: 1.5rem;
     font-weight: 800;
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--font-primary);
     line-height: 1.1;
     margin-bottom: 4px;
 }

@@ -16,16 +16,24 @@ if (!isset($_SESSION['user_id'])) {
 require_once __DIR__ . '/includes/functions.php';
 
 // ── كشف Bundle JS المضغوط ──────────────────────────────────
-// إذا وُجد js/dist/manifest.json وكان الملف المشار إليه موجوداً
-// يُحمَّل ملف bundle واحد بدلاً من 21 ملفاً منفردة
+// يبحث أولاً في الجذر، ثم في js/dist/
 $jsBundleFile = null;
-$_manifestPath = __DIR__ . '/js/dist/manifest.json';
-if (file_exists($_manifestPath)) {
-    $_manifest = json_decode(file_get_contents($_manifestPath), true);
-    if (!empty($_manifest['bundle'])) {
-        $_bundleFull = __DIR__ . '/js/dist/' . $_manifest['bundle'];
-        if (file_exists($_bundleFull)) {
-            $jsBundleFile = 'js/dist/' . $_manifest['bundle'];
+
+// المسارات المحتملة لـ manifest.json
+$_manifestPaths = [
+    ['manifest' => __DIR__ . '/manifest.json',        'prefix' => ''],
+    ['manifest' => __DIR__ . '/js/dist/manifest.json', 'prefix' => 'js/dist/'],
+];
+
+foreach ($_manifestPaths as $_mp) {
+    if (file_exists($_mp['manifest'])) {
+        $_manifest = json_decode(file_get_contents($_mp['manifest']), true);
+        if (!empty($_manifest['bundle'])) {
+            $_bundleFull = __DIR__ . '/' . $_mp['prefix'] . $_manifest['bundle'];
+            if (file_exists($_bundleFull)) {
+                $jsBundleFile = $_mp['prefix'] . $_manifest['bundle'];
+                break;
+            }
         }
     }
 }
@@ -53,6 +61,7 @@ $userRole = $_SESSION['user_role'] ?? '';
     <link rel="stylesheet" href="css/daily-payments.css">
     <link rel="stylesheet" href="css/ceo-approvals.css">
     <link rel="stylesheet" href="css/archive.css">
+    <link rel="stylesheet" href="css/purchase-requests.css">
     <link rel="icon" href="images/logo.png">
 </head>
 
@@ -151,6 +160,19 @@ $userRole = $_SESSION['user_role'] ?? '';
                     </svg>
                 </span>
                 <span class="nav-label">الخطابات</span>
+            </button>
+
+            <button class="nav-tab" data-tab="purchase-requests" data-tooltip="المعاملات">
+                <span class="nav-icon">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                        <polyline points="14 2 14 8 20 8" />
+                        <line x1="16" y1="13" x2="8" y2="13" />
+                        <line x1="16" y1="17" x2="8" y2="17" />
+                    </svg>
+                </span>
+                <span class="nav-label">المعاملات</span>
+                <span class="nav-badge" id="pr-badge" style="display:none">0</span>
             </button>
 
 
@@ -416,36 +438,36 @@ $userRole = $_SESSION['user_role'] ?? '';
     <!-- رسالة التنبيه -->
     <div class="toast" id="toast"></div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <?php if ($jsBundleFile): ?>
-    <!-- ✅ Bundle مضغوط: 21 ملف → ملف واحد (أُنشئ بـ: node build.js) -->
+    <!-- ✅ Bundle مضغوط — أُنشئ بـ: node build.js -->
     <script src="<?= htmlspecialchars($jsBundleFile) ?>"></script>
-    <?php else: ?>
-    <!-- ⚡ Fallback: الملفات الفردية — تُستخدم عند غياب الـ bundle أو أثناء التطوير -->
-    <!-- لإنشاء الـ bundle: npm install -g terser && node build.js -->
-    <script src="js/pdf-engine.js"></script>
-    <script src="js/app-common.js"></script>
-    <script src="js/app-notifications.js"></script>
-    <script src="js/app-dashboard.js"></script>
-    <script src="js/app-transactions.js"></script>
-    <script src="js/app-sla.js"></script>
-    <script src="js/app-budget.js"></script>
-    <script src="js/app-bank.js"></script>
-    <script src="js/app-daily-payments.js"></script>
-    <script src="js/app-ceo-approvals.js"></script>
-    <script src="js/correspondence.js"></script>
-    <script src="js/excel-import-ui.js"></script>
-    <script src="js/app-archive.js"></script>
-    <script src="js/app-performance.js"></script>
-    <script src="js/app-settings-core.js"></script>
-    <script src="js/app-settings-budget.js"></script>
-    <script src="js/app-settings-employees.js"></script>
-    <script src="js/app-settings-system.js"></script>
-    <script src="js/app-settings-types.js"></script>
-    <script src="js/sidebar-init.js"></script>
-    <script src="js/app-profile.js"></script>
+    <?php else:
+        // كشف مسار الملفات الفردية: في js/ أو في الجذر
+        $_jsPrefix = file_exists(__DIR__ . '/js/pdf-engine.js') ? 'js/' : '';
+    ?>
+    <!-- ⚡ Fallback: الملفات الفردية -->
+    <script src="<?= $_jsPrefix ?>pdf-engine.js"></script>
+    <script src="<?= $_jsPrefix ?>app-common.js"></script>
+    <script src="<?= $_jsPrefix ?>app-notifications.js"></script>
+    <script src="<?= $_jsPrefix ?>app-dashboard.js"></script>
+    <script src="<?= $_jsPrefix ?>app-transactions.js"></script>
+    <script src="<?= $_jsPrefix ?>app-sla.js"></script>
+    <script src="<?= $_jsPrefix ?>app-budget.js"></script>
+    <script src="<?= $_jsPrefix ?>app-bank.js"></script>
+    <script src="<?= $_jsPrefix ?>app-daily-payments.js"></script>
+    <script src="<?= $_jsPrefix ?>app-ceo-approvals.js"></script>
+    <script src="<?= $_jsPrefix ?>correspondence.js"></script>
+    <script src="<?= $_jsPrefix ?>excel-import-ui.js"></script>
+    <script src="<?= $_jsPrefix ?>app-archive.js"></script>
+    <script src="<?= $_jsPrefix ?>app-performance.js"></script>
+    <script src="<?= $_jsPrefix ?>app-settings-core.js"></script>
+    <script src="<?= $_jsPrefix ?>app-settings-budget.js"></script>
+    <script src="<?= $_jsPrefix ?>app-settings-employees.js"></script>
+    <script src="<?= $_jsPrefix ?>app-settings-system.js"></script>
+    <script src="<?= $_jsPrefix ?>app-settings-types.js"></script>
+    <script src="<?= $_jsPrefix ?>sidebar-init.js"></script>
+    <script src="<?= $_jsPrefix ?>app-profile.js"></script>
+    <script src="<?= $_jsPrefix ?>app-purchase-requests.js"></script>
     <?php endif; ?>
     <script>
     // معلومات المستخدم الحالي
@@ -479,7 +501,7 @@ if (isset($_SESSION['user_id'])) {
 
         // أول تبويب مسموح به (يُستخدم عند التحميل الأولي)
         window._firstAllowedTab = function() {
-            var order = ['dashboard', 'notifications', 'transactions', 'bank-deposits',
+            var order = ['dashboard', 'notifications', 'transactions', 'purchase-requests', 'bank-deposits',
                 'correspondence', 'reservations', 'sla', 'performance', 'settings'
             ];
             for (var i = 0; i < order.length; i++) {

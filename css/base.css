@@ -13,7 +13,7 @@ body {
     color: var(--text-primary);
     min-height: 100vh;
     direction: rtl;
-    /* Layout يُعرَّف في sidebar.css */
+    unicode-bidi: embed;
     display: flex;
     flex-direction: row-reverse;
     overflow-x: hidden;

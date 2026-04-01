@@ -24,7 +24,7 @@
   padding: 1.5rem;
   max-width: 1400px;
   margin: 0 auto;
-  font-family: 'Segoe UI', 'Tajawal', sans-serif;
+  font-family: var(--font-primary);
 }
 
 /* ── هيدر الصفحة ────────────────────────────────────────── */
@@ -1011,7 +1011,7 @@
 /* ── صفحة طباعة الحجز ───────────────────────────────────── */
 .ceo-print-doc {
   direction: rtl;
-  font-family: 'Segoe UI', 'Tajawal', Arial, sans-serif;
+  font-family: var(--font-primary);
   padding: 2.5rem;
   max-width: 794px;
   margin: 0 auto;

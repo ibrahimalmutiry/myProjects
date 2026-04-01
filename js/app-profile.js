@@ -301,7 +301,7 @@ function injectProfileStyles() {
     .prof-perm--system_admin { background:rgba(255,107,107,.14);color:#ff6b6b; }
     .prof-perm--manager { background:rgba(177,151,252,.14);color:#b197fc; }
     .prof-perm--employee { background:rgba(105,219,124,.14);color:var(--accent-green); }
-    .prof-emp-num { padding:.25rem .65rem;background:var(--bg-surface);border:1px solid var(--border-color);border-radius:20px;font-size:.75rem;color:var(--text-muted);font-family:monospace; }
+    .prof-emp-num { padding:.25rem .65rem;background:var(--bg-surface);border:1px solid var(--border-color);border-radius:20px;font-size:.75rem;color:var(--text-muted);font-family:var(--font-primary); }
     .prof-dept { display:inline-flex;align-items:center;gap:.3rem;font-size:.77rem;color:var(--text-muted); }
 
     /* Stats */
@@ -375,7 +375,7 @@ function injectProfileStyles() {
     .prof-tx-row { display:flex;align-items:center;gap:.8rem;padding:.7rem 1.2rem;border-bottom:1px solid var(--border-color);cursor:pointer;transition:background .15s; }
     .prof-tx-row:last-child { border-bottom:none; }
     .prof-tx-row:hover { background:var(--bg-surface); }
-    .prof-tx-num { font-family:monospace;font-size:.8rem;font-weight:800;color:var(--accent-blue);flex-shrink:0;min-width:70px; }
+    .prof-tx-num { font-family:var(--font-primary);font-size:.8rem;font-weight:800;color:var(--accent-blue);flex-shrink:0;min-width:70px; }
     .prof-tx-body { flex:1;min-width:0; }
     .prof-tx-type { font-size:.81rem;font-weight:600;color:var(--text-primary);margin-bottom:.18rem; }
     .prof-tx-meta { display:flex;align-items:center;gap:.35rem;flex-wrap:wrap; }

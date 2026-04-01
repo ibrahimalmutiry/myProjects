@@ -920,6 +920,8 @@ function switchTab(tab) {
         }
     } else if (tab === 'ceo-approvals') {
         if (typeof loadCeoApprovalsPage === 'function') loadCeoApprovalsPage();
+    } else if (tab === 'purchase-requests') {
+        if (typeof loadPurchaseRequestsPage === 'function') loadPurchaseRequestsPage();
     }
 }
 
@@ -1113,40 +1115,12 @@ function getAlertBadge(alert) {
 }
 
 // ════════════════════════════════════════════════════════════
-//  دالة موحدة لتحميل PDF مباشرة
+//  downloadAsPDF — مُعرَّفة في pdf-engine.js (يُحمَّل أولاً)
+//  هذا السطر للتوافق فقط في حال تغيّر ترتيب التحميل
 // ════════════════════════════════════════════════════════════
-/**
- * downloadAsPDF(elementId, filename, extraCSS)
- * تحمّل العنصر مباشرة كـ PDF بدون نافذة طباعة
- */
-async function downloadAsPDF(elementId, filename, extraCSS) {
-    const el = document.getElementById(elementId);
-    if (!el) { console.error('downloadAsPDF: element not found:', elementId); return; }
-
-    // إذا html2pdf غير محملة نرجع للطباعة
-    if (typeof html2pdf === 'undefined') {
-        console.warn('html2pdf not loaded, falling back to print');
-        window.print();
-        return;
-    }
-
-    const opt = {
-        margin: [10, 10, 10, 10],
-        filename: filename || 'document.pdf',
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true, letterRendering: true },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
-    };
-
-    // إخفاء عناصر no-print مؤقتاً
-    const noPrint = el.querySelectorAll('.no-print');
-    noPrint.forEach(e => e.style.setProperty('display', 'none', 'important'));
-
-    try {
-        await html2pdf().set(opt).from(el).save();
-    } finally {
-        noPrint.forEach(e => e.style.removeProperty('display'));
+if (typeof downloadAsPDF === 'undefined') {
+    async function downloadAsPDF(elementId, filename, extraCSS) {
+        return PdfEngine.print(elementId, filename, extraCSS);
     }
 }
 

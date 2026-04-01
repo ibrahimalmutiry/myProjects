@@ -9,30 +9,340 @@
 // قسم النظام — إعدادات فقط (بادئات + موقّعون + خطر)
 // ════════════════════════════════════════════════════════════
 async function renderSystemSection() {
-    var content = document.getElementById('settingsContent');
-    var html = '';
-    html += '<div class="settings-section-header"><h2>⚙️ إعدادات النظام</h2></div>';
-    html += '<div class="system-grid">';
-    html += '<div class="system-card prefixes-card">';
-    html += '<h3>🏷️ بادئات الأرقام التلقائية</h3>';
-    html += '<p class="prefixes-desc">تُستخدم هذه البادئات في توليد أرقام المستندات تلقائياً — أحرف إنجليزية كبيرة فقط (1-10 محارف)</p>';
-    html += '<div id="prefixes-list"><div class="loading-inline">⏳ جاري التحميل...</div></div>';
-    html += '</div>';
-    html += '<div class="system-card prefixes-card">';
-    html += '<h3>✍️ موقّعو أوامر الدفع</h3>';
-    html += '<p class="prefixes-desc">تظهر هذه الأسماء في مربعات التوقيع أسفل أمر الدفع عند الطباعة</p>';
-    html += '<div id="signers-list"><div class="loading-inline">⏳ جاري التحميل...</div></div>';
-    html += '</div>';
-    html += '<div class="system-card danger-zone">';
-    html += '<h3>⚠️ منطقة الخطر</h3>';
-    html += '<p>هذه الإجراءات لا يمكن التراجع عنها</p>';
-    html += '<div class="danger-buttons">';
-    html += '<button class="btn btn-danger" onclick="clearAllTransactions()">حذف جميع المعاملات</button>';
-    html += '</div></div></div>';
-    content.innerHTML = html;
+    var cont = document.getElementById('settingsContent');
+    cont.innerHTML = `
+    <div class="settings-section-header"><h2>⚙️ إعدادات النظام</h2></div>
+    <div class="system-grid">
+
+        <!-- بادئات -->
+        <div class="system-card prefixes-card">
+            <h3>🏷️ بادئات الأرقام التلقائية</h3>
+            <p class="prefixes-desc">أحرف إنجليزية كبيرة فقط (1-10 محارف)</p>
+            <div id="prefixes-list"><div class="loading-inline">⏳</div></div>
+        </div>
+
+        <!-- موقعون -->
+        <div class="system-card prefixes-card">
+            <h3>✍️ موقّعو أوامر الدفع</h3>
+            <p class="prefixes-desc">تظهر في مربعات التوقيع عند الطباعة</p>
+            <div id="signers-list"><div class="loading-inline">⏳</div></div>
+        </div>
+
+        <!-- منطقة الخطر -->
+        <div class="system-card danger-zone">
+            <h3>⚠️ منطقة الخطر</h3>
+            <p>هذه الإجراءات لا يمكن التراجع عنها</p>
+            <div class="danger-buttons">
+                <button class="btn btn-danger" onclick="clearAllTransactions()">حذف جميع المعاملات</button>
+            </div>
+        </div>
+
+        <!-- ══ الأقسام التنظيمية ══ -->
+        <div class="system-card" style="grid-column:1/-1">
+            <div class="div-section-head">
+                <div>
+                    <h3 style="margin:0">🏢 الأقسام التنظيمية</h3>
+                    <p class="div-sub">الوحدات الداخلية داخل كل قطاع — يُربط بها الموظفون</p>
+                </div>
+                <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+                    <select id="div-sector-filter" class="form-select form-select-sm"
+                            onchange="loadDivisionsSection()" style="min-width:150px">
+                        <option value="">كل القطاعات</option>
+                    </select>
+                    <button class="btn btn-outline-sm" onclick="openBulkImportModal()"
+                            title="إدراج أقسام متعددة دفعةً واحدة">
+                        📥 استيراد دفعي
+                    </button>
+                    <button class="btn btn-primary btn-sm" onclick="openAddDivisionModal()">+ إضافة قسم</button>
+                </div>
+            </div>
+            <div id="divisions-list"><div class="loading-inline">⏳ جاري التحميل...</div></div>
+        </div>
+
+    </div>`;
+
     loadPrefixesSection();
     loadSignersSection();
+    await loadDivisionsSection();          // يجلب القطاعات أيضاً لملء الفلتر
 }
+
+// ════════════════════════════════════════════════════════════
+// الأقسام التنظيمية — عرض وإدارة
+// ════════════════════════════════════════════════════════════
+
+/** بيانات مؤقتة لاستخدامها في المودالات */
+const DivState = { sectors: [], employees: [], divisions: [] };
+
+async function loadDivisionsSection() {
+    const el = document.getElementById('divisions-list');
+    if (!el) return;
+    el.innerHTML = '<div class="loading-inline">⏳ جاري التحميل...</div>';
+
+    try {
+        // جلب الأقسام (sectors = dept_type='sector' أو parent_id IS NULL)
+        const [depRes, empRes] = await Promise.all([
+            fetch('api/settings.php?action=get_departments'),
+            fetch('api/?action=employees'),
+        ]);
+        const depData = await depRes.json();
+        const empData = await empRes.json();
+
+        const allDepts = depData.success ? (depData.data || []) : [];
+        DivState.employees = empData.success ? (empData.data || []) : [];
+
+        // تصنيف: القطاعات = بدون parent أو dept_type=sector
+        DivState.sectors = allDepts.filter(d => !d.parent_id || d.dept_type === 'sector');
+        // الأقسام = لها parent أو dept_type=division/team
+        DivState.divisions = allDepts.filter(d => d.parent_id || d.dept_type === 'division' || d.dept_type === 'team');
+
+        // ملء فلتر القطاع
+        const filterSel = document.getElementById('div-sector-filter');
+        if (filterSel && filterSel.options.length <= 1) {
+            DivState.sectors.forEach(s => {
+                const opt = new Option(s.name, s.id);
+                filterSel.add(opt);
+            });
+        }
+
+        // فلترة الأقسام حسب القطاع المختار
+        const selectedSector = filterSel?.value || '';
+        let filtered = DivState.divisions;
+        if (selectedSector) {
+            filtered = filtered.filter(d =>
+                String(d.sector_id) === selectedSector ||
+                String(d.parent_id) === selectedSector
+            );
+        }
+
+        if (!filtered.length) {
+            const sectorName = selectedSector
+                ? (DivState.sectors.find(s => String(s.id) === selectedSector)?.name || '')
+                : '';
+            el.innerHTML = `
+                <div class="div-empty">
+                    <div style="font-size:2.5rem;opacity:.35">🏢</div>
+                    <p>${sectorName ? `لا توجد أقسام في قطاع "${sectorName}"` : 'لا توجد أقسام بعد'}</p>
+                    <button class="btn btn-primary btn-sm" onclick="openAddDivisionModal()">أضف أول قسم</button>
+                </div>`;
+            return;
+        }
+
+        // تجميع حسب القطاع
+        const bySector = {};
+        filtered.forEach(d => {
+            const sid = d.sector_id || d.parent_id || 0;
+            if (!bySector[sid]) bySector[sid] = [];
+            bySector[sid].push(d);
+        });
+
+        let html = '';
+        for (const [sid, divs] of Object.entries(bySector)) {
+            const sector = DivState.sectors.find(s => String(s.id) === sid);
+            if (sector) {
+                html += `<div class="div-sector-group-label">
+                    <span class="div-sector-dot"></span>${sector.name}
+                    <span class="div-sector-count">${divs.length} قسم</span>
+                </div>`;
+            }
+            divs.forEach(d => {
+                const empCount = parseInt(d.employee_count) || 0;
+                const manager = d.manager_name || '—';
+                const typeLabel = { division: 'قسم', team: 'فريق', sector: 'قطاع' }[d.dept_type] || d.dept_type;
+                html += `
+                <div class="div-row" data-id="${d.id}">
+                    <div class="div-row-icon">🏢</div>
+                    <div class="div-row-info">
+                        <div class="div-row-name">
+                            ${d.name}
+                            ${d.code ? `<code class="div-code">${d.code}</code>` : ''}
+                            <span class="div-type-badge div-type-${d.dept_type}">${typeLabel}</span>
+                        </div>
+                        <div class="div-row-meta">
+                            <span title="مدير القسم">👤 ${manager}</span>
+                            <span title="عدد الموظفين">👥 ${empCount} موظف</span>
+                            ${d.description ? `<span title="الوصف">💬 ${d.description}</span>` : ''}
+                        </div>
+                    </div>
+                    <div class="div-row-actions">
+                        <button class="btn btn-sm btn-outline"
+                            onclick="openEditDivisionModal(${JSON.stringify(d).split('"').join('&quot;')})">
+                            ✏️ تعديل
+                        </button>
+                        <button class="btn btn-sm btn-danger-outline"
+                            onclick="deleteDivision(${d.id},'${d.name}',${empCount})">
+                            🗑 حذف
+                        </button>
+                    </div>
+                </div>`;
+            });
+        }
+        el.innerHTML = `<div class="div-list">${html}</div>`;
+
+    } catch (e) {
+        el.innerHTML = `<p style="color:red;padding:1rem">خطأ: ${e.message}</p>`;
+    }
+}
+
+// ── المودال المشترك للإضافة والتعديل ─────────────────────────
+function _divisionModalHTML(d = {}) {
+    const sectors = DivState.sectors;
+    const employees = DivState.employees;
+
+    const sectorOpts = sectors.map(s =>
+        `<option value="${s.id}" ${(d.sector_id || d.parent_id) == s.id ? 'selected' : ''}>${s.name}</option>`
+    ).join('');
+
+    const empOpts = employees.map(e =>
+        `<option value="${e.id}" ${d.manager_id == e.id ? 'selected' : ''}>${e.name}</option>`
+    ).join('');
+
+    return `
+    <div class="pr-form">
+        ${d.id ? `<input type="hidden" id="dv-id" value="${d.id}">` : ''}
+
+        <div class="form-group">
+            <label class="form-label">القطاع التابع له *</label>
+            <select id="dv-sector" class="form-select" required>
+                <option value="">— اختر القطاع —</option>
+                ${sectorOpts}
+            </select>
+        </div>
+
+        <div class="modal-form-grid">
+            <div class="form-group">
+                <label class="form-label">اسم القسم *</label>
+                <input type="text" id="dv-name" class="form-input"
+                       value="${d.name || ''}" placeholder="مثال: المحاسبة" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label">الرمز
+                    <span style="font-size:.72rem;color:var(--text-muted)">(اختياري)</span>
+                </label>
+                <input type="text" id="dv-code" class="form-input"
+                       value="${d.code || ''}" placeholder="ACC" maxlength="10"
+                       style="text-transform:uppercase">
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">النوع</label>
+            <select id="dv-type" class="form-select">
+                <option value="division" ${'division' === (d.dept_type || 'division') ? 'selected' : ''}>قسم</option>
+                <option value="team"     ${'team' === d.dept_type ? 'selected' : ''}>فريق</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">🧑‍💼 مدير / رئيس القسم
+                <span style="font-size:.72rem;color:var(--text-muted)">(اختياري)</span>
+            </label>
+            <select id="dv-manager" class="form-select">
+                <option value="">— بدون مدير —</option>
+                ${empOpts}
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">الوصف
+                <span style="font-size:.72rem;color:var(--text-muted)">(اختياري)</span>
+            </label>
+            <input type="text" id="dv-desc" class="form-input"
+                   value="${d.description || ''}" placeholder="وصف مختصر لمهام القسم...">
+        </div>
+
+        <div class="form-actions">
+            <button class="btn btn-ghost" onclick="closeModal()">إلغاء</button>
+            <button class="btn btn-primary" onclick="saveDivision(${d.id || 'null'})">
+                ${d.id ? '💾 حفظ التعديلات' : '➕ إضافة القسم'}
+            </button>
+        </div>
+    </div>`;
+}
+
+async function openAddDivisionModal() {
+    // تأكد من تحميل البيانات
+    if (!DivState.sectors.length) await loadDivisionsSection();
+    DOM.modalTitle.textContent = '🏢 إضافة قسم تنظيمي';
+    DOM.modalBody.innerHTML = _divisionModalHTML();
+    openModal();
+}
+
+async function openEditDivisionModal(d) {
+    if (typeof d === 'string') { try { d = JSON.parse(d); } catch (_) { return; } }
+    if (!DivState.sectors.length) await loadDivisionsSection();
+    DOM.modalTitle.textContent = `✏️ تعديل: ${d.name}`;
+    DOM.modalBody.innerHTML = _divisionModalHTML(d);
+    openModal();
+}
+
+async function saveDivision(id) {
+    const isNew = !id;
+    const sectorId = document.getElementById('dv-sector')?.value;
+    const name = document.getElementById('dv-name')?.value?.trim();
+    const code = document.getElementById('dv-code')?.value?.trim().toUpperCase();
+    const deptType = document.getElementById('dv-type')?.value || 'division';
+    const managerId = document.getElementById('dv-manager')?.value || null;
+    const desc = document.getElementById('dv-desc')?.value?.trim() || '';
+
+    if (!sectorId) { showToast('يجب اختيار القطاع', 'error'); return; }
+    if (!name) { showToast('اسم القسم مطلوب', 'error'); return; }
+
+    const payload = {
+        name, code, dept_type: deptType,
+        sector_id: sectorId,
+        parent_id: sectorId,
+        manager_id: managerId,
+        description: desc,
+    };
+    if (id) payload.id = id;
+
+    const action = isNew ? 'add_division' : 'update_division';
+    try {
+        const res = await fetch(`api/settings.php?action=${action}`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast(isNew ? '✅ تم إضافة القسم' : '✅ تم تحديث القسم', 'success');
+            closeModal();
+            // إعادة تعيين البيانات المؤقتة لإعادة التحميل
+            DivState.sectors = [];
+            await loadDivisionsSection();
+            // تحديث قائمة الأقسام في نموذج الموظف إن كان مفتوحاً
+            if (typeof loadSettingsEmployees === 'function') await loadSettingsEmployees();
+        } else {
+            showToast(data.message || 'فشل الحفظ', 'error');
+        }
+    } catch (e) {
+        showToast('خطأ في الاتصال', 'error');
+    }
+}
+
+async function deleteDivision(id, name, empCount) {
+    if (empCount > 0) {
+        showToast(`⚠️ لا يمكن الحذف — ${empCount} موظف مرتبط بهذا القسم`, 'error');
+        return;
+    }
+    if (!confirm(`حذف قسم "${name}"؟`)) return;
+    try {
+        const res = await fetch('api/settings.php?action=delete_division', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id }),
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast('✅ تم الحذف', 'success');
+            DivState.sectors = [];
+            await loadDivisionsSection();
+        } else {
+            showToast(data.message || 'فشل الحذف', 'error');
+        }
+    } catch (e) {
+        showToast('خطأ في الاتصال', 'error');
+    }
+}
+
 
 // ════════════════════════════════════════════════════════════
 // لوحة النظام — معلومات + إحصائيات + رسوم بيانية
@@ -563,6 +873,142 @@ function openUserGuide() {
     window.open('User_Guide.html', '_blank', 'width=1200,height=800');
 }
 
+
+// ════════════════════════════════════════════════════════════
+// الاستيراد الدفعي للأقسام
+// ════════════════════════════════════════════════════════════
+
+async function openBulkImportModal() {
+    if (!DivState.sectors.length) await loadDivisionsSection();
+    const secOpts = DivState.sectors.map(s =>
+        `<option value="${s.id}">${s.name} (${s.code || '—'})</option>`
+    ).join('');
+
+    DOM.modalTitle.textContent = '📥 إدراج أقسام دفعي';
+    DOM.modalBody.innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:1rem">
+        <p style="margin:0;font-size:.84rem;color:var(--text-muted);background:var(--bg-secondary);
+                  padding:.65rem .85rem;border-radius:6px;line-height:1.7">
+            اختر القطاع ثم أدخل الأقسام — <strong>سطر لكل قسم</strong>.<br>
+            الصيغة: <code>اسم القسم</code> أو <code>اسم القسم | الرمز</code>
+            مثال: <code style="color:var(--primary,#3b82f6)">الحسابات | ACC</code>
+        </p>
+        <div class="modal-form-grid">
+            <div class="form-group">
+                <label class="form-label">القطاع *</label>
+                <select id="bi-sector" class="form-select" onchange="onBiSectorChange(this)">
+                    <option value="">— اختر —</option>
+                    ${secOpts}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">النوع</label>
+                <select id="bi-type" class="form-select">
+                    <option value="division">قسم</option>
+                    <option value="team">فريق</option>
+                </select>
+            </div>
+        </div>
+        <div class="form-group">
+            <label class="form-label">
+                الأقسام *
+                <span id="bi-count" style="color:var(--text-muted);font-weight:400;font-size:.78rem"></span>
+            </label>
+            <textarea id="bi-lines" class="form-control" rows="7" dir="rtl"
+                style="font-family:monospace;font-size:.84rem;resize:vertical"
+                placeholder="الحسابات&#10;الخزينة&#10;الموازنة | BDG&#10;السكرتارية | SEC&#10;المبيعات | SAL"
+                oninput="onBiLinesInput(this)"></textarea>
+        </div>
+        <div id="bi-preview" style="display:none">
+            <div style="font-size:.75rem;font-weight:700;color:var(--text-muted);
+                        text-transform:uppercase;margin-bottom:.35rem;letter-spacing:.04em">
+                معاينة
+            </div>
+            <div id="bi-preview-list"
+                 style="display:flex;flex-direction:column;gap:.3rem;max-height:160px;overflow-y:auto"></div>
+        </div>
+        <div class="form-actions">
+            <button class="btn btn-ghost" onclick="closeModal()">إلغاء</button>
+            <button class="btn btn-primary" id="bi-submit-btn" onclick="submitBulkImport()" disabled>
+                📥 إدراج الأقسام
+            </button>
+        </div>
+    </div>`;
+    openModal('large');
+}
+
+function onBiLinesInput(ta) {
+    const lines = ta.value.split('\n').map(l => l.trim()).filter(l => l);
+    const countEl = document.getElementById('bi-count');
+    const prevEl = document.getElementById('bi-preview');
+    const listEl = document.getElementById('bi-preview-list');
+    const btnEl = document.getElementById('bi-submit-btn');
+    const secId = document.getElementById('bi-sector')?.value;
+    if (countEl) countEl.textContent = lines.length ? `(${lines.length} قسم)` : '';
+    if (!lines.length) {
+        if (prevEl) prevEl.style.display = 'none';
+        if (btnEl) btnEl.disabled = true;
+        return;
+    }
+    if (prevEl) prevEl.style.display = '';
+    if (btnEl) btnEl.disabled = !secId;
+    if (listEl) {
+        listEl.innerHTML = lines.map((line, i) => {
+            const [name, code] = line.split('|').map(p => p.trim());
+            return `<div style="display:flex;align-items:center;gap:.5rem;padding:.3rem .6rem;
+                         border-radius:5px;background:var(--bg-secondary);font-size:.82rem">
+                <span style="color:var(--text-muted);min-width:18px;text-align:center">${i + 1}</span>
+                <span style="flex:1;font-weight:600">${name || ''}</span>
+                ${code ? `<code style="font-size:.7rem;background:var(--bg-card);padding:.1rem .35rem;border-radius:3px;color:var(--text-muted)">${code}</code>` : ''}
+                <span style="color:#22c55e">✓</span>
+            </div>`;
+        }).join('');
+    }
+}
+
+function onBiSectorChange(sel) {
+    const btn = document.getElementById('bi-submit-btn');
+    const lines = (document.getElementById('bi-lines')?.value || '').split('\n').map(l => l.trim()).filter(l => l);
+    if (btn) btn.disabled = !sel.value || !lines.length;
+}
+
+async function submitBulkImport() {
+    const sectorId = document.getElementById('bi-sector')?.value;
+    const deptType = document.getElementById('bi-type')?.value || 'division';
+    const rawLines = document.getElementById('bi-lines')?.value || '';
+    const lines = rawLines.split('\n').map(l => l.trim()).filter(l => l);
+    if (!sectorId) { showToast('يجب اختيار القطاع', 'error'); return; }
+    if (!lines.length) { showToast('أدخل أسماء الأقسام', 'error'); return; }
+
+    const btn = document.getElementById('bi-submit-btn');
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ جارٍ الإدراج...'; }
+
+    let ok = 0, fail = 0, errs = [];
+    for (const line of lines) {
+        const [name, code = ''] = line.split('|').map(p => p.trim());
+        if (!name) continue;
+        try {
+            const res = await fetch('api/settings.php?action=add_division', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, code, dept_type: deptType, sector_id: sectorId, parent_id: sectorId }),
+            });
+            const data = await res.json();
+            if (data.success) ok++;
+            else { fail++; errs.push(`"${name}": ${data.message}`); }
+        } catch (e) { fail++; errs.push(`"${name}": خطأ`); }
+    }
+
+    if (!fail) {
+        showToast(`✅ تم إدراج ${ok} قسم بنجاح`, 'success');
+        closeModal();
+    } else {
+        showToast(`✅ ${ok} ناجح  ❌ ${fail} فشل`, fail > ok ? 'error' : 'warning');
+        if (errs.length) console.warn('أخطاء:', errs);
+    }
+    DivState.sectors = [];
+    await loadDivisionsSection();
+    if (typeof loadSettingsEmployees === 'function') loadSettingsEmployees();
+}
 
 // ── CSS شريط التبويبات العلوي لصفحة الإعدادات ────────────────
 (function injectSettingsTopbarStyles() {

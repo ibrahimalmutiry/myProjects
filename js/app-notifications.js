@@ -472,8 +472,10 @@ function renderNotificationsPage() {
 
     // ── تصنيف التنبيهات ──
     // تنبيهات خاصة: SLA/OLA + recipient_id محدد + التصعيدات
-    const PERSONAL_CATS = ['sla_warning', 'sla_breach', 'ola_breach', 'escalation', 'manual_escalation', 'direct'];
-    const isPersonal = n =>
+    const PERSONAL_CATS = [
+        'sla_warning', 'sla_breach', 'ola_breach', 'ola_warning',
+        'escalation', 'manual_escalation', 'direct'
+    ]; const isPersonal = n =>
         PERSONAL_CATS.includes(n.category) ||
         (n.recipient_id && String(n.recipient_id) !== '0');
 
@@ -945,7 +947,7 @@ function injectNotifPageStyles() {
     .np-dot    { width:8px;height:8px;border-radius:50%;background:var(--accent-orange);flex-shrink:0;margin-right:auto; }
     .np-desc   { font-size:.8rem;color:var(--text-secondary);margin-bottom:.4rem;line-height:1.5; }
     .np-meta   { display:flex;align-items:center;flex-wrap:wrap;gap:.4rem; }
-    .np-ref    { font-size:.75rem;font-weight:700;color:var(--accent-blue);font-family:monospace; }
+    .np-ref    { font-size:.75rem;font-weight:700;color:var(--accent-blue);font-family:var(--font-primary); }
     .np-emp    { font-size:.75rem;color:var(--text-muted); }
     .np-time   { font-size:.73rem;color:var(--text-muted);margin-right:auto; }
 
@@ -1156,13 +1158,13 @@ function renderNotifSettingsForm(cfg) {
                 <label class="form-label">Tenant ID (Directory ID)</label>
                 <input type="text" id="ms_tenant_id" class="form-input" value="${val('ms_tenant_id')}"
                     placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                    style="font-family:monospace;font-size:.85rem">
+                    style="font-family:var(--font-primary);font-size:.85rem">
             </div>
             <div class="form-group">
                 <label class="form-label">Client ID (Application ID)</label>
                 <input type="text" id="ms_client_id" class="form-input" value="${val('ms_client_id')}"
                     placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                    style="font-family:monospace;font-size:.85rem">
+                    style="font-family:var(--font-primary);font-size:.85rem">
             </div>
             <div class="form-group">
                 <label class="form-label">Client Secret</label>

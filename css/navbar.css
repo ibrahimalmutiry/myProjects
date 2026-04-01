@@ -321,7 +321,7 @@
 .user-number {
     color: var(--text-muted);
     font-size: 0.7rem;
-    font-family: 'Courier New', monospace;
+    font-family: var(--font-primary);
     line-height: 1.2;
 }
 

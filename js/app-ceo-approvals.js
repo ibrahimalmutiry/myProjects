@@ -739,7 +739,7 @@ function renderCeoListOnly() {
 //  تصدير PDF وأرشفة
 // ═══════════════════════════════════════════════════════════════
 
-// ── ختم SVG للـ PDF (يتجنب مشاكل RTL في html2pdf) ──────────────
+// ── ختم SVG للـ PDF ───────────────────────────────────────────
 function buildCeoStampSvg(settings) {
     const s = settings || CeoState.stampSettings || {};
     const color = s.stamp_color || '#1e40af';
@@ -901,11 +901,6 @@ function getCeoRdv2PrintCSS() {
 }
 
 async function exportCeoApprovalPdf(reservationId) {
-    if (typeof html2pdf === 'undefined') {
-        showToast('مكتبة PDF غير محمّلة', 'error');
-        return;
-    }
-
     let res = CeoState.currentRes;
     if (!res || res.id !== reservationId) {
         try { res = await fetchCeoReservationDetail(reservationId); if (res) CeoState.currentRes = res; } catch (e) { }
@@ -958,14 +953,10 @@ async function exportCeoApprovalPdf(reservationId) {
     const actionDotMap = { 'اعتماد': 'approve', 'مراجعة': 'review', 'توجيه': 'route', 'رفض': 'reject' };
 
     // ── بناء HTML الوثيقة بتصميم rdv2 ──
-    // لا نحتاج style هنا — PdfEngine.fromElement يبني wrapper مرئي خاص به
     const printEl = document.createElement('div');
     printEl.style.cssText = 'direction:rtl;width:794px;background:#fff;';
 
-    // نضع الـ CSS داخل العنصر نفسه حتى يراه html2canvas
-    const styleTag = `<style>${getCeoRdv2PrintCSS()}</style>`;
-
-    printEl.innerHTML = styleTag + `
+    printEl.innerHTML = `
     <div class="rdv2-shell">
       <div class="rdv2-doc">
 
@@ -1168,23 +1159,23 @@ async function exportCeoApprovalPdf(reservationId) {
     const fileName = `CEO_Approval_${res.reservation_number || res.id}_${Date.now()}.pdf`;
 
     try {
-        // PdfEngine.fromElement يقبل أي عنصر HTML حتى لو مو في الـ DOM
-        // يبني wrapper مرئي داخلياً → html2canvas يرسمه صح → PDF غير فارغ
-        await PdfEngine.fromElement(printEl, fileName, {
-            margin: [7, 8, 7, 8],
-            image: { type: 'jpeg', quality: 0.97 },
-        });
+        // PdfEngine.fromHTML يفتح نافذة طباعة نظيفة
+        const ok = PdfEngine.fromHTML(printEl.innerHTML, fileName, getCeoRdv2PrintCSS());
 
-        showToast('✅ تم تصدير وحفظ PDF بنجاح', 'success');
+        if (ok) {
+            showToast('✅ تم فتح نافذة الطباعة — احفظ كـ PDF', 'success');
 
-        await fetch('api/ceo_approvals_api.php?action=save_archive_path', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                reservation_id: reservationId,
-                file_path: `archive/ceo_approvals/${fileName}`,
-            }),
-        });
+            await fetch('api/ceo_approvals_api.php?action=save_archive_path', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    reservation_id: reservationId,
+                    file_path: `archive/ceo_approvals/${fileName}`,
+                }),
+            });
+        } else {
+            showToast('تعذّر فتح نافذة التحميل', 'error');
+        }
     } catch (e) {
         console.error('[CEO] PDF export:', e);
         showToast('تعذّر تصدير PDF', 'error');

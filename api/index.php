@@ -7,9 +7,17 @@
 // بدء الجلسة للوصول إلى بيانات المستخدم
 session_start();
 
-// تعطيل عرض الأخطاء في الإخراج (سيتم إرسالها كـ JSON)
-error_reporting(E_ALL);
-ini_set('display_errors', 0);
+set_error_handler(function($errno, $errstr, $errfile, $errline) {
+    ob_end_clean();
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode([
+        'success' => false,
+        'debug_error' => "[$errno] $errstr",
+        'file' => basename($errfile),
+        'line' => $errline
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
+});
 require_once dirname(__DIR__) . '/includes/permissions_functions.php';
 // معالج الأخطاء
 set_error_handler(function($severity, $message, $file, $line) {
@@ -823,18 +831,31 @@ try {
             if ($id <= 0) jsonResponse(['success' => false, 'message' => 'معرف غير صالح'], 400);
             jsonResponse(['success' => true, 'data' => checkTransactionSla($id)]);
             break;
-
-        // ─── تصعيد يدوي لمرحلة ───────────────────────────────────
         case 'sla_manual_escalate':
-            if ($method !== 'POST') jsonResponse(['success' => false, 'message' => 'طريقة غير صحيحة'], 405);
-            require_once __DIR__ . '/../includes/sla_functions.php';
-            $input = json_decode(file_get_contents('php://input'), true);
-            $txId  = (int)($input['transaction_id'] ?? 0);
-            $stage = $input['stage'] ?? '';
-            if ($txId <= 0 || empty($stage))
-                jsonResponse(['success' => false, 'error' => 'بيانات ناقصة'], 400);
-            $userId = (int)($_SESSION['user_id'] ?? 0);
-            jsonResponse(manualEscalateStage($txId, $stage, $userId));
+            if ($method !== 'POST')
+                jsonResponse(['success' => false, 'error' => 'طريقة غير صحيحة'], 405);
+
+            try {
+                require_once dirname(__DIR__) . '/includes/sla_functions.php';
+
+                $input = json_decode(file_get_contents('php://input'), true);
+                $txId  = (int)($input['transaction_id'] ?? 0);
+                $stage = trim($input['stage'] ?? '');
+
+                if ($txId <= 0 || empty($stage))
+                    jsonResponse(['success' => false, 'error' => 'بيانات ناقصة'], 400);
+
+                $userId = (int)($_SESSION['user_id'] ?? 0);
+                jsonResponse(manualEscalateStage($txId, $stage, $userId));
+
+            } catch (Throwable $e) {
+                jsonResponse([
+                    'success' => false,
+                    'error'   => $e->getMessage(),
+                    'line'    => $e->getLine(),
+                    'file'    => basename($e->getFile())
+                ], 500);
+            }
             break;
             // ─── جلب صلاحيات موظف ─────────────────────────────────────────
         case 'get_employee_permissions':

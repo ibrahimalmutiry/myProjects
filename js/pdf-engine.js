@@ -1,104 +1,116 @@
 /**
- * pdf-engine.js — محرك تصدير PDF
- * يستخدم html2canvas + jsPDF مباشرة (بدون html2pdf bundle)
+ * pdf-engine.js — محرك تصدير PDF الموحد
+ * الاستراتيجية: window.print() في نافذة معزولة نظيفة
+ * ✅ لا يعتمد على html2canvas — جودة أعلى، أسرع، RTL صحيح
+ * ✅ يعمل مع الوضع الداكن والفاتح
+ * ✅ يدعم الخطوط الخارجية (ينتظر تحميلها)
+ *
+ * API:
+ *   PdfEngine.print(elementId, filename, css?)    — من عنصر في الصفحة
+ *   PdfEngine.fromHTML(htmlString, filename, css?) — من HTML نص
+ *   PdfEngine.fromElement(el, filename, css?)      — من DOM element
+ *   PdfEngine.download(elementId, filename, css?)  — مرادف لـ print
+ *   PdfEngine.button(btnEl, elementId, filename)   — ربط زر بالتحميل
  */
 
 const PdfEngine = (() => {
 
-    async function _render(sourceEl, filename) {
-        const overlay = document.createElement('div');
-        overlay.style.cssText = 'position:fixed;inset:0;background:#fff;z-index:2147483646;display:flex;align-items:center;justify-content:center;';
-        overlay.innerHTML = `<div style="background:#fff;border-radius:12px;padding:1.5rem 2.5rem;box-shadow:0 4px 24px rgba(0,0,0,.15);text-align:center;font-family:sans-serif;direction:rtl;">
-            <div style="font-size:2rem;margin-bottom:.4rem">📄</div>
-            <div style="font-weight:600;color:#1e293b;font-size:.95rem">جاري تصدير PDF...</div>
-        </div>`;
+    // ── CSS الأساسي المشترك لجميع الوثائق ───────────────────
+    const BASE_CSS = `
+        @page { size: A4 portrait; margin: 8mm 10mm; }
+        *, *::before, *::after {
+            box-sizing: border-box;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+        }
+        html, body {
+            margin: 0; padding: 0;
+            background: #fff !important;
+            direction: rtl;
+            font-family: Tahoma, 'Segoe UI', Arial, sans-serif;
+            font-size: 11px;
+            color: #1e293b;
+        }
+        .no-print,
+        .dp-order-controls,
+        .rdv2-toolbar,
+        .ceo-pdf-btn,
+        .arch-viewer-hdr button,
+        [data-no-print] { display: none !important; }
+        .print-only { display: block !important; }
+        table { border-collapse: collapse; width: 100%; }
+        th { background: #1e3a5f !important; color: #fff !important; }
+        tr, .no-break { page-break-inside: avoid; }
+        a { text-decoration: none; color: inherit; }
+    `;
 
-        const wrapper = document.createElement('div');
-        wrapper.style.cssText = 'direction:rtl;unicode-bidi:embed;position:fixed;top:0;left:0;width:794px;min-height:10px;background:#fff;direction:rtl;z-index:2147483645;overflow:visible;max-height:none;padding:0;margin:0;';
-        wrapper.innerHTML = sourceEl.innerHTML || '';
+    // ── فتح نافذة طباعة نظيفة ────────────────────────────────
+    function _openPrintWindow(htmlContent, filename, extraCSS) {
+        var win = window.open('', '_blank', 'width=900,height=700,scrollbars=yes');
+        if (!win) {
+            alert('يرجى السماح بالنوافذ المنبثقة لهذا الموقع لتتمكن من تحميل PDF');
+            return false;
+        }
 
-        wrapper.querySelectorAll('.no-print').forEach(e => e.style.setProperty('display', 'none', 'important'));
+        var title = (filename || 'وثيقة').replace(/\.pdf$/i, '').replace(/[-_]/g, ' ');
 
-        document.body.appendChild(overlay);
-        document.body.appendChild(wrapper);
-        await new Promise(r => setTimeout(r, 600));
+        win.document.write('<!DOCTYPE html>\n<html dir="rtl" lang="ar">\n<head>\n<meta charset="utf-8">\n<title>' + title + '</title>\n<style>\n' + BASE_CSS + '\n' + (extraCSS || '') + '\n</style>\n</head>\n<body>\n' + htmlContent + '\n<script>\nfunction _doPrint(){\nif(document.fonts&&document.fonts.ready){\ndocument.fonts.ready.then(function(){setTimeout(function(){window.print();},350);});\n}else{\nsetTimeout(function(){window.print();},700);\n}\n}\nif(document.readyState==="loading"){\ndocument.addEventListener("DOMContentLoaded",_doPrint);\n}else{\n_doPrint();\n}\n<\/script>\n</body>\n</html>');
+        win.document.close();
+        return true;
+    }
 
-        try {
-            const canvas = await html2canvas(wrapper, {
-                scale: 2,
-                useCORS: true,
-                allowTaint: false,
-                backgroundColor: '#ffffff',
-                scrollX: 0,
-                scrollY: 0,
-                windowWidth: 794,
-                width: wrapper.scrollWidth,
-                height: wrapper.scrollHeight,
-            });
-
-            const imgData = canvas.toDataURL('image/jpeg', 0.97);
-            const pdfW = 210, pdfH = 297;
-            const imgW = pdfW;
-            const imgH = (canvas.height / canvas.width) * imgW;
-
-            const { jsPDF } = window.jspdf;
-            const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
-
-            let yPos = 0, remaining = imgH;
-            while (remaining > 0) {
-                const pageH = Math.min(pdfH, remaining);
-                const srcY = (yPos / imgH) * canvas.height;
-                const srcH = (pageH / imgH) * canvas.height;
-
-                const pc = document.createElement('canvas');
-                pc.width = canvas.width; pc.height = srcH;
-                pc.getContext('2d').drawImage(canvas, 0, srcY, canvas.width, srcH, 0, 0, canvas.width, srcH);
-
-                if (yPos > 0) doc.addPage();
-                doc.addImage(pc.toDataURL('image/jpeg', 0.97), 'JPEG', 0, 0, imgW, pageH);
-                yPos += pageH; remaining -= pageH;
-            }
-
-            doc.save(filename || 'document.pdf');
-        } finally {
-            if (document.body.contains(wrapper)) document.body.removeChild(wrapper);
-            if (document.body.contains(overlay)) document.body.removeChild(overlay);
+    // ── إدارة حالة الزر ──────────────────────────────────────
+    function _btnState(btn, state, origHTML) {
+        if (!btn) return;
+        var labels = {
+            loading: '⏳ جاري التحضير...',
+            success: '✅ تم فتح نافذة الطباعة',
+            error: '❌ فشل — حاول مجدداً'
+        };
+        btn.disabled = (state === 'loading');
+        if (labels[state]) btn.innerHTML = labels[state];
+        if (state === 'success' || state === 'error') {
+            setTimeout(function () { btn.innerHTML = origHTML; btn.disabled = false; }, 2500);
         }
     }
 
-    async function fromElement(el, filename) {
-        if (typeof html2canvas === 'undefined') { console.error('[PdfEngine] html2canvas غير محمّل'); return; }
-        if (typeof window.jspdf === 'undefined') { console.error('[PdfEngine] jsPDF غير محمّل'); return; }
-        await _render(el, filename);
+    // ════════════════════════════════════════════════════════
+    //  API العامة
+    // ════════════════════════════════════════════════════════
+
+    function print(elementId, filename, extraCSS) {
+        var el = document.getElementById(elementId);
+        if (!el) {
+            console.error('[PdfEngine] العنصر "' + elementId + '" غير موجود');
+            return false;
+        }
+        return fromElement(el, filename, extraCSS);
     }
 
-    async function download(elementId, filename) {
-        const el = document.getElementById(elementId);
-        if (!el) { console.error('[PdfEngine] element not found:', elementId); return; }
-        await fromElement(el, filename);
+    function fromElement(el, filename, extraCSS) {
+        if (!el) { console.error('[PdfEngine] el is null'); return false; }
+        return fromHTML(el.innerHTML || '', filename, extraCSS);
     }
 
-    async function button(btnEl, elementId, filename) {
+    function fromHTML(htmlString, filename, extraCSS) {
+        return _openPrintWindow(htmlString, filename || 'وثيقة.pdf', extraCSS || '');
+    }
+
+    var download = print;
+
+    function button(btnEl, elementId, filename, extraCSS) {
         if (!btnEl) return;
-        const orig = btnEl.innerHTML;
-        btnEl.disabled = true; btnEl.innerHTML = '⏳ جاري التحضير...';
-        try { await download(elementId, filename); }
-        finally { btnEl.disabled = false; btnEl.innerHTML = orig; }
+        var origHTML = btnEl.innerHTML;
+        _btnState(btnEl, 'loading', origHTML);
+        var ok = print(elementId, filename, extraCSS);
+        _btnState(btnEl, ok ? 'success' : 'error', origHTML);
     }
 
-    function print(elementId, title, extraCSS) {
-        const el = document.getElementById(elementId);
-        if (!el) { console.error('[PdfEngine] element not found:', elementId); return; }
-        const win = window.open('', '_blank', 'width=900,height=700');
-        win.document.write(`<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><title>${title || 'وثيقة'}</title>
-<style>@page{size:A4 portrait;margin:7mm 8mm;}body{margin:0;direction:rtl;background:#fff;font-family:sans-serif;}.no-print{display:none!important;}${extraCSS || ''}</style>
-</head><body>${el.innerHTML}<script>window.onload=function(){setTimeout(function(){window.print();},700);}<\/script></body></html>`);
-        win.document.close();
-    }
+    return { print: print, download: download, fromElement: fromElement, fromHTML: fromHTML, button: button };
 
-    return { fromElement, download, button, print };
 })();
 
-async function downloadAsPDF(elementId, filename) {
-    await PdfEngine.download(elementId, filename);
+// ── توافق مع الكود القديم ─────────────────────────────────────
+async function downloadAsPDF(elementId, filename, extraCSS) {
+    return PdfEngine.print(elementId, filename, extraCSS);
 }

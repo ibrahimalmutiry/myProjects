@@ -70,7 +70,7 @@ if (empty($empNumber)) {
     }
 
     body {
-        font-family: 'Noto Sans Arabic', sans-serif;
+        font-family:var(--font-primary);
         background: var(--bg-primary);
         color: var(--text-primary);
         min-height: 100vh;
@@ -276,7 +276,7 @@ if (empty($empNumber)) {
 
     .emp-info .emp-number {
         color: var(--accent-blue);
-        font-family: monospace;
+        font-family:var(--font-primary);
         font-size: 0.9rem;
     }
 

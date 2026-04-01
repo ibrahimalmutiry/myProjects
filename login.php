@@ -63,7 +63,7 @@ if (isset($_SESSION['user_id'])) {
     }
 
     body {
-        font-family: 'Noto Sans Arabic', sans-serif;
+        font-family:var(--font-primary);
         background: var(--bg-primary);
         color: var(--text-primary);
         min-height: 100vh;

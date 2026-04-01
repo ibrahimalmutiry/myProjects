@@ -8,133 +8,275 @@
 // ========== قسم الموظفين ==========
 async function loadSettingsEmployees() {
     try {
+        // الموظفون
         var res = await fetch('api/?action=employees');
         var data = await res.json();
-        if (data.success) {
-            SettingsData.employees = data.data;
-        }
-        // جلب الأقسام من API الحجوزات
-        var dRes = await fetch('api/budget.php?action=meta');
+        if (data.success) SettingsData.employees = data.data;
+
+        // الأقسام (قطاعات + أقسام تنظيمية)
+        var dRes = await fetch('api/settings.php?action=get_departments');
         var dData = await dRes.json();
-        if (dData.success && dData.data.departments) {
-            SettingsData.departments = dData.data.departments;
+        if (dData.success && dData.data) {
+            var all = dData.data;
+            SettingsData.sectors = all.filter(function (d) { return !d.parent_id || d.dept_type === 'sector'; });
+            SettingsData.divisions = all.filter(function (d) { return d.parent_id || d.dept_type === 'division' || d.dept_type === 'team'; });
+            SettingsData.departments = all; // كل الأقسام للتوافق
+        } else {
+            // fallback
+            var fRes = await fetch('api/budget.php?action=meta');
+            var fData = await fRes.json();
+            if (fData.success && fData.data && fData.data.departments) {
+                SettingsData.departments = fData.data.departments;
+                SettingsData.sectors = fData.data.departments;
+                SettingsData.divisions = [];
+            }
         }
+
+        // مستويات الصلاحية
+        await loadPermissionLevels();
+
     } catch (e) {
-        console.error(e);
+        console.error('loadSettingsEmployees:', e);
     }
 }
 
+// ── مستويات الصلاحية الديناميكية ─────────────────────────────
+var PERM_LEVELS_CACHE = [];
+
+async function loadPermissionLevels() {
+    try {
+        var res = await fetch('api/settings.php?action=get_permission_levels');
+        var data = await res.json();
+        if (data.success && data.data && data.data.length) {
+            PERM_LEVELS_CACHE = data.data;
+        }
+    } catch (e) { /* تُستخدم القيم الثابتة */ }
+    if (!PERM_LEVELS_CACHE.length) {
+        PERM_LEVELS_CACHE = [
+            { code: 'system_admin', label: 'مدير النظام', description: 'صلاحية كاملة', color: '#ef4444' },
+            { code: 'sector_head', label: 'رئيس القطاع', description: 'يرى قطاعه كاملاً', color: '#8b5cf6' },
+            { code: 'division_manager', label: 'مدير القسم', description: 'يرى قسمه', color: '#3b82f6' },
+            { code: 'employee_l1', label: 'موظف مستوى أول', description: 'وصول موسع', color: '#f59e0b' },
+            { code: 'employee', label: 'موظف', description: 'وصول محدود', color: '#22c55e' },
+        ];
+    }
+}
+
+
+/* تعريف أدوار النظام الثابتة مع ألوانها ومسمياتها */
+const SYSTEM_ROLES = [
+    { value: 'admin', label: 'مدير النظام', label_en: 'System Admin', color: '#ef4444', desc: 'صلاحية كاملة على النظام' },
+    { value: 'CEO', label: 'الرئيس التنفيذي', label_en: 'CEO', color: '#8b5cf6', desc: 'اعتماد الطلبات الكبيرة' },
+    { value: 'receiver', label: 'الاستلام', label_en: 'Receiver', color: '#3b82f6', desc: 'استلام المعاملات وتصنيفها' },
+    { value: 'budget', label: 'الموازنة', label_en: 'Budget', color: '#f59e0b', desc: 'مراجعة واعتماد الموازنة' },
+    { value: 'dispatch', label: 'التوجيه', label_en: 'Dispatcher', color: '#10b981', desc: 'توجيه المعاملات' },
+    { value: 'payment', label: 'المالية — الدفع', label_en: 'Payment', color: '#06b6d4', desc: 'تنفيذ المدفوعات' },
+    { value: 'invoice', label: 'الفوترة', label_en: 'Invoice', color: '#6366f1', desc: 'إصدار الفواتير' },
+    { value: 'employee', label: 'موظف', label_en: 'Employee', color: '#94a3b8', desc: 'موظف عادي بدون دور نظامي' },
+];
+
 function renderEmployeesSection() {
-    var content = document.getElementById('settingsContent');
+    var cont = document.getElementById('settingsContent');
 
-    var html = '<div class="settings-section-header">';
-    html += '<h2>إدارة الموظفين</h2>';
-    html += '<button class="btn btn-primary" onclick="openAddEmployeeModal()">';
-    html += '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>';
-    html += ' إضافة موظف';
-    html += '</button>';
-    html += '</div>';
+    var filtered = SettingsData.employees || [];
+    var cf = SettingsData.currentFilter || 'all';
+    if (cf !== 'all') filtered = filtered.filter(function (e) { return e.role === cf; });
 
-    // فلتر الأقسام
-    html += '<div class="filter-tabs">';
-    html += '<button class="filter-tab ' + (SettingsData.currentFilter === 'all' ? 'active' : '') + '" onclick="filterEmployees(\'all\', this)">الكل</button>';
-    html += '<button class="filter-tab ' + (SettingsData.currentFilter === 'CEO' ? 'active' : '') + '" onclick="filterEmployees(\'CEO\', this)">الرئيس التنفيذي</button>';
-    html += '<button class="filter-tab ' + (SettingsData.currentFilter === 'admin' ? 'active' : '') + '" onclick="filterEmployees(\'admin\', this)">المديرين</button>';
-    html += '<button class="filter-tab ' + (SettingsData.currentFilter === 'receiver' ? 'active' : '') + '" onclick="filterEmployees(\'receiver\', this)">الاستلام</button>';
-    html += '<button class="filter-tab ' + (SettingsData.currentFilter === 'budget' ? 'active' : '') + '" onclick="filterEmployees(\'budget\', this)">الموازنة</button>';
-    html += '<button class="filter-tab ' + (SettingsData.currentFilter === 'payment' ? 'active' : '') + '" onclick="filterEmployees(\'payment\', this)">الدفع</button>';
-    html += '<button class="filter-tab ' + (SettingsData.currentFilter === 'invoice' ? 'active' : '') + '" onclick="filterEmployees(\'invoice\', this)">الفوترة</button>';
-    html += '</div>';
+    var counts = {};
+    (SettingsData.employees || []).forEach(function (e) { counts[e.role] = (counts[e.role] || 0) + 1; });
+    var total = (SettingsData.employees || []).length;
 
-    // بطاقات الموظفين
-    html += '<div class="employees-grid">';
+    var filters = [{ key: 'all', label: 'الكل' }].concat(
+        (SYSTEM_ROLES || []).map(function (r) { return { key: r.value, label: r.label }; })
+    );
 
-    var filtered = SettingsData.employees;
-    if (SettingsData.currentFilter !== 'all') {
-        filtered = SettingsData.employees.filter(function (e) {
-            return e.role === SettingsData.currentFilter;
+    var filterHTML = filters.map(function (f) {
+        var cnt = f.key === 'all' ? total : (counts[f.key] || 0);
+        var active = cf === f.key ? 'active' : '';
+        return '<button class="emp-filter-btn ' + active + '" onclick="filterEmployees(\'' + f.key + '\', this)">' +
+            f.label + (cnt ? ' <span class="emp-filter-cnt">' + cnt + '</span>' : '') +
+            '</button>';
+    }).join('');
+
+    var rows = '';
+    if (!filtered.length) {
+        rows = '<tr><td colspan="9" style="text-align:center;padding:2.5rem;color:var(--text-muted)">لا يوجد موظفون في هذا التصنيف</td></tr>';
+    } else {
+        filtered.forEach(function (emp) {
+            var sectors = SettingsData.sectors || SettingsData.departments || [];
+            var divisions = SettingsData.divisions || [];
+            var all = SettingsData.departments || [];
+
+            var sectorId = emp.sector_id || emp.department_id;
+            var divisionId = emp.division_id;
+
+            var sector = sectors.find(function (s) { return s.id == sectorId; })
+                || all.find(function (d) { return d.id == sectorId; });
+            var division = divisions.find(function (d) { return d.id == divisionId; })
+                || all.find(function (d) { return d.id == divisionId; });
+
+            function biName(rec) {
+                if (!rec) return '—';
+                var ar = rec.name || '';
+                var en = rec.name_en || '';
+                if (ar && en && ar !== en) return ar + ' <span style="color:var(--text-muted);font-size:.7rem">' + en + '</span>';
+                return ar || en || '—';
+            }
+            var sectorName = biName(sector);
+            var divName = division ? biName(division) : '—';
+
+            var sup = emp.supervisor_id
+                ? (SettingsData.employees || []).find(function (e) { return e.id == emp.supervisor_id; })
+                : null;
+            var supName = sup ? sup.name : '<span style="color:var(--text-muted)">—</span>';
+
+            var permCode = emp.permission_level_code || emp.permission_level || 'employee';
+            var permLevel = (PERM_LEVELS_CACHE || []).find(function (p) { return p.code === permCode; });
+            var permLabel = permLevel ? permLevel.label : permCode;
+            var permColor = permLevel ? permLevel.color : '#6b7280';
+
+            var roleName = getRoleName(emp.role);
+            var roleColor = getRoleColor(emp.role);
+
+            var actionsHtml = '<div style="display:flex;gap:.3rem;justify-content:center">';
+            if (canDo('employee.permissions'))
+                actionsHtml += '<button class="emp-act-btn emp-act-perm" onclick="openPermissionsModal(' + emp.id + ',\'' + emp.name.replace(/'/g, "\\'") + '\')" title="الصلاحيات">🔒</button>';
+            if (canDo('employee.edit'))
+                actionsHtml += '<button class="emp-act-btn emp-act-edit" onclick="editEmployee(' + emp.id + ')" title="تعديل">✏️</button>';
+            if (canDo('employee.delete'))
+                actionsHtml += '<button class="emp-act-btn emp-act-del" onclick="deleteEmployee(' + emp.id + ',\'' + emp.name.replace(/'/g, "\\'") + '\')" title="حذف">🗑</button>';
+            actionsHtml += '</div>';
+
+            rows += '<tr class="emp-row">'
+                + '<td><div class="emp-name-cell">' + emp.name + '</div>' + (emp.job_title ? '<div class="emp-job-title">' + emp.job_title + '</div>' : '') + '</td>'
+                + '<td><span class="emp-num-badge">' + emp.employee_number + '</span></td>'
+                + '<td><span class="emp-role-badge" style="background:' + roleColor + '18;color:' + roleColor + '">' + roleName + '</span></td>'
+                + '<td><span class="emp-perm-badge" style="background:' + permColor + '18;color:' + permColor + '">' + permLabel + '</span></td>'
+                + '<td><div class="emp-contact-cell"><span>' + (emp.email || '—') + '</span>'
+                + '<span style="color:var(--text-muted)">' + (emp.phone || '—') + '</span></div></td>'
+                + '<td><div class="emp-dept-cell"><span class="emp-sector-tag">' + sectorName + '</span>'
+                + (divisionId && divName !== '—' ? '<span class="emp-div-tag">' + divName + '</span>' : '')
+                + '</div></td>'
+                + '<td class="emp-sup-cell">' + supName + '</td>'
+                + '<td><span class="emp-status" style="' + (emp.is_active != '0' ? 'background:#dcfce7;color:#16a34a' : 'background:#fee2e2;color:#dc2626') + '">' + (emp.is_active != '0' ? 'نشط' : 'موقوف') + '</span></td>'
+                + '<td>' + actionsHtml + '</td>'
+                + '</tr>';
         });
     }
 
-    if (filtered.length === 0) {
-        html += '<div class="empty-state">لا يوجد موظفين</div>';
-    } else {
-        for (var i = 0; i < filtered.length; i++) {
-            var emp = filtered[i];
-            // جلب اسم المشرف
-            var supervisorName = '';
-            if (emp.supervisor_id) {
-                var sup = SettingsData.employees.find(function (e) { return e.id == emp.supervisor_id; });
-                supervisorName = sup ? sup.name : '';
-            }
+    cont.innerHTML =
+        '<div class="emp-page">'
+        + '<div class="emp-page-header">'
+        + '<div><h2 class="emp-page-title">👥 إدارة الموظفين</h2>'
+        + '<p class="emp-page-sub">' + total + ' موظف مسجل</p></div>'
+        + '<div style="display:flex;gap:.5rem;align-items:center">'
+        + '<input type="text" id="emp-search" class="emp-search" placeholder="🔍 بحث بالاسم أو الرقم..." oninput="empTableSearch(this.value)">'
+        + '<button class="btn btn-primary" onclick="openAddEmployeeModal()">'
+        + '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>'
+        + ' إضافة موظف</button>'
+        + '</div></div>'
+        + '<div class="emp-filters">' + filterHTML + '</div>'
+        + '<div class="emp-table-wrap">'
+        + '<table class="emp-table" id="emp-table">'
+        + '<thead><tr>'
+        + '<th>الاسم</th>'
+        + '<th>رقم الموظف</th>'
+        + '<th>الدور</th>'
+        + '<th>مستوى الصلاحية</th>'
+        + '<th>التواصل</th>'
+        + '<th>القطاع / القسم</th>'
+        + '<th>المشرف</th>'
+        + '<th>الحالة</th>'
+        + '<th style="text-align:center">إجراءات</th>'
+        + '</tr></thead>'
+        + '<tbody id="emp-tbody">' + rows + '</tbody>'
+        + '</table></div>'
+        + '</div>'
+        + '<style>'
+        + '.emp-page{display:flex;flex-direction:column;gap:1rem;padding:var(--pr-gap,1.25rem);animation:prFadeIn .3s ease}'
+        + '.emp-page-header{display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:.75rem}'
+        + '.emp-page-title{margin:0;font-size:1.2rem;font-weight:700;color:var(--text-primary)}'
+        + '.emp-page-sub{margin:.2rem 0 0;font-size:.8rem;color:var(--text-muted)}'
+        + '.emp-search{padding:.5rem .85rem;border:1px solid var(--border-color);border-radius:7px;background:var(--bg-card);color:var(--text-primary);font-size:.85rem;width:220px;transition:border-color .2s}'
+        + '.emp-search:focus{outline:none;border-color:var(--primary,#3b82f6);box-shadow:0 0 0 3px rgba(59,130,246,.12)}'
+        + '.emp-filters{display:flex;flex-wrap:wrap;gap:.4rem}'
+        + '.emp-filter-btn{padding:.35rem .8rem;border:1px solid var(--border-color);border-radius:99px;background:var(--bg-card);color:var(--text-secondary);font-size:.8rem;cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:.3rem}'
+        + '.emp-filter-btn:hover{border-color:var(--primary,#3b82f6);color:var(--primary,#3b82f6)}'
+        + '.emp-filter-btn.active{background:var(--primary,#3b82f6);color:#fff;border-color:transparent}'
+        + '.emp-filter-cnt{background:rgba(255,255,255,.25);border-radius:99px;padding:0 .4rem;font-size:.72rem}'
+        + '.emp-filter-btn:not(.active) .emp-filter-cnt{background:var(--bg-secondary);color:var(--text-muted)}'
+        + '.emp-table-wrap{overflow-x:auto;border:1px solid var(--border-color);border-radius:10px;background:var(--bg-card);box-shadow:0 2px 12px rgba(0,0,0,.06)}'
+        + '.emp-table{width:100%;border-collapse:collapse;font-size:.855rem;direction:rtl}'
+        + '.emp-table thead tr{background:var(--bg-secondary)}'
+        + '.emp-table th{padding:.8rem 1rem;text-align:right;font-size:.75rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;border-bottom:1px solid var(--border-color)}'
+        + '.emp-row{border-bottom:1px solid var(--border-light,#f1f5f9);transition:background .15s;cursor:default}'
+        + '.emp-row:last-child{border-bottom:none}'
+        + '.emp-row:hover{background:var(--bg-hover,#f8fafc)}'
+        + '.emp-row td{padding:.75rem 1rem;vertical-align:middle}'
+        + '.emp-name-cell{font-weight:600;color:var(--text-primary);font-size:.88rem}'
+        + '.emp-job-title{font-size:.72rem;color:var(--text-muted);margin-top:.1rem}'
+        + '.emp-num-badge{display:inline-block;font-family:monospace;font-size:.82rem;font-weight:700;color:var(--primary,#3b82f6);background:rgba(59,130,246,.09);padding:.2rem .55rem;border-radius:5px}'
+        + '.emp-role-badge,.emp-perm-badge{display:inline-block;padding:.2rem .65rem;border-radius:99px;font-size:.75rem;font-weight:600;white-space:nowrap}'
+        + '.emp-contact-cell{display:flex;flex-direction:column;gap:.1rem;font-size:.8rem;color:var(--text-secondary)}'
+        + '.emp-dept-cell{display:flex;flex-direction:column;gap:.25rem}'
+        + '.emp-sector-tag{font-size:.78rem;font-weight:600;color:var(--text-primary)}'
+        + '.emp-div-tag{font-size:.72rem;color:var(--text-muted);padding:.1rem .4rem;background:var(--bg-secondary);border-radius:4px;width:fit-content}'
+        + '.emp-sup-cell{font-size:.82rem;color:var(--text-secondary)}'
+        + '.emp-status{display:inline-block;padding:.2rem .6rem;border-radius:99px;font-size:.72rem;font-weight:600}'
+        + '.emp-act-btn{width:30px;height:30px;border:1px solid var(--border-color);border-radius:6px;background:none;cursor:pointer;font-size:.9rem;display:inline-flex;align-items:center;justify-content:center;transition:all .15s}'
+        + '.emp-act-btn:hover{transform:scale(1.1)}'
+        + '.emp-act-perm:hover{background:#dbeafe;border-color:#3b82f6}'
+        + '.emp-act-edit:hover{background:#dcfce7;border-color:#22c55e}'
+        + '.emp-act-del:hover{background:#fee2e2;border-color:#ef4444}'
+        + '[data-theme="dark"] .emp-table-wrap,[data-theme="dark"] .emp-search{background:var(--bg-card,#1e293b);border-color:var(--border-color,#334155)}'
+        + '[data-theme="dark"] .emp-table thead tr{background:var(--bg-secondary,#0f172a)}'
+        + '[data-theme="dark"] .emp-row:hover{background:rgba(255,255,255,.04)}'
+        + '@media(max-width:768px){.emp-table th:nth-child(n+4),.emp-row td:nth-child(n+4){display:none}.emp-search{width:150px}}'
+        + '</style>';
+}
 
-            html += '<div class="employee-card">';
-            html += '<div class="employee-avatar">' + emp.employee_number + '</div>';
-            html += '<div class="employee-info">';
-            html += '<h4>' + emp.name + '</h4>';
-            html += '<span class="role-badge role-' + emp.role + '">' + getRoleName(emp.role) + '</span>';
-            html += '<p class="employee-contact">' + (emp.email || '—') + '</p>';
-            html += '<p class="employee-contact">' + (emp.phone || '—') + '</p>';
-            // عرض اسم القسم
-            if (emp.department_id) {
-                var dept = SettingsData.departments.find(function (d) { return d.id == emp.department_id; });
-                if (dept) {
-                    html += '<p class="employee-contact" style="color:var(--accent-purple);font-size:.8rem">🏢 ' + dept.name + '</p>';
-                }
-            }
-            if (supervisorName) {
-                html += '<p class="employee-contact" style="color:var(--accent-blue);font-size:.8rem">';
-                html += '👤 المشرف: ' + supervisorName;
-                html += '</p>';
-            } else {
-                html += '<p class="employee-contact" style="color:var(--text-muted);font-size:.78rem">';
-                html += '👤 المشرف: مدير النظام (افتراضي)';
-                html += '</p>';
-            }
-            html += '</div>';
-            html += '<div class="employee-actions">';
-            if (canDo('employee.permissions')) {
-                html += '<button class="btn-icon-sm perm-btn" onclick="openPermissionsModal(' + emp.id + ', \'' + emp.name + '\')" title="إدارة الصلاحيات" style="color:var(--accent-blue);border-color:var(--accent-blue)">';
-                html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>';
-                html += '</button>';
-            }
-            if (canDo('employee.edit')) {
-                html += '<button class="btn-icon-sm" onclick="editEmployee(' + emp.id + ')" title="تعديل"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg></button>';
-            }
-            if (canDo('employee.delete')) {
-                html += '<button class="btn-icon-sm btn-danger-icon" onclick="deleteEmployee(' + emp.id + ', \'' + emp.name + '\')" title="حذف"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>';
-            }
-            html += '</div>';
-            html += '</div>';
-        }
-    }
-
-    html += '</div>';
-    content.innerHTML = html;
+/** بحث مباشر في جدول الموظفين */
+function empTableSearch(q) {
+    var lower = q.toLowerCase();
+    var rows = document.querySelectorAll('#emp-tbody .emp-row');
+    rows.forEach(function (row) {
+        var txt = row.textContent.toLowerCase();
+        row.style.display = (!q || txt.includes(lower)) ? '' : 'none';
+    });
 }
 
 function getRoleName(role) {
-    var roles = {
-        'admin': 'مدير النظام',
-        'receiver': 'الاستلام',
-        'budget': 'الموازنة',
-        'payment': 'الدفع',
-        'invoice': 'الفوترة'
-    };
-    return roles[role] || role;
+    var r = (typeof SYSTEM_ROLES !== 'undefined' ? SYSTEM_ROLES : [])
+        .find(function (x) { return x.value === role; });
+    return r ? r.label : (role || '—');
+}
+function getRoleColor(role) {
+    var r = (typeof SYSTEM_ROLES !== 'undefined' ? SYSTEM_ROLES : [])
+        .find(function (x) { return x.value === role; });
+    return r ? r.color : '#94a3b8';
 }
 
 function filterEmployees(role, btn) {
     SettingsData.currentFilter = role;
-    document.querySelectorAll('.filter-tab').forEach(function (t) {
-        t.classList.remove('active');
-    });
-    btn.classList.add('active');
+    document.querySelectorAll('.emp-filter-btn').forEach(function (t) { t.classList.remove('active'); });
+    if (btn) btn.classList.add('active');
     renderEmployeesSection();
 }
 
 function _roleLabel(role) {
     return { admin: 'مدير', receiver: 'استلام', budget: 'موازنة', payment: 'دفع', invoice: 'فوترة' }[role] || role;
+}
+
+
+/** بناء خيارات الأدوار الوظيفية مع الوصف */
+function buildRoleOptions(selectedRole) {
+    return (SYSTEM_ROLES || []).map(function (r) {
+        var sel = selectedRole === r.value ? 'selected' : '';
+        return '<option value="' + r.value + '" ' + sel + '>'
+            + r.label
+            + (r.desc ? ' — ' + r.desc : '')
+            + '</option>';
+    }).join('');
 }
 
 function openAddEmployeeModal() {
@@ -143,22 +285,39 @@ function openAddEmployeeModal() {
         .map(e => `<option value="${e.id}">${e.name} (${_roleLabel(e.role)})</option>`)
         .join('');
 
-    const departmentOptions = (SettingsData.departments || [])
-        .map(d => `<option value="${d.id}">${d.name}</option>`)
-        .join('');
+    const sectors = SettingsData.sectors || [];
+    const divisions = SettingsData.divisions || [];
+    const sectorOpts = sectors.map(s => {
+        var lbl = s.name + (s.name_en && s.name_en !== s.name ? ' — ' + s.name_en : '');
+        return `<option value="${s.id}">${lbl}</option>`;
+    }).join('');
+    const divOpts = divisions.map(d => {
+        var label = d.name + (d.name_en && d.name_en !== d.name ? ' — ' + d.name_en : '');
+        return `<option value="${d.id}" data-sector="${d.sector_id || d.parent_id || ''}">${label}</option>`;
+    }).join('');
+    const permOpts = PERM_LEVELS_CACHE.map(p =>
+        `<option value="${p.code}">${p.label}</option>`
+    ).join('');
 
     DOM.modalTitle.textContent = 'إضافة موظف جديد';
     DOM.modalBody.innerHTML = `
         <form id="employeeForm" onsubmit="saveEmployee(event)">
             <input type="hidden" name="id" id="empId" value="">
-             <div class="form-group">
-                    <label class="form-label">رقم الموظف</label>
-                    <input type="text" class="form-input" name="empNumber" id="empNumber" required>
-                </div>
+            <div class="form-group">
+                <label class="form-label">رقم الموظف *</label>
+                <input type="text" class="form-input" name="empNumber" id="empNumber" required>
+            </div>
             <div class="modal-form-grid">
                 <div class="form-group">
-                    <label class="form-label">اسم الموظف</label>
+                    <label class="form-label">اسم الموظف *</label>
                     <input type="text" class="form-input" name="name" id="empName" required>
+                </div>
+                <div class="form-group" style="grid-column:1/-1">
+                    <label class="form-label">المسمى الوظيفي
+                        <span style="font-size:.72rem;color:var(--text-muted);font-weight:400">اختياري — يظهر في الملف الشخصي</span>
+                    </label>
+                    <input type="text" class="form-input" name="job_title" id="empJobTitle"
+                           placeholder="مثال: مدير الخزينة، مهندس صيانة، محاسب أول">
                 </div>
                 <div class="form-group">
                     <label class="form-label">البريد الإلكتروني</label>
@@ -169,49 +328,71 @@ function openAddEmployeeModal() {
                     <input type="text" class="form-input" name="phone" id="empPhone">
                 </div>
                 <div class="form-group">
-                    <label class="form-label">القسم / الدور</label>
+                    <label class="form-label">الدور الوظيفي في النظام *
+                        <span style="font-size:.72rem;color:var(--text-muted);font-weight:400">يحدد صلاحيات سير العمل</span>
+                    </label>
                     <select class="form-select" name="role" id="empRole" required>
-                        <option value="">اختر القسم</option>
-                        <option value="admin">مدير النظام</option>
-                        <option value="CEO">الرئيس التنفيذي</option>
-                        <option value="receiver">الاستلام</option>
-                        <option value="budget">الموازنة</option>
-                        <option value="payment">الدفع</option>
-                        <option value="invoice">الفوترة</option>
+                        <option value="">— اختر الدور —</option>
+                        ${buildRoleOptions('')}
                     </select>
                 </div>
             </div>
-            <div class="form-group" style="margin-top:.5rem">
-                <label class="form-label">
-                    🏢 القسم التنظيمي
-                    <span style="font-size:.78rem;color:var(--text-muted);font-weight:400">
-                        (يُحدد الحجوزات التي يستطيع الموظف رؤيتها)
-                    </span>
-                </label>
-                <select class="form-select" name="department_id" id="empDepartment">
-                    <option value="">— بدون قسم محدد —</option>
-                    ${departmentOptions}
+            <div class="form-group">
+                <label class="form-label">🔒 مستوى الصلاحية</label>
+                <select class="form-select" name="permission_level_code" id="empPermLevel">
+                    ${permOpts}
                 </select>
             </div>
-            <div class="form-group" style="margin-top:.5rem">
-                <label class="form-label">
-                    👤 المشرف المباشر
-                    <span style="font-size:.78rem;color:var(--text-muted);font-weight:400">
-                        (يُصعَّد إليه عند تجاوزOLA/SLA)
-                    </span>
+            <div class="form-group">
+                <label class="form-label">🏛️ القطاع
+                    <span style="font-size:.75rem;color:var(--text-muted);font-weight:400">(نطاق رؤية المعاملات)</span>
+                </label>
+                <select class="form-select" name="sector_id" id="empSector" onchange="onSectorChange(this)">
+                    <option value="">— بدون قطاع —</option>
+                    ${sectorOpts}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">🏢 القسم التنظيمي
+                    <span style="font-size:.75rem;color:var(--text-muted);font-weight:400">(الوحدة المباشرة داخل القطاع)</span>
+                </label>
+                <select class="form-select" name="division_id" id="empDivision">
+                    <option value="">— بدون قسم —</option>
+                    ${divOpts}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">👤 المشرف المباشر
+                    <span style="font-size:.75rem;color:var(--text-muted);font-weight:400">(يُصعَّد إليه عند تجاوز OLA/SLA)</span>
                 </label>
                 <select class="form-select" name="supervisor_id" id="empSupervisor">
-                    <option value="">— بدون مشرف (يُصعَّد لمدير النظام) —</option>
+                    <option value="">— بدون مشرف —</option>
                     ${supervisorOptions}
                 </select>
             </div>
-            <div class="modal-footer" style="padding: 0; border: none; margin-top: 1.5rem;">
+            <div class="modal-footer" style="padding:0;border:none;margin-top:1.5rem">
                 <button type="button" class="btn btn-secondary" onclick="closeModal()">إلغاء</button>
                 <button type="submit" class="btn btn-primary">حفظ</button>
             </div>
         </form>
     `;
     openModal();
+}
+
+/** فلترة الأقسام عند تغيير القطاع */
+function onSectorChange(sel) {
+    var sectorId = sel ? sel.value : '';
+    var divSel = document.getElementById('empDivision');
+    if (!divSel) return;
+    Array.from(divSel.options).forEach(function (opt) {
+        if (!opt.value) return;
+        opt.style.display = (!sectorId || opt.dataset.sector == sectorId) ? '' : 'none';
+    });
+    // إعادة تعيين الاختيار إن لم يكن منتمياً للقطاع
+    var cur = divSel.options[divSel.selectedIndex];
+    if (cur && cur.value && sectorId && cur.dataset.sector != sectorId) {
+        divSel.value = '';
+    }
 }
 
 function editEmployee(id) {
@@ -223,22 +404,44 @@ function editEmployee(id) {
         .map(e => `<option value="${e.id}" ${emp.supervisor_id == e.id ? 'selected' : ''}>${e.name} (${_roleLabel(e.role)})</option>`)
         .join('');
 
-    const departmentOptions = (SettingsData.departments || [])
-        .map(d => `<option value="${d.id}" ${emp.department_id == d.id ? 'selected' : ''}>${d.name}</option>`)
-        .join('');
+    const sectors = SettingsData.sectors || [];
+    const divisions = SettingsData.divisions || [];
+    const curSector = emp.sector_id || emp.department_id;
+
+    const sectorOptsEdit = sectors.map(s => {
+        var label = s.name + (s.name_en && s.name_en !== s.name ? ' — ' + s.name_en : '');
+        return `<option value="${s.id}" ${curSector == s.id ? 'selected' : ''}>${label}</option>`;
+    }).join('');
+    const divOptsEdit = divisions.map(d => {
+        var sid = d.sector_id || d.parent_id || '';
+        var hidden = (curSector && String(sid) !== String(curSector)) ? 'style="display:none"' : '';
+        var label = d.name + (d.name_en && d.name_en !== d.name ? ' — ' + d.name_en : '');
+        return `<option value="${d.id}" data-sector="${sid}" ${emp.division_id == d.id ? 'selected' : ''} ${hidden}>${label}</option>`;
+    }).join('');
+    const permOptsEdit = PERM_LEVELS_CACHE.map(p =>
+        `<option value="${p.code}" ${(emp.permission_level_code || emp.permission_level) == p.code ? 'selected' : ''}>${p.label}</option>`
+    ).join('');
 
     DOM.modalTitle.textContent = 'تعديل موظف';
     DOM.modalBody.innerHTML = `
         <form id="employeeForm" onsubmit="saveEmployee(event)">
-               <div class="form-group">
-                    <label class="form-label">رقم الموظف</label>
-                    <input type="text" class="form-input" name="employee_number" id="empNumber" value="${emp.employee_number}" required>
-                </div>
             <input type="hidden" name="id" id="empId" value="${emp.id}">
+            <div class="form-group">
+                <label class="form-label">رقم الموظف *</label>
+                <input type="text" class="form-input" name="employee_number" id="empNumber" value="${emp.employee_number}" required>
+            </div>
             <div class="modal-form-grid">
                 <div class="form-group">
-                    <label class="form-label">اسم الموظف</label>
+                    <label class="form-label">اسم الموظف *</label>
                     <input type="text" class="form-input" name="name" id="empName" value="${emp.name}" required>
+                </div>
+                <div class="form-group" style="grid-column:1/-1">
+                    <label class="form-label">المسمى الوظيفي
+                        <span style="font-size:.72rem;color:var(--text-muted);font-weight:400">اختياري — يظهر في الملف الشخصي</span>
+                    </label>
+                    <input type="text" class="form-input" name="job_title" id="empJobTitle"
+                           value="${emp.job_title || ''}"
+                           placeholder="مثال: مدير الخزينة، مهندس صيانة، محاسب أول">
                 </div>
                 <div class="form-group">
                     <label class="form-label">البريد الإلكتروني</label>
@@ -249,44 +452,51 @@ function editEmployee(id) {
                     <input type="text" class="form-input" name="phone" id="empPhone" value="${emp.phone || ''}">
                 </div>
                 <div class="form-group">
-                    <label class="form-label">القسم / الدور</label>
+                    <label class="form-label">الدور الوظيفي في النظام *
+                        <span style="font-size:.72rem;color:var(--text-muted);font-weight:400">يحدد صلاحيات سير العمل</span>
+                    </label>
                     <select class="form-select" name="role" id="empRole" required>
-                        <option value="admin" ${emp.role === 'admin' ? 'selected' : ''}>مدير النظام</option>
-                        <option value="CEO" ${emp.role === 'CEO' ? 'selected' : ''}>الرئيس التنفيذي</option>
-                        <option value="receiver" ${emp.role === 'receiver' ? 'selected' : ''}>الاستلام</option>
-                        <option value="budget" ${emp.role === 'budget' ? 'selected' : ''}>الموازنة</option>
-                        <option value="payment" ${emp.role === 'payment' ? 'selected' : ''}>الدفع</option>
-                        <option value="invoice" ${emp.role === 'invoice' ? 'selected' : ''}>الفوترة</option>
+                        <option value="">— اختر الدور —</option>
+                        ${buildRoleOptions(emp.role)}
                     </select>
                 </div>
             </div>
-            <div class="form-group" style="margin-top:.5rem">
-                <label class="form-label">
-                    🏢 القسم التنظيمي
-                    <span style="font-size:.78rem;color:var(--text-muted);font-weight:400">
-                        (يُحدد الحجوزات التي يستطيع الموظف رؤيتها)
-                    </span>
-                </label>
-                <select class="form-select" name="department_id" id="empDepartment">
-                    <option value="">— بدون قسم محدد —</option>
-                    ${departmentOptions}
+            <div class="form-group">
+                <label class="form-label">🔒 مستوى الصلاحية</label>
+                <select class="form-select" name="permission_level_code" id="empPermLevel">
+                    ${permOptsEdit}
                 </select>
             </div>
-            <div class="form-group" style="margin-top:.5rem">
-                <label class="form-label">
-                    👤 المشرف المباشر
-                    <span style="font-size:.78rem;color:var(--text-muted);font-weight:400">
-                        (يُصعَّد إليه عند تجاوزOLA/SLA)
-                    </span>
+            <div class="form-group">
+                <label class="form-label">🏛️ القطاع
+                    <span style="font-size:.75rem;color:var(--text-muted);font-weight:400">(نطاق رؤية المعاملات)</span>
+                </label>
+                <select class="form-select" name="sector_id" id="empSector" onchange="onSectorChange(this)">
+                    <option value="">— بدون قطاع —</option>
+                    ${sectorOptsEdit}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">🏢 القسم التنظيمي
+                    <span style="font-size:.75rem;color:var(--text-muted);font-weight:400">(الوحدة المباشرة داخل القطاع)</span>
+                </label>
+                <select class="form-select" name="division_id" id="empDivision">
+                    <option value="">— بدون قسم —</option>
+                    ${divOptsEdit}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">👤 المشرف المباشر
+                    <span style="font-size:.75rem;color:var(--text-muted);font-weight:400">(يُصعَّد إليه عند تجاوز OLA/SLA)</span>
                 </label>
                 <select class="form-select" name="supervisor_id" id="empSupervisor">
-                    <option value="">— بدون مشرف (يُصعَّد لمدير النظام) —</option>
+                    <option value="">— بدون مشرف —</option>
                     ${supervisorOptions}
                 </select>
             </div>
-            <div class="modal-footer" style="padding: 0; border: none; margin-top: 1.5rem;">
+            <div class="modal-footer" style="padding:0;border:none;margin-top:1.5rem">
                 <button type="button" class="btn btn-secondary" onclick="closeModal()">إلغاء</button>
-                <button type="submit" class="btn btn-primary">حفظ</button>
+                <button type="submit" class="btn btn-primary">💾 حفظ التعديلات</button>
             </div>
         </form>
     `;
@@ -296,18 +506,25 @@ function editEmployee(id) {
 async function saveEmployee(e) {
     e.preventDefault();
 
-    var id = document.getElementById('empId').value;
+    var id = document.getElementById('empId')?.value;
     var supervisorEl = document.getElementById('empSupervisor');
-    var departmentEl = document.getElementById('empDepartment');
+    var sectorEl = document.getElementById('empSector');
+    var divisionEl = document.getElementById('empDivision');
+    var permLevelEl = document.getElementById('empPermLevel');
     var empNumberEl = document.getElementById('empNumber');
     var data = {
         name: document.getElementById('empName').value,
         email: document.getElementById('empEmail').value,
         phone: document.getElementById('empPhone').value,
         role: document.getElementById('empRole').value,
+        job_title: document.getElementById('empJobTitle')?.value?.trim() || '',
         employee_number: empNumberEl ? empNumberEl.value.trim() : '',
         supervisor_id: supervisorEl ? (supervisorEl.value || null) : null,
-        department_id: departmentEl ? (departmentEl.value || null) : null
+        sector_id: sectorEl ? (sectorEl.value || null) : null,
+        division_id: divisionEl ? (divisionEl.value || null) : null,
+        permission_level_code: permLevelEl ? (permLevelEl.value || null) : null,
+        // department_id = sector_id للتوافق مع الكود القديم
+        department_id: sectorEl ? (sectorEl.value || null) : null,
     };
 
     if (id) data.id = id;
@@ -424,36 +641,70 @@ var ACTIONS_CONFIG = [
     { key: 'employee.edit', label: 'تعديل موظف', icon: '✏️', group: 'الموظفين' },
     { key: 'employee.delete', label: 'حذف موظف', icon: '🗑', group: 'الموظفين' },
     { key: 'employee.permissions', label: 'إدارة الصلاحيات', icon: '🔒', group: 'الموظفين' },
+    // طلبات الشراء — المعاملات
+    { key: 'pr.create', label: 'إنشاء طلب شراء', icon: '➕', group: 'طلبات الشراء' },
+    { key: 'pr.view_all', label: 'عرض كل الطلبات', icon: '👁', group: 'طلبات الشراء' },
+    { key: 'pr.view_own', label: 'عرض طلباتي فقط', icon: '📋', group: 'طلبات الشراء' },
+    { key: 'pr.approve', label: 'موافقة / رفض طلب', icon: '✅', group: 'طلبات الشراء' },
+    { key: 'pr.refer', label: 'إحالة طلب', icon: '🔀', group: 'طلبات الشراء' },
+    { key: 'pr.assign', label: 'إسناد داخلي', icon: '👤', group: 'طلبات الشراء' },
+    { key: 'pr.issue_po', label: 'إصدار أمر الشراء', icon: '📄', group: 'طلبات الشراء' },
+    { key: 'pr.budget_review', label: 'مراجعة الموازنة', icon: '💰', group: 'طلبات الشراء' },
+    { key: 'pr.delete', label: 'حذف طلب', icon: '🗑', group: 'طلبات الشراء' },
+    { key: 'pr.export', label: 'تصدير الطلبات', icon: '📤', group: 'طلبات الشراء' },
 ];
 
 var PAGES_CONFIG = [
+    // رئيسية
     { key: 'dashboard', label: 'لوحة التحكم', icon: '📊', group: 'رئيسية' },
     { key: 'notifications', label: 'التنبيهات', icon: '🔔', group: 'رئيسية' },
+    // المعاملات
+    { key: 'purchase-requests', label: 'طلبات الشراء (المعاملات)', icon: '📋', group: 'معاملات' },
     { key: 'transactions', label: 'المعاملات المالية', icon: '💰', group: 'معاملات' },
     { key: 'correspondence', label: 'الخطابات', icon: '📨', group: 'معاملات' },
+    // التخطيط المالي
     { key: 'reservations', label: 'حجوزات الموازنة', icon: '📅', group: 'التخطيط المالي' },
     { key: 'budget-plans', label: 'الموازنة التقديرية', icon: '📊', group: 'التخطيط المالي' },
+    // الخزينة
     { key: 'bank-overview', label: 'نظرة عامة (الخزينة)', icon: '🏦', group: 'الخزينة' },
     { key: 'bank-accounts', label: 'الحسابات البنكية', icon: '💳', group: 'الخزينة' },
     { key: 'bank-investments', label: 'الودائع الاستثمارية', icon: '📈', group: 'الخزينة' },
     { key: 'daily-payments', label: 'المدفوعات اليومية', icon: '💵', group: 'الخزينة' },
+    // الأرشيف
     { key: 'archive', label: 'الأرشيف المالي', icon: '🗂️', group: 'الأرشيف' },
+    // المتابعة
     { key: 'ceo-approvals', label: 'اعتمادات الرئيس التنفيذي', icon: '✅', group: 'المتابعة' },
     { key: 'sla', label: 'SLA / OLA', icon: '⏱', group: 'المتابعة' },
     { key: 'performance', label: 'متابعة الأداء', icon: '📈', group: 'المتابعة' },
+    // نظام
     { key: 'settings', label: 'الإعدادات', icon: '⚙️', group: 'نظام' },
 ];
 
-var PERMISSION_LEVELS = [
-    { value: 'system_admin', label: 'مدير النظام', desc: 'صلاحية كاملة على كل شيء بما فيها الحذف', color: 'var(--accent-red)' },
-    { value: 'manager', label: 'مدير', desc: 'وصول موسع للتقارير والمتابعة', color: 'var(--accent-blue)' },
-    { value: 'employee', label: 'موظف', desc: 'وصول محدود لصفحته الوظيفية', color: 'var(--accent-green)' },
-];
+// PERMISSION_LEVELS — getter ديناميكي يقرأ من PERM_LEVELS_CACHE دائماً
+Object.defineProperty(window, 'PERMISSION_LEVELS', {
+    get: function () { return PERM_LEVELS_CACHE; },
+    configurable: true
+});
 
 var DEFAULT_PAGES = {
-    system_admin: { dashboard: 1, notifications: 1, transactions: 1, correspondence: 1, reservations: 1, 'budget-plans': 1, 'bank-overview': 1, 'bank-accounts': 1, 'bank-investments': 1, 'daily-payments': 1, archive: 1, 'ceo-approvals': 1, sla: 1, performance: 1, settings: 1 },
-    manager: { dashboard: 1, notifications: 1, transactions: 1, correspondence: 1, reservations: 1, 'budget-plans': 1, 'bank-overview': 1, 'bank-accounts': 1, 'bank-investments': 1, 'daily-payments': 1, archive: 1, 'ceo-approvals': 1, sla: 1, performance: 1, settings: 0 },
-    employee: { dashboard: 0, notifications: 1, transactions: 1, correspondence: 1, reservations: 1, 'budget-plans': 0, 'bank-overview': 0, 'bank-accounts': 0, 'bank-investments': 0, 'daily-payments': 0, archive: 0, 'ceo-approvals': 0, sla: 0, performance: 0, settings: 0 },
+    system_admin: {
+        dashboard: 1, notifications: 1, 'purchase-requests': 1,
+        transactions: 1, correspondence: 1, reservations: 1, 'budget-plans': 1,
+        'bank-overview': 1, 'bank-accounts': 1, 'bank-investments': 1, 'daily-payments': 1,
+        archive: 1, 'ceo-approvals': 1, sla: 1, performance: 1, settings: 1,
+    },
+    manager: {
+        dashboard: 1, notifications: 1, 'purchase-requests': 1,
+        transactions: 1, correspondence: 1, reservations: 1, 'budget-plans': 1,
+        'bank-overview': 1, 'bank-accounts': 1, 'bank-investments': 1, 'daily-payments': 1,
+        archive: 1, 'ceo-approvals': 1, sla: 1, performance: 1, settings: 0,
+    },
+    employee: {
+        dashboard: 0, notifications: 1, 'purchase-requests': 1,
+        transactions: 1, correspondence: 1, reservations: 1, 'budget-plans': 0,
+        'bank-overview': 0, 'bank-accounts': 0, 'bank-investments': 0, 'daily-payments': 0,
+        archive: 0, 'ceo-approvals': 0, sla: 0, performance: 0, settings: 0,
+    },
 };
 
 /** فتح modal صلاحيات الموظف */
@@ -490,7 +741,7 @@ function renderPermissionsForm(empId, empName, perms) {
             '<div class="perm-level-dot" style="background:' + l.color + '"></div>' +
             '<div>' +
             '<div style="font-weight:700;font-size:.88rem">' + l.label + '</div>' +
-            '<div style="font-size:.76rem;color:var(--text-muted)">' + l.desc + '</div>' +
+            '<div style="font-size:.76rem;color:var(--text-muted)">' + (l.description || l.desc || '') + '</div>' +
             '</div>' +
             '</label>';
     }).join('');

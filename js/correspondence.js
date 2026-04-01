@@ -626,7 +626,7 @@ function displayEditCorrespondenceModal(corr, departments) {
 
     DOM.modalBody.innerHTML = `
         <div style="display:flex;align-items:center;gap:.75rem;padding:.875rem 1.25rem;background:var(--bg-surface);border:1px solid var(--border-color);border-radius:10px;margin-bottom:1.25rem;flex-wrap:wrap;">
-            <span style="display:inline-flex;align-items:center;gap:.4rem;background:rgba(74,171,247,.1);color:var(--accent-blue);padding:.35rem .75rem;border-radius:6px;font-size:.85rem;font-weight:700;font-family:monospace;">${corr.correspondence_number}</span>
+            <span style="display:inline-flex;align-items:center;gap:.4rem;background:rgba(74,171,247,.1);color:var(--accent-blue);padding:.35rem .75rem;border-radius:6px;font-size:.85rem;font-weight:700;font-family:var(--font-primary);">${corr.correspondence_number}</span>
             ${getCorrespondenceTypeBadge(corr.type)}
         </div>
         <form id="edit-corr-form" onsubmit="submitEditCorrespondence(event, ${corr.id})">

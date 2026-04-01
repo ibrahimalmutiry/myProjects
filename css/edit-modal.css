@@ -25,7 +25,7 @@
     font-weight: 700;
     color: var(--text-primary);
     letter-spacing: .5px;
-    font-family: monospace;
+    font-family: var(--font-primary);
 }
 
 .edit-tx-desc {
@@ -479,7 +479,7 @@
     color: var(--text-primary);
     font-size: .88rem;
     font-weight: 700;
-    font-family: monospace;
+    font-family: var(--font-primary);
     text-align: center;
     text-transform: uppercase;
     outline: none;

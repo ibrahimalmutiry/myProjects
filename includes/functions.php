@@ -2098,9 +2098,7 @@ function loadPermissionsForSession($userId) {
             $_SESSION['permission_level'] = 'employee';
             $_SESSION['can_delete'] = false;
         }
-        $allPages = ['dashboard','transactions','correspondence','bank-overview','bank-accounts','bank-investments','daily-payments','sla','performance','settings','notifications','reservations','budget-plans','archive','ceo-approvals'];
-        $_SESSION['page_permissions'] = array_fill_keys($allPages, ($_SESSION['permission_level'] === 'system_admin'));
-        return;
+        $allPages = ['dashboard','transactions','correspondence','bank-overview','bank-accounts','bank-investments','daily-payments','sla','performance','settings','notifications','reservations','budget-plans','archive','ceo-approvals','purchase-requests'];
     }
     
     $r = $conn->query("SELECT role, permission_level, can_delete FROM employees WHERE id=$userId LIMIT 1");
@@ -2115,7 +2113,7 @@ function loadPermissionsForSession($userId) {
     $_SESSION['permission_level'] = $row['permission_level'];
     $_SESSION['can_delete'] = (bool)$row['can_delete'];
     
-    $allPages = ['dashboard','transactions','correspondence','bank-overview','bank-accounts','bank-investments','daily-payments','sla','performance','settings','notifications','reservations','budget-plans','archive','ceo-approvals'];
+    $allPages = ['dashboard','transactions','correspondence','bank-overview','bank-accounts','bank-investments','daily-payments','sla','performance','settings','notifications','reservations','budget-plans','archive','ceo-approvals','purchase-requests'];
     
     if ($row['permission_level'] === 'system_admin') {
         $_SESSION['page_permissions']   = array_fill_keys($allPages, true);
@@ -2128,8 +2126,8 @@ function loadPermissionsForSession($userId) {
             if ($r2) while ($pr = $r2->fetch_assoc()) $stored[$pr['page']] = (bool)$pr['can_access'];
         }
         $defaults = [
-            'manager'  => ['dashboard'=>1,'transactions'=>1,'correspondence'=>1,'bank-deposits'=>1,'sla'=>1,'performance'=>1,'settings'=>0,'notifications'=>1,'reservations'=>1,'budget-plans'=>1],
-            'employee' => ['dashboard'=>0,'transactions'=>1,'correspondence'=>1,'bank-deposits'=>1,'sla'=>0,'performance'=>0,'settings'=>0,'notifications'=>1,'reservations'=>1,'budget-plans'=>0],
+            'manager'  => ['dashboard'=>1,'transactions'=>1,'correspondence'=>1,'bank-deposits'=>1,'sla'=>1,'performance'=>1,'settings'=>0,'notifications'=>1,'reservations'=>1,'budget-plans'=>1,'purchase-requests'=>1],
+            'employee' => ['dashboard'=>0,'transactions'=>1,'correspondence'=>1,'bank-deposits'=>1,'sla'=>0,'performance'=>0,'settings'=>0,'notifications'=>1,'reservations'=>1,'budget-plans'=>0,'purchase-requests'=>1],
         ];
         $def = $defaults[$row['permission_level']] ?? [];
         $pagePerms = [];
@@ -2147,4 +2145,11 @@ function loadPermissionsForSession($userId) {
         $_SESSION['action_permissions'] = $actionPerms;
     }
 }
+
+// ── نظام المعاملات (طلبات الشراء) ──────────────────────────
+$_prFunctionsPath = __DIR__ . '/pr_functions.php';
+if (file_exists($_prFunctionsPath)) {
+    require_once $_prFunctionsPath;
+}
+
 } // end function_exists

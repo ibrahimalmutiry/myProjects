@@ -70,7 +70,7 @@
     align-items: center;
     gap: 0.75rem;
     flex-wrap: wrap;
-    font-family: 'Courier New', monospace;
+    font-family: var(--font-primary);
     font-size: 1rem;
     color: var(--text-secondary);
 }

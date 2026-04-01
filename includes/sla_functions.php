@@ -598,7 +598,7 @@ function getTransactionSlaStatus($transactionId) {
                 if ($eRes && $eRes->num_rows) $empName = $eRes->fetch_assoc()['name'];
             }
 
-            $pct = $allowedMin > 0 ? round(($olaMin / $allowedMin) * 100, 1) : 0;
+$pct = $allowedMin > 0 ? min(9999.99, round($olaMin / $allowedMin * 100, 1)) : 0;
 
             $totalElapsed += $olaMin;
 
@@ -982,12 +982,12 @@ function runSlaBatchCheckFull() {
 // ═══════════════════════════════════════════════════════════════
 
 function manualEscalateStage($transactionId, $stage, $requesterId) {
-    $conn  = db();
-    $txId  = (int)$transactionId;
-    $stg   = $conn->real_escape_string($stage);
-    $now   = date('Y-m-d H:i:s');
+    $conn = db();
+    $txId = (int)$transactionId;
+    $stg  = $conn->real_escape_string($stage);
+    $now  = date('Y-m-d H:i:s');
 
-    // ── 1. جلب بيانات stage_times ────────────────────────────
+    // ── 1. جلب بيانات المرحلة ────────────────────────────────
     $st = $conn->query("SELECT * FROM stage_times
                         WHERE transaction_id=$txId AND stage='$stg'
                         LIMIT 1");
@@ -996,42 +996,43 @@ function manualEscalateStage($transactionId, $stage, $requesterId) {
 
     $row = $st->fetch_assoc();
 
-    // ── 2. مُصعَّد مسبقاً؟ منع التكرار ──────────────────────
+    // ── 2. منع التكرار ───────────────────────────────────────
     if (!empty($row['escalated_at']))
         return ['success' => false, 'error' => 'تم التصعيد مسبقاً'];
 
-    // ── 3. تسجيل escalated_at ────────────────────────────────
-    $conn->query("UPDATE stage_times SET escalated_at='$now'
-                  WHERE transaction_id=$txId AND stage='$stg'
-                  AND escalated_at IS NULL");
+    // ── 3. جلب بيانات المعاملة ───────────────────────────────
+    $txRes = $conn->query("SELECT transaction_number, type_id, sub_type_id
+                           FROM transactions WHERE id=$txId LIMIT 1");
+    if (!$txRes || $txRes->num_rows === 0)
+        return ['success' => false, 'error' => 'المعاملة غير موجودة'];
 
+    $tx    = $txRes->fetch_assoc();
+    $txNum = $tx['transaction_number'] ?? '';
+
+    // ── 4. تحديد المشرف ──────────────────────────────────────
     $empId       = (int)($row['employee_id'] ?? 0);
     $supervisorId = _getSupervisor($conn, $empId);
 
-    // جلب بيانات المعاملة للإشعار
-    $txRes = $conn->query("SELECT transaction_number FROM transactions WHERE id=$txId LIMIT 1");
-    $txNum = $txRes ? ($txRes->fetch_assoc()['transaction_number'] ?? '') : '';
+    // جلب اسم المشرف
+    $supervisorName = 'غير محدد';
+    if ($supervisorId) {
+        $supRes = $conn->query("SELECT name FROM employees WHERE id=$supervisorId LIMIT 1");
+        if ($supRes && $supRes->num_rows > 0)
+            $supervisorName = $supRes->fetch_assoc()['name'] ?? 'غير محدد';
+    }
 
-    $olaRule    = null;
-    $policy     = null;
-    $txTypeRes  = $conn->query("SELECT type_id, sub_type_id FROM transactions WHERE id=$txId LIMIT 1");
-    if ($txTypeRes) {
-        $txRow2  = $txTypeRes->fetch_assoc();
-        $typeId  = (int)($txRow2['type_id'] ?? 0);
-        $subId2  = (int)($txRow2['sub_type_id'] ?? 0);
-        $policy  = getSlaPolicy($typeId, $subId2 ?: null);
-        if ($policy) {
-            $rules  = getOlaRules($policy['id']);
-            $olaRule = $rules[$stage] ?? null;
-        }
+    // ── 5. حساب الوقت والنسبة ────────────────────────────────
+    $policy  = getSlaPolicy((int)$tx['type_id'], (int)($tx['sub_type_id'] ?? 0) ?: null);
+    $olaRule = null;
+    if ($policy) {
+        $rules   = getOlaRules($policy['id']);
+        $olaRule = $rules[$stage] ?? null;
     }
 
     $allowedMin = $olaRule ? (float)$olaRule['allowed_hours'] * 60 : 0;
     $receivedAt = $row['received_at'] ?? $row['started_at'] ?? $now;
-    $elapsedMin = $receivedAt
-        ? (int)round((strtotime($now) - strtotime($receivedAt)) / 60)
-        : 0;
-    $pct = $allowedMin > 0 ? round($elapsedMin / $allowedMin * 100, 1) : 0;
+    $elapsedMin = (int)round((strtotime($now) - strtotime($receivedAt)) / 60);
+    $pct        = $allowedMin > 0 ? round($elapsedMin / $allowedMin * 100, 1) : 0;
 
     $stageLabels = [
         'receiving' => 'الاستلام',
@@ -1041,11 +1042,15 @@ function manualEscalateStage($transactionId, $stage, $requesterId) {
     ];
     $stageLabel = $stageLabels[$stage] ?? $stage;
 
-    // ── 4. تسجيل في sla_breaches ─────────────────────────────
+    // ── 6. تسجيل escalated_at ────────────────────────────────
+    $conn->query("UPDATE stage_times SET escalated_at='$now'
+                  WHERE transaction_id=$txId AND stage='$stg'
+                  AND escalated_at IS NULL");
+
+    // ── 7. تسجيل في sla_breaches ─────────────────────────────
     $escIdVal = $supervisorId ? (int)$supervisorId : 'NULL';
     $empIdVal = $empId ?: 'NULL';
 
-    // تحقق: هل يوجد تجاوزمسجّل بالفعل لهذه المرحلة؟
     $existing = $conn->query("SELECT id FROM sla_breaches
         WHERE transaction_id=$txId AND stage='$stg'
           AND breach_type='ola_breach' AND resolved_at IS NULL
@@ -1059,58 +1064,85 @@ function manualEscalateStage($transactionId, $stage, $requesterId) {
             ('transaction', $txId, '$stg', 'ola_breach', $empIdVal,
              $elapsedMin, " . (int)$allowedMin . ", $pct, $escIdVal, '$now')");
     } else {
-        // حدّث المسجّل ليضم المشرف والتوقيت
         $conn->query("UPDATE sla_breaches SET
             escalated_to=$escIdVal, notified_at='$now'
             WHERE transaction_id=$txId AND stage='$stg'
               AND breach_type='ola_breach' AND resolved_at IS NULL");
     }
 
-    // ── 5. إشعار داخلي للمشرف (مرة واحدة) ──────────────────
-    if ($supervisorId) {
-        $msg = $conn->real_escape_string("تصعيد OLA: معاملة $txNum — مرحلة $stageLabel تجاوزت {$pct}%");
-        // تحقق من عدم وجود إشعار سابق لنفس المعاملة والمرحلة
-        $notifExists = $conn->query("SELECT id FROM system_notifications
-            WHERE employee_id=$supervisorId
-              AND transaction_id=$txId
-              AND message LIKE '%$stg%'
-              AND message LIKE '%تصعيد OLA%'
-              AND created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
-            LIMIT 1");
+    // ── 8. إشعار داخلي للمشرف (قناة أولى) ───────────────────
+// ── 8. إشعار داخلي (قناة أولى) ───────────────────────────
+$notificationSent = false;
+if ($supervisorId) {
+    $msg = $conn->real_escape_string(
+        "تصعيد OLA: معاملة $txNum — مرحلة $stageLabel تجاوزت {$pct}%"
+    );
 
-        if (!$notifExists || $notifExists->num_rows === 0) {
-            $conn->query("INSERT INTO system_notifications
-                (type, category, title, message, transaction_id, employee_id, is_read, created_at)
-                VALUES
-                ('urgent', 'escalation',
-                 'تصعيد OLA',
-                 '$msg', $txId, $supervisorId, 0, '$now')");
+    // إشعار للمشرف
+    $notifExists = $conn->query("SELECT id FROM system_notifications
+        WHERE employee_id=$supervisorId AND transaction_id=$txId
+          AND category='escalation'
+          AND created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
+        LIMIT 1");
+
+    if (!$notifExists || $notifExists->num_rows === 0) {
+        $conn->query("INSERT INTO system_notifications
+            (type, category, title, message, transaction_id, employee_id, is_read, created_at)
+            VALUES ('urgent', 'escalation', 'تصعيد OLA', '$msg', $txId, $supervisorId, 0, '$now')");
+        $notificationSent = ($conn->affected_rows > 0);
+    } else {
+        $notificationSent = true;
+    }
+
+    // إشعار للموظف الطالب أيضاً (يرى "تم التصعيد")
+    $requesterMsg = $conn->real_escape_string(
+        "تم تصعيد معاملة $txNum (مرحلة $stageLabel) إلى $supervisorName"
+    );
+    $requesterId = (int)$requesterId;
+    if ($requesterId > 0 && $requesterId !== $supervisorId) {
+        $conn->query("INSERT INTO system_notifications
+            (type, category, title, message, transaction_id, employee_id, is_read, created_at)
+            VALUES ('info', 'escalation', 'تم التصعيد', '$requesterMsg', $txId, $requesterId, 0, '$now')");
+    }
+}
+
+    // ── 9. بريد إلكتروني للمشرف (قناة ثانية) — لا يوقف التصعيد ─
+    $emailSent  = false;
+    $emailError = null;
+    if ($supervisorId) {
+        try {
+            $emailResult = sendSlaNotification(
+                'ola_breach', 'transaction', $txId, $txNum,
+                $empId, $supervisorId,
+                [
+                    'stage'       => $stage,
+                    'stage_label' => $stageLabel,
+                    'elapsed'     => $elapsedMin,
+                    'allowed'     => (int)$allowedMin,
+                    'pct'         => $pct,
+                    'ref_number'  => $txNum,
+                    'scope'       => 'transaction',
+                    'manual'      => true,
+                ]
+            );
+            $emailSent = true;
+        } catch (Throwable $e) {
+            // فشل البريد لا يلغي التصعيد
+            $emailError = $e->getMessage();
+            error_log("[SLA Escalate] email failed for tx=$txId stage=$stage: $emailError");
         }
     }
 
-    // ── 6. إرسال بريد إلكتروني للمشرف ──────────────────────
-    if ($supervisorId) {
-        sendSlaNotification(
-            'ola_breach', 'transaction', $txId, $txNum,
-            $empId, $supervisorId,
-            [
-                'stage'       => $stage,
-                'stage_label' => $stageLabel,
-                'elapsed'     => $elapsedMin,
-                'allowed'     => (int)$allowedMin,
-                'pct'         => $pct,
-                'ref_number'  => $txNum,
-                'scope'       => 'transaction',
-                'manual'      => true,
-            ]
-        );
-    }
-
+    // ── 10. الرد ─────────────────────────────────────────────
     return [
-        'success'       => true,
-        'escalated_to'  => $supervisorId,
+        'success'            => true,
+        'escalated_to_id'    => $supervisorId,
+        'escalated_to_name'  => $supervisorName,   // ← للعرض في الواجهة
         'transaction_number' => $txNum,
-        'stage_label'   => $stageLabel,
-        'pct'           => $pct,
+        'stage_label'        => $stageLabel,
+        'pct'                => $pct,
+        'notification_sent'  => $notificationSent,
+        'email_sent'         => $emailSent,
+        'email_error'        => $emailError,        // null إذا نجح
     ];
 }

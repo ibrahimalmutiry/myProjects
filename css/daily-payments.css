@@ -316,7 +316,7 @@
 
 /* Table cells */
 .dp-txn-num {
-    font-family: monospace;
+    font-family: var(--font-primary);
     font-size: .78rem;
     color: var(--accent-blue);
     font-weight: 700;
@@ -359,7 +359,7 @@
 }
 
 .dp-budget-code {
-    font-family: monospace;
+    font-family: var(--font-primary);
     font-size: .78rem;
     color: #ffa94d;
 }
@@ -736,7 +736,7 @@
     padding: 2rem 2.5rem;
     background: #fff;
     color: #111;
-    font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+    font-family: var(--font-primary);
     scrollbar-width: thin;
 }
 
@@ -781,7 +781,7 @@
     font-size: .85rem;
     color: #666;
     margin-top: .25rem;
-    font-family: monospace;
+    font-family: var(--font-primary);
 }
 
 .po-meta-grid {

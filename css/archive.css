@@ -8,7 +8,6 @@
     --arch-gold-light: #e8c97a;
     --arch-gold-dim: rgba(201, 168, 76, 0.10);
     --arch-gold-dim2: rgba(201, 168, 76, 0.18);
-    --arch-mono: 'IBM Plex Mono', 'Courier New', monospace;
 }
 
 /* ══ الصفحة ════════════════════════════════════════════ */
@@ -203,7 +202,7 @@
 .arch-stat-val {
     font-size: 1.9rem;
     font-weight: 800;
-    font-family: var(--arch-mono);
+    font-family: var(--font-primary);
     line-height: 1;
     margin-bottom: 4px;
 }
@@ -247,7 +246,7 @@
     left: 18px;
     font-size: 10px;
     color: rgba(201, 168, 76, .25);
-    font-family: var(--arch-mono);
+    font-family: var(--font-primary);
     letter-spacing: 1px;
 }
 
@@ -359,7 +358,7 @@
 .arch-rc-date {
     font-size: .68rem;
     color: var(--text-secondary);
-    font-family: var(--arch-mono);
+    font-family: var(--font-primary);
 }
 
 .arch-rc-bar {
@@ -579,7 +578,7 @@
     color: var(--text-secondary);
     display: flex;
     gap: 8px;
-    font-family: var(--arch-mono);
+    font-family: var(--font-primary);
 }
 
 .arch-doc-tags {
@@ -694,7 +693,7 @@
 .li-meta {
     font-size: .68rem;
     color: var(--text-secondary);
-    font-family: var(--arch-mono);
+    font-family: var(--font-primary);
     margin-top: 2px;
 }
 
@@ -821,7 +820,7 @@ body.arch-list-view .arch-doc-list {
     padding: 2px 7px;
     border-radius: 4px;
     font-size: .65rem;
-    font-family: var(--arch-mono);
+    font-family: var(--font-primary);
     color: #ccc;
 }
 
@@ -848,7 +847,7 @@ body.arch-list-view .arch-doc-list {
 
 .arch-info-val {
     font-weight: 500;
-    font-family: var(--arch-mono);
+    font-family: var(--font-primary);
     font-size: .72rem;
     color: var(--text-primary);
     max-width: 55%;
@@ -1075,7 +1074,7 @@ body.arch-list-view .arch-doc-list {
     max-width: 540px;
     margin: 0 auto;
     box-shadow: 0 20px 60px rgba(0, 0, 0, .4);
-    font-family: 'Tajawal', sans-serif;
+    font-family: var(--font-primary);
     min-height: 600px;
     position: relative;
     overflow: hidden;
@@ -1101,7 +1100,7 @@ body.arch-list-view .arch-doc-list {
     color: rgba(201, 168, 76, .06);
     pointer-events: none;
     white-space: nowrap;
-    font-family: var(--arch-mono);
+    font-family: var(--font-primary);
 }
 
 .arch-mock-hdr {
@@ -1562,7 +1561,7 @@ body.arch-list-view .arch-doc-list {
 .aum-ftr-info {
     font-size: .78rem;
     color: var(--text-muted);
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--font-primary);
 }
 
 /* ═══════════════════════════════════════════════════════════

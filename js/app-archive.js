@@ -254,7 +254,7 @@ window.ArchiveModule = (function () {
                         <span id="vwr-icon" style="font-size:22px">📄</span>
                         <div>
                             <h3 id="vwr-title">—</h3>
-                            <div style="font-size:.7rem;color:var(--text-muted);font-family:'IBM Plex Mono',monospace;margin-top:2px" id="vwr-sub">—</div>
+                            <div style="font-size:.7rem;color:var(--text-muted);font-family:var(--font-primary);margin-top:2px" id="vwr-sub">—</div>
                         </div>
                     </div>
                     <div style="display:flex;gap:8px;align-items:center">
@@ -288,10 +288,10 @@ window.ArchiveModule = (function () {
                     </div>
                 </div>
                 <div class="arch-viewer-ftr">
-                    <div style="font-size:.75rem;color:var(--text-muted);font-family:'IBM Plex Mono',monospace">صفحة 1 / 1</div>
+                    <div style="font-size:.75rem;color:var(--text-muted);font-family:var(--font-primary)">صفحة 1 / 1</div>
                     <div style="display:flex;gap:8px">
                         <button class="arch-btn arch-btn-ghost" style="font-size:.75rem">🔍 −</button>
-                        <span style="font-size:.75rem;color:var(--text-muted);font-family:'IBM Plex Mono',monospace;padding:0 8px">100%</span>
+                        <span style="font-size:.75rem;color:var(--text-muted);font-family:var(--font-primary);padding:0 8px">100%</span>
                         <button class="arch-btn arch-btn-ghost" style="font-size:.75rem">🔍 +</button>
                     </div>
                 </div>
@@ -851,18 +851,25 @@ window.ArchiveModule = (function () {
 
     /* ══ اختيار ملف → معاينة ════════════════════════════════ */
     function selectFile(id) {
-        const f = S.files.find(x => x.id == id);
-        if (!f) return;
-        S.viewingFile = f;
+        const file = S.files.find(f => f.id === id);
+        if (!file) return;
+
+        const dlBtn = document.getElementById('prev-dl');
+        if (dlBtn) {
+            // ✅ تحديث href الصحيح
+            dlBtn.href = `${API}?action=download&id=${file.id}`;
+            dlBtn.download = file.display_name || 'document';
+        }
+
         document.querySelectorAll('.arch-doc-card,.arch-list-item').forEach(c => c.classList.toggle('selected', c.dataset.id == id));
-        document.getElementById('prev-icon').textContent = _emoji(f.file_extension);
-        document.getElementById('prev-type').textContent = (f.file_extension || '?').toUpperCase();
-        document.getElementById('prev-name').textContent = f.display_name;
-        document.getElementById('prev-cat').textContent = f.category_label || f.category || '—';
-        document.getElementById('prev-size').textContent = f.file_size_formatted || '—';
-        document.getElementById('prev-date').textContent = _fmtDate(f.created_at);
-        document.getElementById('prev-user').textContent = f.uploader_name || '—';
-        document.getElementById('prev-dl').href = `${API}?action=download&id=${id}`;
+        document.getElementById('prev-icon').textContent = _emoji(file.file_extension);
+        document.getElementById('prev-type').textContent = (file.file_extension || '?').toUpperCase();
+        document.getElementById('prev-name').textContent = file.display_name;
+        document.getElementById('prev-cat').textContent = file.category_label || file.category || '—';
+        document.getElementById('prev-size').textContent = file.file_size_formatted || '—';
+        document.getElementById('prev-date').textContent = _fmtDate(file.created_at);
+        document.getElementById('prev-user').textContent = file.uploader_name || '—';
+        document.getElementById('prev-dl').href = `${API}?action=download&id=${file.id}`;
         document.getElementById('arch-preview').classList.add('open');
     }
 

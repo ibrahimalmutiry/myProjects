@@ -54,13 +54,30 @@ function saveNotificationSettings($data) {
         'notify_on_ola_warning','notify_on_ola_breach',
         'notify_on_sla_warning','notify_on_sla_breach',
     ];
+
+    // ضمان وجود الصفوف أولاً (seed تلقائي)
+    $stmt = $conn->prepare("INSERT IGNORE INTO notification_settings (setting_key, setting_value) VALUES (?, '0')");
+    if ($stmt) {
+        foreach ($allowed as $key) {
+            $stmt->bind_param('s', $key);
+            $stmt->execute();
+        }
+        $stmt->close();
+    }
+
+    // الآن حدّث القيم
+    $stmt = $conn->prepare("UPDATE notification_settings SET setting_value=? WHERE setting_key=?");
+    if (!$stmt) return ['success' => false, 'error' => $conn->error];
+
     $ok = 0;
     foreach ($allowed as $key) {
         if (!isset($data[$key])) continue;
-        $val = $conn->real_escape_string($data[$key]);
-        $conn->query("UPDATE notification_settings SET setting_value='$val' WHERE setting_key='$key'");
-        if ($conn->affected_rows >= 0) $ok++;
+        $val = (string)$data[$key];
+        $stmt->bind_param('ss', $val, $key);
+        $stmt->execute();
+        $ok++;
     }
+    $stmt->close();
     return ['success' => true, 'updated' => $ok];
 }
 
@@ -608,7 +625,7 @@ function _buildEmailHtml($title, $body, $icon, $severity, $extra, $elapsed, $all
 <head>
 <meta charset="UTF-8">
 <style>
-  body { font-family: Arial, sans-serif; background:#f3f4f6; margin:0; padding:20px; direction:rtl }
+  body { font-family: var(--font-primary); background:#f3f4f6; margin:0; padding:20px; direction:rtl }
   .card { background:#fff; border-radius:12px; max-width:560px; margin:auto;
           border-top:4px solid {$color}; box-shadow:0 2px 12px rgba(0,0,0,.1); overflow:hidden }
   .header { background:{$color}; color:#fff; padding:20px 24px }
