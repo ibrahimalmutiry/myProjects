@@ -1,4 +1,107 @@
 <?php
+
+// ═══════════════════════════════════════════════════════════
+// Self-Healing DB — يُضيف الأعمدة المفقودة عند تحميل الملف
+// ═══════════════════════════════════════════════════════════
+if (function_exists('db')) {
+    $_prHealConn = db();
+    // permission_level_code — عمود الصلاحيات الموسَّع
+    @$_prHealConn->query(
+        "ALTER TABLE employees ADD COLUMN IF NOT EXISTS permission_level_code VARCHAR(50) DEFAULT NULL"
+    );
+    // توسيع ENUM ليشمل المستويات الخمسة
+    @$_prHealConn->query(
+        "ALTER TABLE employees MODIFY COLUMN permission_level
+         ENUM('system_admin','sector_head','division_manager','employee_l1','employee','manager')
+         NOT NULL DEFAULT 'employee'"
+    );
+    // system_notifications — أعمدة الإشعارات الجديدة
+    @$_prHealConn->query(
+        "ALTER TABLE system_notifications ADD COLUMN IF NOT EXISTS action_url VARCHAR(500) DEFAULT NULL"
+    );
+    @$_prHealConn->query(
+        "ALTER TABLE system_notifications ADD COLUMN IF NOT EXISTS grouped_id VARCHAR(100) DEFAULT NULL"
+    );
+    @$_prHealConn->query(
+        "ALTER TABLE system_notifications ADD COLUMN IF NOT EXISTS expires_at DATETIME DEFAULT NULL"
+    );
+    @$_prHealConn->query(
+        "ALTER TABLE system_notifications ADD COLUMN IF NOT EXISTS priority TINYINT NOT NULL DEFAULT 5"
+    );
+    unset($_prHealConn);
+}
+
+
+/**
+ * Helper: نفذ استعلام وأعد fetch_assoc آمناً من PHP 7.4
+ */
+function _qfetch($conn, $sql) {
+    $r = $conn->query($sql);
+    return ($r && $r->num_rows > 0) ? $r->fetch_assoc() : null;
+}
+function _qval($conn, $sql, $field, $default = null) {
+    $r = $conn->query($sql);
+    if (!$r || !$r->num_rows) return $default;
+    $row = $r->fetch_assoc();
+    return $row[$field] ?? $default;
+}
+
+
+// ════════════════════════════════════════════════════════════
+// Self-Healing: يُضيف الأعمدة المفقودة تلقائياً عند الحاجة
+// يُنفَّذ مرة واحدة فقط خلال الطلب (static guard)
+// ════════════════════════════════════════════════════════════
+function prEnsureColumns(): void {
+    static $done = false;
+    if ($done) return;
+    $done = true;
+
+    $conn = db();
+
+    // purchase_requests — الأعمدة الأكثر عرضة للغياب
+    $prCols = [
+        'assigned_to'           => "ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS assigned_to INT DEFAULT NULL",
+        'rejection_reason'      => "ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS rejection_reason TEXT DEFAULT NULL",
+        'rejected_at'           => "ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS rejected_at DATETIME DEFAULT NULL",
+        'rejected_by'           => "ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS rejected_by INT DEFAULT NULL",
+        'returned_to_manager'   => "ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS returned_to_manager INT DEFAULT NULL",
+        'returned_at'           => "ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS returned_at DATETIME DEFAULT NULL",
+        'workflow_path'         => "ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS workflow_path ENUM('short','long') NOT NULL DEFAULT 'short'",
+        'current_stage'         => "ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS current_stage VARCHAR(60) NOT NULL DEFAULT 'budget_review'",
+        'po_number'             => "ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS po_number VARCHAR(100) DEFAULT NULL",
+        'final_supplier_id'     => "ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS final_supplier_id INT DEFAULT NULL",
+        'final_supplier_name'   => "ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS final_supplier_name VARCHAR(255) DEFAULT NULL",
+        'final_amount'          => "ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS final_amount DECIMAL(15,2) DEFAULT NULL",
+        'final_amount_sar'      => "ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS final_amount_sar DECIMAL(15,2) DEFAULT NULL",
+        'po_issued_at'          => "ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS po_issued_at DATETIME DEFAULT NULL",
+        'po_issued_by'          => "ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS po_issued_by INT DEFAULT NULL",
+        'budget_reservation_id' => "ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS budget_reservation_id INT DEFAULT NULL",
+        'payment_status'        => "ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS payment_status VARCHAR(50) DEFAULT 'في الانتظار'",
+        'sent_to_payment_at'    => "ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS sent_to_payment_at DATETIME DEFAULT NULL",
+        'sla_paused_at'         => "ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS sla_paused_at DATETIME DEFAULT NULL",
+        'sla_paused_minutes'    => "ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS sla_paused_minutes INT NOT NULL DEFAULT 0",
+        'amount_sar'            => "ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS amount_sar DECIMAL(15,2) DEFAULT NULL",
+        'exchange_rate'         => "ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS exchange_rate DECIMAL(10,4) NOT NULL DEFAULT 1.0000",
+        'needed_date'           => "ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS needed_date DATE DEFAULT NULL",
+        'priority'              => "ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS priority ENUM('normal','urgent') NOT NULL DEFAULT 'normal'",
+        'updated_at'            => "ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS updated_at DATETIME DEFAULT NULL ON UPDATE NOW()",
+    ];
+    foreach ($prCols as $sql) { @$conn->query($sql); }
+
+    // pr_workflow_stages
+    $wsCols = [
+        "ALTER TABLE pr_workflow_stages ADD COLUMN IF NOT EXISTS assigned_to INT DEFAULT NULL",
+        "ALTER TABLE pr_workflow_stages ADD COLUMN IF NOT EXISTS approved_by INT DEFAULT NULL",
+        "ALTER TABLE pr_workflow_stages ADD COLUMN IF NOT EXISTS started_at DATETIME DEFAULT NULL",
+        "ALTER TABLE pr_workflow_stages ADD COLUMN IF NOT EXISTS arrived_at DATETIME DEFAULT NULL",
+        "ALTER TABLE pr_workflow_stages ADD COLUMN IF NOT EXISTS duration_min INT DEFAULT NULL",
+        "ALTER TABLE pr_workflow_stages ADD COLUMN IF NOT EXISTS action VARCHAR(50) DEFAULT NULL",
+        "ALTER TABLE pr_workflow_stages ADD COLUMN IF NOT EXISTS notes TEXT DEFAULT NULL",
+        "ALTER TABLE pr_workflow_stages ADD COLUMN IF NOT EXISTS employee_id INT DEFAULT NULL",
+    ];
+    foreach ($wsCols as $sql) { @$conn->query($sql); }
+}
+
 /**
  * pr_functions.php
  * ════════════════════════════════════════════════════════════
@@ -20,6 +123,7 @@
  *   - config.php   → دالة db()
  *   - functions.php → getSetting(), sendNotification()
  */
+
 
 // ── التأكد من تحميل config.php ──────────────────────────────
 // pr_functions.php في includes/ → config.php في المجلد الأب
@@ -133,6 +237,7 @@ function prGenerateRequestNumber(): string {
  * @return array ['success'=>bool, 'id'=>int, 'number'=>string, 'message'=>string]
  */
 function prCreateRequest(array $data): array {
+    prEnsureColumns();
     $conn = db();
 
     // ── التحقق من البيانات الإلزامية ────────────────────────
@@ -290,6 +395,7 @@ function prInitWorkflowStages(int $requestId, string $workflowPath): void {
  * @return array ['success'=>bool, 'message'=>string]
  */
 function prApproveStage(int $requestId, int $employeeId, string $stage, string $notes = ''): array {
+    prEnsureColumns();
     $conn = db();
 
     // ── جلب بيانات الطلب ─────────────────────────────────────
@@ -302,6 +408,33 @@ function prApproveStage(int $requestId, int $employeeId, string $stage, string $
             'success' => false,
             'message' => 'المرحلة الحالية للطلب هي: ' . prStageName($req['current_stage']),
         ];
+    }
+
+    // ── التحقق من صلاحية الموظف لهذه المرحلة ────────────────
+    // آمن من غياب عمود assigned_to: نتحقق أولاً من وجوده
+    $_qr1 = $conn->query("
+        SELECT COUNT(*) AS c FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME   = 'pr_workflow_stages'
+          AND COLUMN_NAME  = 'assigned_to'
+    ");
+    $_qr1row = $_qr1 ? $_qr1->fetch_assoc() : null;
+    $hasAssignedTo = isset($_qr1row['c']) ? (int)$_qr1row['c'] : 0;
+
+    if ((int)$hasAssignedTo > 0) {
+        $_qrStageTmp_ = $conn->query("
+            SELECT assigned_to FROM pr_workflow_stages
+            WHERE request_id=$requestId AND stage_name='" . $conn->real_escape_string($stage) . "'
+            LIMIT 1
+        ");
+        $stageRow = ($_qrStageTmp_) ? $_qrStageTmp_->fetch_assoc() : null;
+
+        if (!empty($stageRow['assigned_to']) && (int)$stageRow['assigned_to'] !== $employeeId) {
+            $levelRow = (($_qr2 = $conn->query("SELECT permission_level FROM employees WHERE id=$employeeId LIMIT 1")) ? $_qr2->fetch_assoc() : null);
+            if (($levelRow['permission_level'] ?? '') !== 'system_admin') {
+                return ['success' => false, 'message' => 'غير مخوّل باعتماد هذه المرحلة'];
+            }
+        }
     }
 
     // ── المرحلتان اللتان تحتاجان موافقة الاثنين ──────────────
@@ -358,6 +491,19 @@ function prHandleDualApproval(int $requestId, int $employeeId, string $stage, st
         'finance_review'  => 'finance_manager',
     ];
     $role = $roleMap[$stage] ?? $stage;
+
+    // ── منع نفس الشخص من الموافقة مرتين ─────────────────────
+    $_qr3 = $conn->query("
+        SELECT COUNT(*) AS c FROM pr_stage_approvals
+        WHERE request_id=$requestId AND stage_name='$stage'
+        AND employee_id=$employeeId AND status='approved'
+    ");
+    $_qr3row = $_qr3 ? $_qr3->fetch_assoc() : null;
+    $alreadyApproved = isset($_qr3row['c']) ? (int)$_qr3row['c'] : 0;
+
+    if ((int)$alreadyApproved > 0) {
+        return ['success' => false, 'message' => 'لقد سبق أن وافقت على هذه المرحلة'];
+    }
 
     // ── تسجيل أو تحديث موافقة هذا الموظف ───────────────────
     $conn->query("
@@ -557,7 +703,17 @@ function prIssuePurchaseOrder(int $requestId, int $employeeId, array $poData): a
                 'new_value'   => 'long',
             ]);
 
-            // إضافة مراحل الموافقة الإضافية
+            // ── مسح مراحل المسار القصير القديمة قبل إضافة الطويل ──
+            // يمنع ازدواج السجلات في pr_workflow_stages
+            $conn->query("
+                DELETE FROM pr_workflow_stages
+                WHERE request_id=$requestId
+                  AND stage_name IN (
+                      'budget_review','purchasing',
+                      'waiting_budget_approval','payment','completed'
+                  )
+            ");
+
             prInitWorkflowStages($requestId, 'long');
             prTransitionToStage($requestId, 'treasury_review', $employeeId);
         } else {
@@ -820,12 +976,14 @@ function prReferRequest(int $requestId, int $fromEmployeeId, array $referralData
     // إذا كانت الإحالة لموظف محدد وكانت المرحلة الحالية في المسار الطويل
     // وكان المُحال إليه من دور 'budget' — نُضيف مرحلة budget_review مؤقتة
     if ($toEmpId && $req['workflow_path'] === 'long') {
-        $empRole = $conn->query("SELECT role FROM employees WHERE id=$toEmpId LIMIT 1")?->fetch_assoc()['role'] ?? '';
+        $_qr4 = $conn->query("SELECT role FROM employees WHERE id=$toEmpId LIMIT 1");
+        $_qr4row = $_qr4 ? $_qr4->fetch_assoc() : null;
+        $empRole = isset($_qr4row['role']) ? $_qr4row['role'] : '';
         if ($empRole === 'budget') {
             // نحوّل المرحلة الحالية لـ budget_review مؤقتاً
             $conn->query("UPDATE purchase_requests SET current_stage='budget_review' WHERE id=$requestId");
             // إذا لم تكن المرحلة موجودة في الـ workflow_stages — نُضيفها
-            $exists = $conn->query("SELECT id FROM pr_workflow_stages WHERE request_id=$requestId AND stage_name='budget_review' LIMIT 1")?->num_rows ?? 0;
+            $_qrEx_ = $conn->query("SELECT id FROM pr_workflow_stages WHERE request_id=$requestId AND stage_name='budget_review' LIMIT 1"); $exists = ($_qrEx_ && $_qrEx_->num_rows) ? $_qrEx_->num_rows : 0;
             if (!$exists) {
                 $conn->query("INSERT INTO pr_workflow_stages (request_id, stage_name, stage_order, status, arrived_at)
                     VALUES ($requestId, 'budget_review', 0, 'pending', NOW())");
@@ -857,6 +1015,11 @@ function prReferRequest(int $requestId, int $fromEmployeeId, array $referralData
         ]);
     }
 
+    // ── بدء عداد SLA للإحالة إذا كانت لموظف محدد ────────────
+    if ($toEmpId && !$stageChanged) {
+        prStartReferralSlaTracking($requestId, $toEmpId);
+    }
+
     return ['success' => true, 'message' => 'تم تسجيل الإحالة بنجاح', 'stage_changed' => $stageChanged];
 }
 
@@ -872,6 +1035,7 @@ function prReferRequest(int $requestId, int $fromEmployeeId, array $referralData
  * @return array
  */
 function prAssignRequest(int $requestId, int $managerEmployeeId, int $assignedEmployeeId, string $notes = ''): array {
+    prEnsureColumns();
     $conn = db();
 
     $req = prGetRequest($requestId);
@@ -944,6 +1108,7 @@ function prAssignRequest(int $requestId, int $managerEmployeeId, int $assignedEm
  * @return array|null بيانات الطلب أو null إن لم يوجد
  */
 function prGetRequest(int $requestId): ?array {
+    prEnsureColumns();
     $conn = db();
     $r    = $conn->query("
         SELECT
@@ -1002,19 +1167,87 @@ function prGetRequests(
     $conn  = db();
     $where = ['1=1'];
 
-    // ── قواعد الرؤية حسب الإدارة ────────────────────────────
-    if ($permissionLevel !== 'system_admin') {
-        if ($deptCode === 'FIN') {
-            // المالية ترى الكل — لا قيد
-        } elseif ($deptCode === 'PUR') {
-            // المشتريات ترى الواردة لها (purchasing) + التي أنشأتها
-            $where[] = "(pr.department_id=$userDeptId
-                        OR pr.current_stage='purchasing'
-                        OR pr.current_stage='waiting_budget_approval')";
-        } else {
-            // بقية الإدارات — إدارتهم فقط
-            $where[] = "pr.department_id=$userDeptId";
+    // ── قواعد الرؤية — تُجلب من DB مباشرةً لضمان الدقة ─────────
+    // لا نعتمد على الجلسة لأن بيانات الإدارة قد تكون قديمة
+    $empInfoRow = (($_qr5 = $conn->query("
+        SELECT e.role, e.department_id, e.division_id, e.sector_id,
+               d.code  AS dept_code,
+               ds.code AS sector_code,
+               dd.code AS division_code
+        FROM employees e
+        LEFT JOIN departments d  ON d.id = e.department_id
+        LEFT JOIN departments ds ON ds.id = e.sector_id
+        LEFT JOIN departments dd ON dd.id = e.division_id
+        WHERE e.id = $userId
+        LIMIT 1
+    ")) ? $_qr5->fetch_assoc() : null);
+
+    $userRole      = $empInfoRow['role']          ?? '';
+    $empDeptId     = (int)($empInfoRow['department_id'] ?? 0);
+    $empDeptCode   = $empInfoRow['dept_code']     ?? '';
+    $empSectorCode = $empInfoRow['sector_code']   ?? '';
+    $empDivCode    = $empInfoRow['division_code'] ?? '';
+
+    // هل ينتمي لقطاع سلاسل الإمداد؟
+    // يتحقق من كود الإدارة المباشرة + القسم + القطاع (أي منها يبدأ بـ 41 أو = PUR)
+    $allCodes      = [$empDeptCode, $empSectorCode, $empDivCode];
+    $isSupplyChain = false;
+    foreach ($allCodes as $_c) {
+        if ($_c === 'PUR' || (strpos((string)$_c, '41') === 0)) {
+            $isSupplyChain = true;
+            break;
         }
+    }
+
+    // الأدوار التي ترى جميع معاملات طلبات الشراء
+    $rolesViewAll = ['budget', 'payment', 'dispatch', 'treasury_manager', 'CEO', 'admin', 'purchasing'];
+
+    // هل إدارة المستخدم مالية؟
+    $isFinanceDept = ($empDeptCode === 'FIN' || $empSectorCode === 'FIN' || $deptCode === 'FIN');
+
+    // جلب مستوى الصلاحية الموسَّع من DB
+    $permRow = (($_qr6 = $conn->query("
+        SELECT permission_level, permission_level_code
+        FROM employees WHERE id=$userId LIMIT 1
+    ")) ? $_qr6->fetch_assoc() : null);
+    $permLevelDB   = $permRow['permission_level']      ?? $permissionLevel;
+    $permLevelCode = $permRow['permission_level_code'] ?? $permLevelDB;
+
+    if ($permLevelDB === 'system_admin'
+        || in_array($userRole, $rolesViewAll)
+        || $isFinanceDept
+    ) {
+        // system_admin + أدوار مالية → يرون الكل
+    } elseif ($permLevelCode === 'sector_head' || $permLevelDB === 'sector_head') {
+        // رئيس القطاع → يرى جميع معاملات قطاعه
+        // يُحدَّد القطاع من sector_id للموظف
+        $sectorDeptIds = [];
+        $sr = $conn->query("
+            SELECT id FROM departments
+            WHERE sector_id=$empDeptId
+               OR id=$empDeptId
+        ");
+        if ($sr) while ($srow = $sr->fetch_assoc()) $sectorDeptIds[] = (int)$srow['id'];
+        if (!empty($sectorDeptIds)) {
+            $idsStr  = implode(',', $sectorDeptIds);
+            $where[] = "pr.department_id IN ($idsStr)";
+        } else {
+            $where[] = "pr.department_id=$empDeptId";
+        }
+    } elseif ($isSupplyChain || $deptCode === 'PUR') {
+        // سلاسل الإمداد → يرون مرحلة المشتريات فقط
+        $where[] = "(pr.department_id=$empDeptId
+                    OR pr.current_stage='purchasing'
+                    OR pr.current_stage='waiting_budget_approval')";
+    } elseif (in_array($permLevelCode, ['division_manager','manager']) || in_array($permLevelDB, ['division_manager','manager'])) {
+        // مدير القسم → يرى قسمه فقط (الحالة الافتراضية)
+        $where[] = "pr.department_id=" . ($empDeptId ?: $userDeptId);
+    } elseif (in_array($permLevelCode, ['employee_l1','employee']) || in_array($permLevelDB, ['employee_l1','employee'])) {
+        // موظف → يرى ما أنشأه هو فقط
+        $where[] = "(pr.created_by=$userId OR pr.department_id=$empDeptId)";
+    } else {
+        // fallback
+        $where[] = "pr.department_id=" . ($empDeptId ?: $userDeptId);
     }
 
     // ── الفلاتر ───────────────────────────────────────────────
@@ -1108,6 +1341,143 @@ function prGetEvents(int $requestId): array {
 }
 
 /**
+ * جلب حالة SLA لجميع مراحل الطلب
+ * يُرجع مصفوفة بكل مراحل pr_sla_tracking مرتبة زمنياً
+ * مع حساب الوقت المنقضي الحقيقي (مطروحاً منه وقت التوقف)
+ *
+ * الحقول المُرجَعة لكل مرحلة:
+ *   stage_name, status, elapsed_minutes, allowed_minutes,
+ *   elapsed_pct, pause_minutes, started_at, ended_at, policy_name
+ *
+ * @param int $requestId
+ * @return array
+ */
+function prGetRequestSlaStatus(int $requestId): array {
+    $conn = db();
+
+    // تأكد أن الجداول موجودة
+    $conn->query("
+        CREATE TABLE IF NOT EXISTS pr_sla_tracking (
+            id               INT AUTO_INCREMENT PRIMARY KEY,
+            request_id       INT          NOT NULL,
+            policy_id        INT          DEFAULT NULL,
+            stage_name       VARCHAR(60)  NOT NULL,
+            started_at       DATETIME     NOT NULL,
+            paused_at        DATETIME     DEFAULT NULL,
+            resume_at        DATETIME     DEFAULT NULL,
+            ended_at         DATETIME     DEFAULT NULL,
+            allowed_minutes  INT          DEFAULT NULL,
+            pause_minutes    INT          NOT NULL DEFAULT 0,
+            elapsed_minutes  INT          NOT NULL DEFAULT 0,
+            elapsed_pct      DECIMAL(7,1) NOT NULL DEFAULT 0,
+            warning_sent     TINYINT(1)   NOT NULL DEFAULT 0,
+            escalation_sent  TINYINT(1)   NOT NULL DEFAULT 0,
+            status           ENUM('active','paused','completed') NOT NULL DEFAULT 'active',
+            UNIQUE KEY uq_req_stage (request_id, stage_name),
+            INDEX idx_status (status)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ");
+
+    $r = $conn->query("
+        SELECT
+            pst.id,
+            pst.stage_name,
+            pst.status,
+            pst.started_at,
+            pst.ended_at,
+            pst.paused_at,
+            pst.allowed_minutes,
+            pst.pause_minutes,
+            -- الوقت المنقضي الفعلي: الفرق من البداية ناقص وقت التوقف
+            GREATEST(0,
+                TIMESTAMPDIFF(MINUTE, pst.started_at,
+                    COALESCE(pst.ended_at, NOW())
+                ) - COALESCE(pst.pause_minutes, 0)
+            ) AS elapsed_minutes,
+            -- النسبة المئوية المحسوبة لحظياً
+            CASE
+                WHEN pst.allowed_minutes > 0 THEN
+                    ROUND(
+                        GREATEST(0,
+                            TIMESTAMPDIFF(MINUTE, pst.started_at,
+                                COALESCE(pst.ended_at, NOW())
+                            ) - COALESCE(pst.pause_minutes, 0)
+                        ) / pst.allowed_minutes * 100, 1
+                    )
+                ELSE pst.elapsed_pct
+            END AS elapsed_pct,
+            psp.name AS policy_name,
+            psp.warning_pct,
+            psp.escalate_pct
+        FROM pr_sla_tracking pst
+        LEFT JOIN pr_sla_policies psp ON pst.policy_id = psp.id
+        WHERE pst.request_id = $requestId
+          AND pst.stage_name NOT LIKE 'referral_%'
+        ORDER BY pst.started_at ASC
+    ");
+
+    $rows = [];
+    if ($r) {
+        while ($row = $r->fetch_assoc()) {
+            $rows[] = [
+                'id'              => (int)$row['id'],
+                'stage_name'      => $row['stage_name'],
+                'status'          => $row['status'],
+                'started_at'      => $row['started_at'],
+                'ended_at'        => $row['ended_at'],
+                'paused_at'       => $row['paused_at'],
+                'allowed_minutes' => (int)($row['allowed_minutes'] ?? 0),
+                'pause_minutes'   => (int)($row['pause_minutes'] ?? 0),
+                'elapsed_minutes' => (int)($row['elapsed_minutes'] ?? 0),
+                'elapsed_pct'     => (float)($row['elapsed_pct'] ?? 0),
+                'policy_name'     => $row['policy_name'] ?? null,
+                'warning_pct'     => (int)($row['warning_pct'] ?? 70),
+                'escalate_pct'    => (int)($row['escalate_pct'] ?? 100),
+            ];
+        }
+    }
+
+    // إذا لم يوجد سجل SLA بعد — أرجع سجلاً محسوباً من المرحلة الحالية
+    if (empty($rows)) {
+        $req = (($_qr7 = $conn->query("
+            SELECT pr.current_stage, pr.created_at,
+                   psp.name AS policy_name,
+                   psp.allowed_hours, psp.warning_pct, psp.escalate_pct
+            FROM purchase_requests pr
+            LEFT JOIN pr_sla_policies psp ON psp.stage_name = pr.current_stage
+              AND psp.is_active = 1
+            WHERE pr.id = $requestId
+            LIMIT 1
+        ")) ? $_qr7->fetch_assoc() : null);
+
+        if ($req) {
+            $allowedMin = $req['allowed_hours'] ? (int)round((float)$req['allowed_hours'] * 60) : 0;
+            $elapsed    = (int)((time() - strtotime($req['created_at'])) / 60);
+            $pct        = $allowedMin > 0 ? round($elapsed / $allowedMin * 100, 1) : 0;
+            $rows[]     = [
+                'id'              => 0,
+                'stage_name'      => $req['current_stage'],
+                'status'          => 'active',
+                'started_at'      => $req['created_at'],
+                'ended_at'        => null,
+                'paused_at'       => null,
+                'allowed_minutes' => $allowedMin,
+                'pause_minutes'   => 0,
+                'elapsed_minutes' => $elapsed,
+                'elapsed_pct'     => min(9999, $pct),
+                'policy_name'     => $req['policy_name'] ?? null,
+                'warning_pct'     => (int)($req['warning_pct'] ?? 70),
+                'escalate_pct'    => (int)($req['escalate_pct'] ?? 100),
+            ];
+        }
+    }
+
+    return $rows;
+}
+
+
+
+/**
  * جلب طلبات الدفع الجاهزة (لصفحة daily-payments)
  * يُعيد الطلبات في مرحلة payment مع تفاصيلها
  *
@@ -1177,6 +1547,17 @@ function prStartSlaTracking(int $requestId, string $stageName): void {
  */
 function prPauseSla(int $requestId, string $stageName): void {
     $conn = db();
+
+    // guard: لا توقف إذا كان العداد متوقفاً أو منتهياً أو غير موجود
+    $check = $conn->query("
+        SELECT status FROM pr_sla_tracking
+        WHERE request_id=$requestId AND stage_name='$stageName'
+        LIMIT 1
+    ");
+    if (!$check || $check->num_rows === 0) return;
+    $row = $check->fetch_assoc();
+    if ($row['status'] !== 'active') return;
+
     $conn->query("
         UPDATE pr_sla_tracking
         SET paused_at=NOW(), status='paused'
@@ -1385,7 +1766,7 @@ function prGetSlaPolicy(string $stageName): ?array {
  *
  * @param int    $requestId
  * @param string $eventType  نوع الحدث من ENUM في الجدول
- * @param int|null $employeeId
+ * @param ?int $employeeId
  * @param array  $data       بيانات إضافية: stage, description, old_value, new_value...
  */
 function prLogEvent(int $requestId, string $eventType, ?int $employeeId, array $data = []): void {
@@ -1485,18 +1866,125 @@ function prTransitionToStage(int $requestId, string $newStage, int $byEmployeeId
  */
 function prSendNotification(int $recipientId, int $requestId, array $notification): void {
     $conn    = db();
-    $type    = $conn->real_escape_string($notification['type'] ?? 'info');
-    $title   = $conn->real_escape_string($notification['title'] ?? '');
-    $message = $conn->real_escape_string($notification['message'] ?? '');
 
+    // ── ضمان وجود الجدول والأعمدة المطلوبة ────────────────────
+    static $tableChecked = false;
+    if (!$tableChecked) {
+        $conn->query("
+            CREATE TABLE IF NOT EXISTS system_notifications (
+                id             INT AUTO_INCREMENT PRIMARY KEY,
+                type           VARCHAR(20)  NOT NULL DEFAULT 'info',
+                category       VARCHAR(60)  DEFAULT NULL,
+                title          VARCHAR(255) NOT NULL DEFAULT '',
+                message        TEXT         DEFAULT NULL,
+                transaction_id INT          DEFAULT NULL,
+                employee_id    INT          DEFAULT NULL,
+                recipient_id   INT          DEFAULT NULL,
+                action_url     VARCHAR(500) DEFAULT NULL,
+                priority       TINYINT      NOT NULL DEFAULT 5,
+                is_read        TINYINT(1)   NOT NULL DEFAULT 0,
+                read_at        DATETIME     DEFAULT NULL,
+                email_sent     TINYINT(1)   NOT NULL DEFAULT 0,
+                exchange_sent  TINYINT(1)   NOT NULL DEFAULT 0,
+                grouped_id     VARCHAR(100) DEFAULT NULL,
+                expires_at     DATETIME     DEFAULT NULL,
+                created_at     DATETIME     NOT NULL DEFAULT NOW(),
+                INDEX idx_recipient (recipient_id),
+                INDEX idx_employee  (employee_id),
+                INDEX idx_unread    (is_read, created_at)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        ");
+        // أضف الأعمدة الجديدة إن لم تكن موجودة
+        foreach ([
+            "ALTER TABLE system_notifications ADD COLUMN IF NOT EXISTS action_url  VARCHAR(500) DEFAULT NULL",
+            "ALTER TABLE system_notifications ADD COLUMN IF NOT EXISTS priority    TINYINT NOT NULL DEFAULT 5",
+            "ALTER TABLE system_notifications ADD COLUMN IF NOT EXISTS grouped_id  VARCHAR(100) DEFAULT NULL",
+            "ALTER TABLE system_notifications ADD COLUMN IF NOT EXISTS expires_at  DATETIME DEFAULT NULL",
+        ] as $sql) { @$conn->query($sql); }
+        $tableChecked = true;
+    }
+
+    $type      = $conn->real_escape_string($notification['type'] ?? 'info');
+    $title     = $conn->real_escape_string($notification['title'] ?? '');
+    $message   = $conn->real_escape_string($notification['message'] ?? '');
+    $priority  = (int)($notification['priority'] ?? 5);
+    $expiresAt = !empty($notification['expires_days'])
+        ? "DATE_ADD(NOW(), INTERVAL " . (int)$notification['expires_days'] . " DAY)"
+        : 'DATE_ADD(NOW(), INTERVAL 30 DAY)';
+
+    // action_url: رابط مباشر للطلب في النظام
+    $actionUrl = "purchase-requests#{$requestId}";
+    $actionUrl = $conn->real_escape_string($actionUrl);
+
+    // grouped_id: يجمع إشعارات نفس الطلب + النوع معاً
+    $groupedId = "pr_{$requestId}_{$type}";
+    $groupedId = $conn->real_escape_string($groupedId);
+
+    // كتابة في كلا العمودين لضمان الاسترجاع
     $conn->query("
         INSERT INTO system_notifications
             (type, category, title, message, transaction_id,
-             recipient_id, is_read, created_at)
+             employee_id, recipient_id, action_url, grouped_id,
+             priority, expires_at, is_read, created_at)
         VALUES
             ('$type', 'purchase_request', '$title', '$message',
-             $requestId, $recipientId, 0, NOW())
+             $requestId, $recipientId, $recipientId, '$actionUrl', '$groupedId',
+             $priority, $expiresAt, 0, NOW())
     ");
+
+    // ── إرسال إيميل عند أحداث Workflow ──────────────────────────
+    // نرسل فقط للحالات المهمة (ليس كل info صغير)
+    $emailWorthy = in_array($type, ['warning', 'urgent'])
+        || in_array($notification['send_email'] ?? '', ['1', true, 'yes'])
+        || ($notification['type'] ?? '') === 'info'; // كل انتقال مرحلة يستحق إيميل
+
+    if ($emailWorthy && function_exists('sendSmtpEmail')) {
+        $empRow = (($_qr8 = $conn->query("SELECT name, email FROM employees WHERE id=$recipientId LIMIT 1")) ? $_qr8->fetch_assoc() : null);
+        if (!empty($empRow['email'])) {
+            $html = _prBuildWorkflowEmailHtml($title, $message, $type, $requestId);
+            @sendSmtpEmail($empRow['email'], $empRow['name'], $title, $html);
+        }
+    }
+}
+
+/**
+ * بناء قالب إيميل لأحداث Workflow
+ */
+function _prBuildWorkflowEmailHtml(string $title, string $message, string $type, int $requestId): string {
+    if ($type === 'urgent') {
+        $color = '#dc2626'; $icon = '🚨';
+    } elseif ($type === 'warning') {
+        $color = '#d97706'; $icon = '⚠️';
+    } else {
+        $color = '#2563eb'; $icon = '📋';
+    }
+    $msg = nl2br(htmlspecialchars($message));
+    $appUrl = (isset($_SERVER['HTTP_HOST']) ? 'http://' . $_SERVER['HTTP_HOST'] : '');
+    $link   = "{$appUrl}/index.php#purchase-requests";
+
+    return <<<HTML
+<!DOCTYPE html><html lang="ar" dir="rtl">
+<head><meta charset="UTF-8">
+<style>
+body{font-family:Arial,sans-serif;background:#f3f4f6;margin:0;padding:20px;direction:rtl}
+.card{background:#fff;border-radius:12px;max-width:520px;margin:auto;border-top:4px solid {$color};box-shadow:0 2px 12px rgba(0,0,0,.1)}
+.hd{background:{$color};color:#fff;padding:18px 22px;border-radius:8px 8px 0 0}
+.hd h1{margin:0;font-size:16px;font-weight:700}
+.bd{padding:20px 22px;font-size:14px;color:#374151;line-height:1.7}
+.btn{display:inline-block;background:{$color};color:#fff;padding:9px 20px;border-radius:7px;text-decoration:none;font-weight:700;font-size:13px;margin-top:14px}
+.ft{background:#f9fafb;padding:12px 22px;font-size:11px;color:#9ca3af;text-align:center;border-radius:0 0 8px 8px}
+</style></head>
+<body>
+<div class="card">
+  <div class="hd"><h1>{$icon} {$title}</h1></div>
+  <div class="bd">
+    <p>{$msg}</p>
+    <a href="{$link}" class="btn">فتح النظام ←</a>
+  </div>
+  <div class="ft">نظام إدارة طلبات الشراء — لا تردّ على هذا البريد</div>
+</div>
+</body></html>
+HTML;
 }
 
 /**
@@ -1564,8 +2052,20 @@ function prGetStageRecipients(int $deptId, string $stage, string $workflowPath):
             $r = $conn->query("SELECT id FROM employees WHERE role='budget' AND is_active=1");
             break;
         case 'treasury_review':
-            // مدير الخزينة — يُحدَّد من إعدادات النظام أو يجلب بالدور
-            $r = $conn->query("SELECT id FROM employees WHERE role='dispatch' AND is_active=1 LIMIT 3");
+            // مدير الخزينة — الدور الصحيح هو treasury_manager
+            // احتياطي: dispatch في قسم الخزينة إذا لم يوجد treasury_manager مسجّل
+            $r = $conn->query("
+                SELECT id FROM employees
+                WHERE role='treasury_manager' AND is_active=1
+                UNION
+                SELECT e.id FROM employees e
+                JOIN departments d ON d.id=e.department_id
+                WHERE e.role='dispatch'
+                  AND d.code IN ('TRES','TREASURY','FIN')
+                  AND e.is_active=1
+                  AND NOT EXISTS (SELECT 1 FROM employees WHERE role='treasury_manager' AND is_active=1)
+                LIMIT 3
+            ");
             break;
         case 'finance_review':
             // المدير المالي
@@ -1577,9 +2077,17 @@ function prGetStageRecipients(int $deptId, string $stage, string $workflowPath):
             $r = $conn->query("SELECT id FROM employees WHERE role='admin' AND permission_level='system_admin' AND is_active=1 LIMIT 2");
             break;
         case 'purchasing':
-            // موظفو المشتريات
-            $r = $conn->query("SELECT id FROM employees WHERE department_id IN
-                               (SELECT id FROM departments WHERE code='PUR') AND is_active=1");
+            // موظفو سلاسل الإمداد: دور purchasing/dispatch أو كود 41xxxx أو PUR
+            $r = $conn->query("
+                SELECT DISTINCT e.id FROM employees e
+                LEFT JOIN departments d ON d.id = e.department_id
+                WHERE e.is_active = 1
+                  AND (
+                    e.role IN ('purchasing', 'dispatch')
+                    OR d.code = 'PUR'
+                    OR d.code LIKE '41%'
+                  )
+            ");
             break;
         case 'payment':
             // موظفو المالية
@@ -1590,7 +2098,14 @@ function prGetStageRecipients(int $deptId, string $stage, string $workflowPath):
     }
 
     if ($r) while ($row = $r->fetch_assoc()) $ids[] = (int)$row['id'];
-    return $ids;
+
+    // ── fallback: إذا لم يُعثَر على أحد → أرسل لـ system_admin ──
+    if (empty($ids)) {
+        $fb = $conn->query("SELECT id FROM employees WHERE role='admin' AND is_active=1 LIMIT 2");
+        if ($fb) while ($row = $fb->fetch_assoc()) $ids[] = (int)$row['id'];
+    }
+
+    return array_unique($ids);
 }
 
 /**
@@ -1682,4 +2197,229 @@ function prGetDepartmentManager(int $deptId): ?int {
     $conn = db();
     $r    = $conn->query("SELECT manager_id FROM departments WHERE id=$deptId LIMIT 1");
     return ($r && $r->num_rows) ? (int)$r->fetch_assoc()['manager_id'] : null;
+}
+
+/**
+ * هل الإدارة تابعة لقطاع سلاسل الإمداد؟
+ * يتحقق من كود الإدارة (PUR أو يبدأ بـ 41)
+ */
+function prIsSupplyChainDept(mysqli $conn, int $deptId): bool {
+    if ($deptId <= 0) return false;
+    $r = $conn->query("SELECT code FROM departments WHERE id=$deptId LIMIT 1");
+    if (!$r || $r->num_rows === 0) return false;
+    $code = $r->fetch_assoc()['code'] ?? '';
+    return $code === 'PUR' || (strpos((string)$code, '41') === 0);
+}
+
+/**
+ * هل الموظف ينتمي لقطاع سلاسل الإمداد؟
+ * يفحص department_id + sector_id + division_id في التسلسل الهرمي
+ * لا يعتمد على بيانات الجلسة — يُجلب من DB مباشرةً
+ *
+ * @param mysqli $conn
+ * @param int    $employeeId
+ * @return bool
+ */
+function prIsUserSupplyChain(mysqli $conn, int $employeeId): bool {
+    $r = $conn->query("
+        SELECT e.role,
+               d.code  AS dept_code,
+               ds.code AS sector_code,
+               dd.code AS division_code
+        FROM employees e
+        LEFT JOIN departments d  ON d.id  = e.department_id
+        LEFT JOIN departments ds ON ds.id = e.sector_id
+        LEFT JOIN departments dd ON dd.id = e.division_id
+        WHERE e.id = $employeeId
+        LIMIT 1
+    ");
+    if (!$r || $r->num_rows === 0) return false;
+    $row  = $r->fetch_assoc();
+
+    // الدور نفسه يدل على سلاسل الإمداد
+    if (in_array($row['role'] ?? '', ['purchasing', 'dispatch'])) return true;
+
+    // كود القسم أو القطاع أو التقسيم يبدأ بـ 41 أو = PUR
+    $codes = [
+        $row['dept_code']    ?? '',
+        $row['sector_code']  ?? '',
+        $row['division_code']?? '',
+    ];
+    foreach ($codes as $c) {
+        if ($c === 'PUR' || (strpos((string)$c, '41') === 0)) return true;
+    }
+    return false;
+}
+
+// ════════════════════════════════════════════════════════════
+// ⑩ إعادة تقديم الطلب المرجَع
+// ════════════════════════════════════════════════════════════
+
+/**
+ * إعادة تقديم طلب مرجَع بعد مراجعته
+ * المدير فقط من يملك هذه الصلاحية
+ *
+ * @param int    $requestId
+ * @param int    $managerId   مدير الإدارة الطالبة
+ * @param string $notes       ملاحظات إعادة التقديم (اختيارية)
+ * @return array
+ */
+function prResubmitRequest(int $requestId, int $managerId, string $notes = ''): array {
+    prEnsureColumns();
+    $conn = db();
+
+    $req = prGetRequest($requestId);
+    if (!$req) return ['success' => false, 'message' => 'الطلب غير موجود'];
+
+    // ── التحقق أن الطلب في حالة إرجاع ───────────────────────
+    if ($req['current_stage'] !== 'returned') {
+        return ['success' => false, 'message' => 'الطلب ليس في حالة إرجاع — لا يمكن إعادة تقديمه'];
+    }
+
+    // ── التحقق أن المُقدِّم مدير الإدارة الطالبة ────────────
+    $permRow = (($_qr9 = $conn->query("
+        SELECT permission_level FROM employees WHERE id=$managerId LIMIT 1
+    ")) ? $_qr9->fetch_assoc() : null);
+    $permLevel = $permRow['permission_level'] ?? 'employee';
+
+    $canResubmit = !in_array($permLevel, ['employee', 'employee_l1']);
+    if (!$canResubmit) {
+        return ['success' => false, 'message' => 'فقط مدير الإدارة يستطيع إعادة تقديم الطلب'];
+    }
+
+    // ── تحديد المرحلة الأولى بحسب المسار ────────────────────
+    $firstStage = $req['workflow_path'] === 'long' ? 'treasury_review' : 'budget_review';
+
+    $esc         = $conn->real_escape_string($notes);
+    $managerName = prGetEmployeeName($managerId);
+
+    $conn->begin_transaction();
+    try {
+        // ── إعادة تعيين الطلب ─────────────────────────────────
+        $conn->query("
+            UPDATE purchase_requests
+            SET current_stage       = '$firstStage',
+                rejection_reason    = NULL,
+                rejected_at         = NULL,
+                rejected_by         = NULL,
+                returned_to_manager = NULL,
+                returned_at         = NULL,
+                updated_at          = NOW()
+            WHERE id=$requestId
+        ");
+
+        // ── إعادة تعيين مرحلة سير العمل الأولى ───────────────
+        $conn->query("
+            UPDATE pr_workflow_stages
+            SET status       = 'pending',
+                arrived_at   = NOW(),
+                started_at   = NULL,
+                completed_at = NULL,
+                employee_id  = NULL,
+                notes        = NULL
+            WHERE request_id=$requestId AND stage_name='$firstStage'
+        ");
+
+        // ── تسجيل الحدث ──────────────────────────────────────
+        prLogEvent($requestId, 'resubmitted', $managerId, [
+            'stage'       => $firstStage,
+            'description' => "$managerName أعاد تقديم الطلب للمرحلة: " . prStageName($firstStage)
+                           . ($notes ? ". ملاحظة: $notes" : ''),
+            'old_value'   => 'returned',
+            'new_value'   => $firstStage,
+        ]);
+
+        // ── إعادة تشغيل SLA ───────────────────────────────────
+        prStartSlaTracking($requestId, $firstStage);
+
+        // ── إشعار المسؤولين عن المرحلة الجديدة ───────────────
+        prNotifyStageRecipients($requestId, $firstStage, $req['request_number']);
+
+        $conn->commit();
+    } catch (Exception $e) {
+        $conn->rollback();
+        return ['success' => false, 'message' => 'فشل إعادة التقديم: ' . $e->getMessage()];
+    }
+
+    // ── إشعار صاحب الطلب بأن إعادة التقديم تمت ────────────────
+    $createdBy = (int)($req['created_by'] ?? 0);
+    if ($createdBy && $createdBy !== $managerId) {
+        prSendNotification($createdBy, $requestId, [
+            'type'    => 'info',
+            'title'   => "✅ تمت إعادة تقديم طلبك — {$req['request_number']}",
+            'message' => "أعاد {$managerName} تقديم طلبك إلى مرحلة " . prStageName($firstStage)
+                       . ($notes ? ". ملاحظة: {$notes}" : ''),
+        ]);
+    }
+
+    return [
+        'success'     => true,
+        'message'     => 'تمت إعادة تقديم الطلب بنجاح',
+        'new_stage'   => $firstStage,
+        'stage_label' => prStageName($firstStage),
+    ];
+}
+
+
+// ════════════════════════════════════════════════════════════
+// ⑪ SLA الإحالة — عداد منفصل لوقت الانتظار عند المُحال إليه
+// ════════════════════════════════════════════════════════════
+
+/**
+ * بدء عداد SLA منفصل عند إحالة الطلب
+ * يُسجَّل كمرحلة 'referral_N' حيث N = عدد الإحالات السابقة + 1
+ *
+ * @param int $requestId
+ * @param int $toEmployeeId
+ */
+function prStartReferralSlaTracking(int $requestId, int $toEmployeeId): void {
+    $conn = db();
+
+    // عدد الإحالات السابقة لهذا الطلب
+    $_qr10 = $conn->query("
+        SELECT COUNT(*) AS c FROM pr_sla_tracking
+        WHERE request_id=$requestId AND stage_name LIKE 'referral_%'
+    ");
+    $_qr10row = $_qr10 ? $_qr10->fetch_assoc() : null;
+    $cnt = (int)($_qr10row['c'] ?? 0);
+
+    $stageName = 'referral_' . ($cnt + 1);
+
+    // جلب سياسة SLA للإحالة (stage_name='referral') إن وُجدت
+    $policy    = prGetSlaPolicy('referral');
+    $allowedMin = $policy ? (int)round((float)$policy['allowed_hours'] * 60) : null;
+    $allowedStr = $allowedMin !== null ? $allowedMin : 'NULL';
+    $policyId   = $policy ? $policy['id'] : 'NULL';
+
+    $conn->query("
+        INSERT INTO pr_sla_tracking
+            (request_id, policy_id, stage_name, started_at, allowed_minutes, status)
+        VALUES
+            ($requestId, $policyId, '$stageName', NOW(), $allowedStr, 'active')
+        ON DUPLICATE KEY UPDATE
+            started_at=NOW(), status='active', elapsed_pct=0,
+            warning_sent=0, escalation_sent=0
+    ");
+}
+
+/**
+ * إنهاء عداد SLA الإحالة (عند انتهاء الإحالة أو موافقة المُحال إليه)
+ *
+ * @param int $requestId
+ */
+function prEndReferralSlaTracking(int $requestId): void {
+    $conn = db();
+    // ننهي آخر سجل إحالة نشط
+    $conn->query("
+        UPDATE pr_sla_tracking
+        SET ended_at=NOW(),
+            elapsed_minutes=GREATEST(
+                TIMESTAMPDIFF(MINUTE, started_at, NOW()) - COALESCE(pause_minutes,0), 0),
+            status='completed'
+        WHERE request_id=$requestId
+          AND stage_name LIKE 'referral_%'
+          AND status='active'
+        ORDER BY id DESC
+        LIMIT 1
+    ");
 }

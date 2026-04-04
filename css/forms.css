@@ -215,6 +215,7 @@
         opacity: 0;
         transform: translateY(-6px);
     }
+
     to {
         opacity: 1;
         transform: translateY(0);
@@ -450,6 +451,7 @@
         opacity: 0;
         transform: translateY(-6px);
     }
+
     to {
         opacity: 1;
         transform: translateY(0);
@@ -617,4 +619,12 @@ input:checked+.toggle-slider:before {
     .form-grid {
         grid-template-columns: 1fr;
     }
+}
+
+/* form-hint — تلميح صغير بجانب التسمية */
+.form-hint {
+    font-size: .72rem;
+    color: var(--text-muted, #9ca3af);
+    font-weight: 400;
+    margin-right: .3rem;
 }

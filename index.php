@@ -481,11 +481,13 @@ if (isset($_SESSION['user_id'])) {
         name: '<?= addslashes($_SESSION['user_name'] ?? '') ?>',
         role: '<?= $_SESSION['user_role'] ?? '' ?>',
         permissionLevel: '<?= $_SESSION['permission_level'] ?? 'employee' ?>',
+        permissionLevelCode: '<?= $_SESSION['permission_level_code'] ?? $_SESSION['permission_level'] ?? 'employee' ?>',
         canDelete: <?= !empty($_SESSION['can_delete']) ? 'true' : 'false' ?>,
         pagePermissions: <?= json_encode($_SESSION['page_permissions'] ?? []) ?>,
         actionPermissions: <?= json_encode($_SESSION['action_permissions'] ?? []) ?>,
         departmentId: <?= isset($_SESSION['department_id']) && $_SESSION['department_id'] ? (int)$_SESSION['department_id'] : 'null' ?>,
-        departmentName: '<?= addslashes($_SESSION['department_name'] ?? '') ?>'
+        departmentName: '<?= addslashes($_SESSION['department_name'] ?? '') ?>',
+        departmentCode: '<?= addslashes($_SESSION['department_code'] ?? '') ?>'
     };
 
     // ── تطبيق صلاحيات الصفحات على السايدبار ──────────────────

@@ -5,7 +5,12 @@
  */
 
 header('Content-Type: application/json; charset=utf-8');
-header('Access-Control-Allow-Origin: *');
+$_allowedOrigin = $_ENV['APP_ORIGIN'] ?? '';
+$_origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+if ($_allowedOrigin !== '' && $_origin === $_allowedOrigin) {
+    header('Access-Control-Allow-Origin: ' . $_allowedOrigin);
+    header('Vary: Origin');
+}
 header('Access-Control-Allow-Methods: GET, POST, DELETE');
 header('Access-Control-Allow-Headers: Content-Type');
 
@@ -609,15 +614,10 @@ try {
                 // ضمان وجود عمود permission_level_code
                 $conn->query("ALTER TABLE employees ADD COLUMN IF NOT EXISTS permission_level_code VARCHAR(50) DEFAULT NULL");
 
-                // تحديد permission_level (ENUM) من الكود
-                $enumMap = [
-                    'system_admin'     => 'system_admin',
-                    'sector_head'      => 'manager',
-                    'division_manager' => 'manager',
-                    'employee_l1'      => 'employee',
-                    'employee'         => 'employee',
-                ];
-                $enumLevel = $enumMap[$levelCode] ?? 'employee';
+                // ضمان توسيع ENUM قبل الحفظ
+                @$conn->query("ALTER TABLE employees MODIFY COLUMN permission_level ENUM('system_admin','sector_head','division_manager','employee_l1','employee','manager') NOT NULL DEFAULT 'employee'");
+                $validLevels = ['system_admin','sector_head','division_manager','employee_l1','employee'];
+                $enumLevel   = in_array($levelCode, $validLevels) ? $levelCode : 'employee';
 
                 $conn->query("UPDATE employees
                     SET permission_level='$enumLevel',

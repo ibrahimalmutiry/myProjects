@@ -6,28 +6,45 @@
 
 // بدء الجلسة للوصول إلى بيانات المستخدم
 session_start();
+ob_start(); // يمنع تسرب أي output قبل JSON
 
+// معالج الأخطاء الموحد — يحول كل error لـ JSON ويمنع HTML
 set_error_handler(function($errno, $errstr, $errfile, $errline) {
-    ob_end_clean();
+    if (ob_get_level()) ob_end_clean();
     header('Content-Type: application/json; charset=utf-8');
     echo json_encode([
-        'success' => false,
-        'debug_error' => "[$errno] $errstr",
-        'file' => basename($errfile),
-        'line' => $errline
+        'success'    => false,
+        'message'    => 'خطأ في الخادم',
+        'debug_error'=> "[$errno] $errstr in " . basename($errfile) . " L$errline",
     ], JSON_UNESCAPED_UNICODE);
     exit;
 });
-require_once dirname(__DIR__) . '/includes/permissions_functions.php';
-// معالج الأخطاء
-set_error_handler(function($severity, $message, $file, $line) {
-    throw new ErrorException($message, 0, $severity, $file, $line);
+set_exception_handler(function($e) {
+    if (ob_get_level()) ob_end_clean();
+    header('Content-Type: application/json; charset=utf-8');
+    http_response_code(500);
+    echo json_encode([
+        'success' => false,
+        'message' => 'خطأ في الخادم: ' . $e->getMessage(),
+        'file'    => basename($e->getFile()),
+        'line'    => $e->getLine(),
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
 });
 
+require_once dirname(__DIR__) . '/includes/permissions_functions.php';
+
 header('Content-Type: application/json; charset=utf-8');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE');
-header('Access-Control-Allow-Headers: Content-Type');
+
+// CORS — مقيّد بالدومين المحدد في .env
+$_allowedOrigin = $_ENV['APP_ORIGIN'] ?? '';
+$_origin        = $_SERVER['HTTP_ORIGIN'] ?? '';
+if ($_allowedOrigin !== '' && $_origin === $_allowedOrigin) {
+    header('Access-Control-Allow-Origin: ' . $_allowedOrigin);
+    header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE');
+    header('Access-Control-Allow-Headers: Content-Type');
+    header('Vary: Origin');
+}
 
 // التعامل مع طلبات OPTIONS
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
@@ -1097,6 +1114,24 @@ try {
             } else {
                 jsonResponse(['success' => false, 'message' => 'معرف غير صالح'], 400);
             }
+            break;
+
+        // ─── تعليم مجموعة إشعارات كمقروءة ──────────────────────
+        case 'mark_notifications_group_read':
+            if ($method !== 'POST') jsonResponse(['success' => false, 'message' => 'POST فقط'], 405);
+            require_once __DIR__ . '/../includes/notification_functions.php';
+            $userId  = (int)($_SESSION['user_id'] ?? 0);
+            $input   = json_decode(file_get_contents('php://input'), true);
+            $ids     = array_map('intval', (array)($input['ids'] ?? []));
+            $idsStr  = implode(',', array_filter($ids));
+            if ($idsStr) {
+                $conn = db();
+                $conn->query("UPDATE system_notifications
+                    SET is_read=1, read_at=NOW()
+                    WHERE id IN ($idsStr)
+                      AND (employee_id=$userId OR recipient_id=$userId)");
+            }
+            jsonResponse(['success' => true, 'marked' => count($ids)]);
             break;
 
         // ─── تعليم كل الإشعارات كمقروءة ─────────────────────────

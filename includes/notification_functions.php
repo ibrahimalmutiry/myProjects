@@ -93,12 +93,13 @@ function createInternalNotification($type, $scope, $refId, $refNumber, $title, $
     $conn        = db();
 
     // تعيين نوع التنبيه حسب الأعمدة الفعلية في الجدول
-    $dbType = match(true) {
-        str_contains($type, 'breach') => 'warning',
-        str_contains($type, 'warning') => 'warning',
-        str_contains($type, 'escalat') => 'urgent',
-        default => 'info',
-    };
+    if (strpos($type, 'breach') !== false || strpos($type, 'warning') !== false) {
+        $dbType = 'warning';
+    } elseif (strpos($type, 'escalat') !== false) {
+        $dbType = 'urgent';
+    } else {
+        $dbType = 'info';
+    }
 
     $dbType      = $conn->real_escape_string($dbType);
     $category    = $conn->real_escape_string($type);   // نوع SLA كـ category
@@ -230,10 +231,12 @@ function markAllNotificationsRead($userId = null) {
 function sendSmtpEmail($to, $toName, $subject, $bodyHtml, $config = null) {
     if (!$config) $config = getNotificationSettings();
 
-    $host      = $config['smtp_host']       ?? 'smtp.gmail.com';
-    $port      = (int)($config['smtp_port'] ?? 587);
-    $user      = $config['smtp_user']       ?? 'aaa1332@gmail.com';
-    $pass      = $config['smtp_pass']       ?? 'xffzbhzebqkjxihs';
+    // بيانات SMTP تُقرأ من الإعدادات المحفوظة في DB أو من .env
+    // لا تضع بيانات اعتماد هنا مباشرة — استخدم .env
+    $host      = $config['smtp_host']       ?? ($_ENV['SMTP_HOST'] ?? 'smtp.gmail.com');
+    $port      = (int)($config['smtp_port'] ?? ($_ENV['SMTP_PORT'] ?? 587));
+    $user      = $config['smtp_user']       ?? ($_ENV['SMTP_USER'] ?? '');
+    $pass      = $config['smtp_pass']       ?? ($_ENV['SMTP_PASS'] ?? '');
     $enc       = $config['smtp_encryption'] ?? 'tls';
     $fromName  = $config['smtp_from_name']  ?? 'نظام الإدارة';
     $fromEmail = $user;
@@ -495,13 +498,17 @@ function sendSlaNotification($breachType, $scope, $refId, $refNumber, $employeeI
     $allowed    = _formatMinutes((int)($extra['allowed'] ?? 0));
     $pct        = number_format((float)($extra['pct'] ?? 0), 1);
 
-    [$severity, $titleTpl, $icon] = match($breachType) {
-        'ola_warning' => ['warning', 'تحذير OLA — {scope} {ref}', '⚠️'],
-        'ola_breach'  => ['critical', 'تجاوزOLA — {scope} {ref} — تصعيد', '🔴'],
-        'sla_warning' => ['warning', 'تحذير SLA — {scope} {ref}', '⚠️'],
-        'sla_breach'  => ['critical', 'تجاوزSLA — {scope} {ref}', '🚨'],
-        default       => ['info', 'إشعار — {scope} {ref}', 'ℹ️'],
-    };
+    if ($breachType === 'ola_warning') {
+        [$severity, $titleTpl, $icon] = ['warning',  'تحذير OLA — {scope} {ref}', '⚠️'];
+    } elseif ($breachType === 'ola_breach') {
+        [$severity, $titleTpl, $icon] = ['critical', 'تجاوز OLA — {scope} {ref} — تصعيد', '🔴'];
+    } elseif ($breachType === 'sla_warning') {
+        [$severity, $titleTpl, $icon] = ['warning',  'تحذير SLA — {scope} {ref}', '⚠️'];
+    } elseif ($breachType === 'sla_breach') {
+        [$severity, $titleTpl, $icon] = ['critical', 'تجاوز SLA — {scope} {ref}', '🚨'];
+    } else {
+        [$severity, $titleTpl, $icon] = ['info', 'إشعار — {scope} {ref}', 'ℹ️'];
+    }
 
     $title    = str_replace(['{scope}','{ref}'], [$scopeLabel, $refNumber], $titleTpl);
     $body     = _buildNotificationBody($icon, $title, $stageLabel, $elapsed, $allowed, $pct, $extra);

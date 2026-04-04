@@ -10,6 +10,20 @@ session_start();
 session_write_close();
 header('Content-Type: application/json; charset=utf-8');
 
+// معالج الاستثناءات غير المتوقعة
+set_exception_handler(function($e) {
+    if (ob_get_level()) ob_end_clean();
+    http_response_code(500);
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode([
+        'success' => false,
+        'message' => 'خطأ في الخادم: ' . $e->getMessage(),
+        'file'    => basename($e->getFile()),
+        'line'    => $e->getLine(),
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
+});
+
 // ── تحميل التبعيات (نفس نمط ceo_approvals_api.php) ─────────
 require_once __DIR__ . '/../includes/functions.php';
 
@@ -50,8 +64,25 @@ try {
     // ════════════════════════════════════════════════════════
     if ($method === 'GET') {
 
+        // ── فحص صلاحية المستخدم ──────────────────────────────
+        if ($action === 'my_access') {
+            $conn   = db();
+            $isSC   = prIsUserSupplyChain($conn, $currentUserId);
+            $roleR  = (($_qrA1_ = $conn->query("SELECT role FROM employees WHERE id=$currentUserId LIMIT 1")) ? $_qrA1_->fetch_assoc() : null);
+            $role   = $roleR['role'] ?? '';
+            $viewAll= in_array($role, ['budget','payment','dispatch','treasury_manager','CEO','admin'])
+                   || $permissionLevel === 'system_admin';
+            jsonOut([
+                'success'         => true,
+                'is_supply_chain' => $isSC,
+                'is_view_all'     => $viewAll,
+                'role'            => $role,
+                'permission_level'=> $permissionLevel,
+            ]);
+        }
+
         // ── قائمة الطلبات ────────────────────────────────────
-        if ($action === 'list') {
+        elseif ($action === 'list') {
             $filters = [
                 'stage'     => $_GET['stage']     ?? '',
                 'priority'  => $_GET['priority']  ?? '',
@@ -213,10 +244,24 @@ try {
             jsonOut($result, $result['success'] ? 200 : 400);
         }
 
+        // ── إعادة تقديم طلب مرجَع ───────────────────────────
+        elseif ($action === 'resubmit') {
+            if ($permissionLevel === 'employee')
+                jsonOut(['success'=>false,'message'=>'فقط مدير الإدارة يستطيع إعادة التقديم'], 403);
+            $requestId = (int)($body['request_id'] ?? 0);
+            $notes     = trim($body['notes'] ?? '');
+            if (!$requestId) jsonOut(['success'=>false,'message'=>'معرّف الطلب مطلوب'], 400);
+            $result = prResubmitRequest($requestId, $currentUserId, $notes);
+            jsonOut($result, $result['success'] ? 200 : 400);
+        }
+
         // ── إصدار أمر الشراء ─────────────────────────────────
         elseif ($action === 'issue_po') {
-            if ($userDeptCode !== 'PUR' && $permissionLevel !== 'system_admin')
-                jsonOut(['success'=>false,'message'=>'فقط موظفو المشتريات'], 403);
+            // يُتحقق من قطاع سلاسل الإمداد مباشرةً من DB
+            $conn = $conn ?? db();
+            $isSupplyChain = prIsUserSupplyChain($conn, $currentUserId) || $permissionLevel === 'system_admin';
+            if (!$isSupplyChain)
+                jsonOut(['success'=>false,'message'=>'فقط موظفو قطاع سلاسل الإمداد والمشتريات'], 403);
             $requestId = (int)($body['request_id'] ?? 0);
             $poData = [
                 'po_number'           => $body['po_number']           ?? '',
@@ -226,6 +271,60 @@ try {
             ];
             $result = prIssuePurchaseOrder($requestId, $currentUserId, $poData);
             jsonOut($result, $result['success'] ? 200 : 400);
+        }
+
+        // ── طلب موافقة CEO من المشتريات (الطلب يتجاوز الحد) ──
+        elseif ($action === 'request_ceo_approval') {
+            // فقط موظفو سلاسل الإمداد
+            $isSupplyChain = $userDeptCode === 'PUR'
+                          || (strpos($userDeptCode, '41') === 0)
+                          || $permissionLevel === 'system_admin';
+            if (!$isSupplyChain)
+                jsonOut(['success'=>false,'message'=>'فقط موظفو سلاسل الإمداد'], 403);
+
+            $requestId = (int)($body['request_id'] ?? 0);
+            $notes     = trim($body['notes'] ?? '');
+            if (!$requestId) jsonOut(['success'=>false,'message'=>'معرّف الطلب مطلوب'], 400);
+
+            $req = prGetRequest($requestId);
+            if (!$req) jsonOut(['success'=>false,'message'=>'الطلب غير موجود'], 404);
+            if ($req['current_stage'] !== 'purchasing')
+                jsonOut(['success'=>false,'message'=>'الطلب ليس في مرحلة المشتريات'], 400);
+
+            $conn = db();
+            $esc  = $conn->real_escape_string($notes);
+            $empName = prGetEmployeeName($currentUserId);
+
+            // نقل الطلب لمرحلة ceo_approval
+            $conn->begin_transaction();
+            try {
+                $conn->query("
+                    UPDATE purchase_requests
+                    SET current_stage = 'ceo_approval', updated_at = NOW()
+                    WHERE id = $requestId
+                ");
+                $conn->query("
+                    UPDATE pr_workflow_stages
+                    SET status='pending', arrived_at=NOW(), started_at=NOW(), notes='$esc'
+                    WHERE request_id=$requestId AND stage_name='ceo_approval'
+                ");
+                // إيقاف SLA مرحلة المشتريات وبدء SLA للـ CEO
+                prEndSlaTracking($requestId, 'purchasing');
+                prStartSlaTracking($requestId, 'ceo_approval');
+                // إشعار CEO
+                prNotifyStageRecipients($requestId, 'ceo_approval', $req['request_number']);
+                prLogEvent($requestId, 'stage_changed', $currentUserId, [
+                    'stage'       => 'ceo_approval',
+                    'description' => "$empName طلب موافقة الرئيس التنفيذي على الطلب" . ($notes ? ". السبب: $notes" : ''),
+                    'old_value'   => 'purchasing',
+                    'new_value'   => 'ceo_approval',
+                ]);
+                $conn->commit();
+                jsonOut(['success'=>true,'message'=>'تم إرسال الطلب لاعتماد الرئيس التنفيذي']);
+            } catch (Exception $e) {
+                $conn->rollback();
+                jsonOut(['success'=>false,'message'=>'فشل الإرسال: '.$e->getMessage()], 500);
+            }
         }
 
         // ── اعتماد حجز الموازنة ──────────────────────────────
@@ -308,10 +407,42 @@ function jsonOut(array $data, int $status = 200): void {
 
 function prCanViewRequest(array $req, int $userId, string $level, int $deptId, string $deptCode): bool {
     if ($level === 'system_admin') return true;
-    if ($deptCode === 'FIN') return true;
-    if ($deptCode === 'PUR' && in_array($req['current_stage'], ['purchasing','waiting_budget_approval'])) return true;
+
+    $conn = db();
+    // جلب بيانات الموظف من DB مباشرةً
+    $empRow = (($_qrA2_ = $conn->query("
+        SELECT e.role, e.department_id,
+               d.code  AS dept_code,
+               ds.code AS sector_code,
+               dd.code AS division_code
+        FROM employees e
+        LEFT JOIN departments d  ON d.id = e.department_id
+        LEFT JOIN departments ds ON ds.id = e.sector_id
+        LEFT JOIN departments dd ON dd.id = e.division_id
+        WHERE e.id = $userId LIMIT 1
+    ")) ? $_qrA2_->fetch_assoc() : null);
+
+    $role        = $empRow['role']         ?? '';
+    $deptCodeDB  = $empRow['dept_code']    ?? '';
+    $sectorCode  = $empRow['sector_code']  ?? '';
+    $divCode     = $empRow['division_code']?? '';
+
+    // الأدوار التي ترى الكل
+    $rolesViewAll = ['budget', 'payment', 'dispatch', 'treasury_manager', 'CEO', 'admin', 'purchasing'];
+    if (in_array($role, $rolesViewAll)) return true;
+    if (in_array($deptCodeDB, ['FIN']) || in_array($sectorCode, ['FIN'])) return true;
+
+    // سلاسل الإمداد — أي كود في التسلسل الهرمي يبدأ بـ 41 أو = PUR
+    $allCodes = [$deptCodeDB, $sectorCode, $divCode, $deptCode];
+    foreach ($allCodes as $c) {
+        if ($c === 'PUR' || (strpos((string)$c, '41') === 0)) {
+            if (in_array($req['current_stage'], ['purchasing','waiting_budget_approval'])) return true;
+            break;
+        }
+    }
+
     if ((int)$req['created_by'] === $userId) return true;
-    if ((int)$req['department_id'] === $deptId) return true;
+    if ((int)$req['department_id'] === (int)($empRow['department_id'] ?? $deptId)) return true;
     return false;
 }
 
@@ -380,9 +511,33 @@ function prUploadAttachment(int $requestId, int $uploadedBy, array $file): array
     if ($file['error'] !== UPLOAD_ERR_OK) return ['success'=>false,'message'=>'فشل رفع الملف'];
     if ($file['size'] > 10*1024*1024) return ['success'=>false,'message'=>'الحجم يتجاوز 10 ميجابايت'];
 
+    // التحقق من حالة الطلب — لا رفع على طلبات منتهية
+    $reqCheck = prGetRequest($requestId);
+    if (!$reqCheck) return ['success'=>false,'message'=>'الطلب غير موجود'];
+    if (in_array($reqCheck['status'] ?? '', ['مرفوض', 'مكتمل', 'ملغي'])) {
+        return ['success'=>false,'message'=>'لا يمكن إضافة مرفقات لطلب في حالة: ' . $reqCheck['status']];
+    }
+
+    // التحقق من الامتداد
     $allowed = ['pdf','jpg','jpeg','png','xlsx','xls','docx','doc'];
     $ext     = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
     if (!in_array($ext, $allowed)) return ['success'=>false,'message'=>'نوع الملف غير مدعوم'];
+
+    // التحقق من MIME الحقيقي (يمنع رفع PHP باسم PDF)
+    $allowedMimes = [
+        'application/pdf',
+        'image/jpeg', 'image/png',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'application/vnd.ms-excel',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/msword',
+    ];
+    $finfo    = finfo_open(FILEINFO_MIME_TYPE);
+    $realMime = finfo_file($finfo, $file['tmp_name']);
+    finfo_close($finfo);
+    if (!in_array($realMime, $allowedMimes)) {
+        return ['success'=>false,'message'=>'محتوى الملف لا يطابق نوعه — الرفع مرفوض'];
+    }
 
     $uploadDir = dirname(__DIR__) . '/uploads/purchase_requests/';
     if (!is_dir($uploadDir)) mkdir($uploadDir, 0755, true);

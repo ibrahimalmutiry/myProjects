@@ -23,11 +23,12 @@
 
 /** حالة صفحة المعاملات */
 const PRState = {
-    requests: [],     // قائمة الطلبات المحملة
-    currentRequest: null,   // الطلب المفتوح حالياً للعرض
-    formOptions: null,   // خيارات النموذج (موردين، مراكز تكلفة...)
+    requests: [],
+    currentRequest: null,
+    formOptions: null,
     filters: { stage: '', priority: '', search: '', date_from: '', date_to: '' },
     loading: false,
+    userAccess: null,   // يُجلب من API: { is_supply_chain, is_view_all, role }
 };
 
 /** أسماء المراحل بالعربية */
@@ -94,6 +95,15 @@ const PR_EVENT_ICONS = {
  */
 async function loadPurchaseRequestsPage() {
     showLoading();
+
+    // تحميل صلاحية المستخدم من DB (مرة واحدة)
+    if (!PRState.userAccess) {
+        try {
+            const r = await fetch('api/purchase_requests_api.php?action=my_access');
+            const d = await r.json();
+            if (d.success) PRState.userAccess = d;
+        } catch (e) { console.warn('my_access fetch failed', e); }
+    }
 
     // تحميل خيارات النموذج مرة واحدة
     if (!PRState.formOptions) {
@@ -419,8 +429,10 @@ function prRenderDetail(req) {
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                 رفض</button>`;
         }
-        if (req.current_stage === 'purchasing' && prIsPurchasingUser())
+        if (req.current_stage === 'purchasing' && prIsPurchasingUser()) {
             actionBtns += `<button class="d3-btn d3-btn-amber" onclick="prOpenPOModal(${req.id})">📋 إصدار PO</button>`;
+            actionBtns += `<button class="d3-btn d3-btn-blue" onclick="prRequestCeoApproval(${req.id})">🔼 موافقة CEO</button>`;
+        }
     }
 
     // ── مسار المعاملة ─────────────────────────────────────────
@@ -2003,6 +2015,38 @@ async function prSubmitPO(requestId) {
 
 
 // ════════════════════════════════════════════════════════════
+// ⑧-ب طلب موافقة الرئيس التنفيذي من المشتريات
+// ════════════════════════════════════════════════════════════
+
+/**
+ * يُرسل الطلب لاعتماد CEO مباشرةً من مرحلة المشتريات
+ * يُستخدم عندما يرى موظف المشتريات ضرورة الحصول على موافقة عليا
+ */
+async function prRequestCeoApproval(requestId) {
+    const notes = prompt('ملاحظات طلب موافقة الرئيس التنفيذي (اختيارية):');
+    if (notes === null) return; // ألغى المستخدم
+
+    const btn = event?.target;
+    if (btn) { btn.disabled = true; btn.textContent = '...جاري الإرسال'; }
+
+    try {
+        const result = await prPostAction('request_ceo_approval', {
+            request_id: requestId,
+            notes: notes || '',
+        });
+
+        if (result?.success) {
+            showToast('✅ تم إرسال الطلب لاعتماد الرئيس التنفيذي', 'success');
+            await prOpenDetail(requestId);
+        } else {
+            showToast(result?.message || 'حدث خطأ', 'error');
+        }
+    } finally {
+        if (btn) { btn.disabled = false; btn.textContent = '🔼 موافقة CEO'; }
+    }
+}
+
+// ════════════════════════════════════════════════════════════
 // ⑨ رفع المرفقات
 // ════════════════════════════════════════════════════════════
 
@@ -2082,21 +2126,34 @@ function prCanApproveCurrentStage(req) {
 
     const stagePermissions = {
         budget_review: ['budget'],
-        treasury_review: ['dispatch', 'manager'],
+        treasury_review: ['dispatch', 'treasury_manager', 'manager'],
         finance_review: ['manager'],
-        ceo_approval: ['admin'],
-        purchasing: ['dispatch'],   // موظفو المشتريات
+        ceo_approval: ['admin', 'CEO'],
+        purchasing: ['dispatch', 'purchasing'],   // سلاسل الإمداد والمشتريات
         payment: ['payment'],
     };
 
     const allowed = stagePermissions[stage] || [];
-    return allowed.includes(role) || allowed.includes(level);
+    if (allowed.includes(role) || allowed.includes(level)) return true;
+
+    // موظفو سلاسل الإمداد — استخدم نتيجة DB إذا متاحة
+    if (stage === 'purchasing') {
+        if (PRState.userAccess?.is_supply_chain) return true;
+        const deptCode = (currentUser.departmentCode || '').toString();
+        if (deptCode === 'PUR' || deptCode.startsWith('41')) return true;
+    }
+    return false;
 }
 
-/** هل المستخدم الحالي من موظفي المشتريات */
+/** هل المستخدم الحالي من موظفي سلاسل الإمداد أو المشتريات */
 function prIsPurchasingUser() {
-    return currentUser.role === 'dispatch' ||
-        currentUser.permissionLevel === 'system_admin';
+    if (currentUser.permissionLevel === 'system_admin') return true;
+    // استخدم النتيجة المجلوبة من DB إذا كانت متاحة
+    if (PRState.userAccess) return PRState.userAccess.is_supply_chain === true;
+    // fallback: فحص محلي
+    if (['dispatch', 'purchasing'].includes(currentUser.role)) return true;
+    const deptCode = (currentUser.departmentCode || '').toString();
+    return deptCode === 'PUR' || deptCode.startsWith('41');
 }
 
 /** تنسيق المبلغ مع العملة */

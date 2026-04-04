@@ -74,8 +74,9 @@ function getEmployeePermissions(int $userId): array {
     $conn   = db();
     $userId = (int)$userId;
 
+    @$conn->query("ALTER TABLE employees ADD COLUMN IF NOT EXISTS permission_level_code VARCHAR(50) DEFAULT NULL");
     $r = $conn->query("
-        SELECT permission_level, can_delete
+        SELECT permission_level, permission_level_code, can_delete
         FROM employees WHERE id = $userId LIMIT 1
     ");
     if (!$r || !($row = $r->fetch_assoc())) return [];
@@ -101,10 +102,13 @@ function getEmployeePermissions(int $userId): array {
 
         // دمج مع الافتراضيات
         $defaults = [
-            'manager'  => ['dashboard'=>1,'transactions'=>1,'correspondence'=>1,'bank-deposits'=>1,'sla'=>1,'performance'=>1,'settings'=>0,'notifications'=>1,'reservations'=>1],
-            'employee' => ['dashboard'=>0,'transactions'=>1,'correspondence'=>1,'bank-deposits'=>1,'sla'=>0,'performance'=>0,'settings'=>0,'notifications'=>1,'reservations'=>1],
+            'sector_head'      => ['dashboard'=>1,'transactions'=>1,'correspondence'=>1,'bank-overview'=>1,'bank-accounts'=>1,'bank-investments'=>1,'daily-payments'=>1,'sla'=>1,'performance'=>1,'settings'=>0,'notifications'=>1,'reservations'=>1,'budget-plans'=>1,'archive'=>1,'ceo-approvals'=>1,'purchase-requests'=>1],
+            'division_manager' => ['dashboard'=>1,'transactions'=>1,'correspondence'=>1,'bank-overview'=>1,'bank-accounts'=>0,'bank-investments'=>0,'daily-payments'=>1,'sla'=>1,'performance'=>1,'settings'=>0,'notifications'=>1,'reservations'=>1,'budget-plans'=>1,'archive'=>1,'ceo-approvals'=>0,'purchase-requests'=>1],
+            'employee_l1'      => ['dashboard'=>0,'transactions'=>1,'correspondence'=>1,'bank-overview'=>0,'bank-accounts'=>0,'bank-investments'=>0,'daily-payments'=>1,'sla'=>0,'performance'=>1,'settings'=>0,'notifications'=>1,'reservations'=>1,'budget-plans'=>0,'archive'=>0,'ceo-approvals'=>0,'purchase-requests'=>1],
+            'manager'          => ['dashboard'=>1,'transactions'=>1,'correspondence'=>1,'bank-overview'=>1,'bank-accounts'=>1,'bank-investments'=>1,'daily-payments'=>1,'sla'=>1,'performance'=>1,'settings'=>0,'notifications'=>1,'reservations'=>1,'budget-plans'=>1,'archive'=>1,'ceo-approvals'=>1,'purchase-requests'=>1],
+            'employee'         => ['dashboard'=>0,'transactions'=>1,'correspondence'=>1,'bank-overview'=>0,'bank-accounts'=>0,'bank-investments'=>0,'daily-payments'=>0,'sla'=>0,'performance'=>0,'settings'=>0,'notifications'=>1,'reservations'=>1,'budget-plans'=>0,'archive'=>0,'ceo-approvals'=>0,'purchase-requests'=>1],
         ];
-        $def = $defaults[$row['permission_level']] ?? [];
+        $def = $defaults[$row['permission_level']] ?? $defaults['employee'];
 
         foreach ($allPages as $p) {
             if (isset($stored[$p])) {
@@ -206,10 +210,13 @@ function loadUserPermissionsToSession(int $userId): void {
         }
 
         $defaults = [
-            'manager'  => ['dashboard'=>1,'transactions'=>1,'correspondence'=>1,'bank-deposits'=>1,'sla'=>1,'performance'=>1,'settings'=>0,'notifications'=>1,'reservations'=>1],
-            'employee' => ['dashboard'=>0,'transactions'=>1,'correspondence'=>1,'bank-deposits'=>1,'sla'=>0,'performance'=>0,'settings'=>0,'notifications'=>1,'reservations'=>1],
+            'sector_head'      => ['dashboard'=>1,'transactions'=>1,'correspondence'=>1,'bank-deposits'=>1,'sla'=>1,'performance'=>1,'settings'=>0,'notifications'=>1,'reservations'=>1,'purchase-requests'=>1],
+            'division_manager' => ['dashboard'=>1,'transactions'=>1,'correspondence'=>1,'bank-deposits'=>1,'sla'=>1,'performance'=>1,'settings'=>0,'notifications'=>1,'reservations'=>1,'purchase-requests'=>1],
+            'employee_l1'      => ['dashboard'=>0,'transactions'=>1,'correspondence'=>1,'bank-deposits'=>1,'sla'=>0,'performance'=>1,'settings'=>0,'notifications'=>1,'reservations'=>1,'purchase-requests'=>1],
+            'manager'          => ['dashboard'=>1,'transactions'=>1,'correspondence'=>1,'bank-deposits'=>1,'sla'=>1,'performance'=>1,'settings'=>0,'notifications'=>1,'reservations'=>1,'purchase-requests'=>1],
+            'employee'         => ['dashboard'=>0,'transactions'=>1,'correspondence'=>1,'bank-deposits'=>1,'sla'=>0,'performance'=>0,'settings'=>0,'notifications'=>1,'reservations'=>1,'purchase-requests'=>1],
         ];
-        $def = $defaults[$row['permission_level']] ?? [];
+        $def = $defaults[$row['permission_level']] ?? $defaults['employee'];
 
         foreach ($allPages as $p) {
             $pagePerms[$p] = isset($stored[$p]) ? $stored[$p] : ((bool)($def[$p] ?? false));

@@ -14,9 +14,14 @@ error_reporting(E_ALL);
 session_start();
 
 header('Content-Type: application/json; charset=utf-8');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: GET, POST, DELETE');
-header('Access-Control-Allow-Headers: Content-Type');
+$_allowedOrigin = $_ENV['APP_ORIGIN'] ?? '';
+$_origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+if ($_allowedOrigin !== '' && $_origin === $_allowedOrigin) {
+    header('Access-Control-Allow-Origin: ' . $_allowedOrigin);
+    header('Vary: Origin');
+}
+
+
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
@@ -130,7 +135,7 @@ try {
                 if ($colRes) {
                     while ($c = $colRes->fetch_assoc()) {
                         $t = strtolower($c['Type']);
-                        if (str_contains($t, 'char') || str_contains($t, 'text') || str_contains($t, 'enum')) {
+                        if ((strpos($t, 'char') !== false) || (strpos($t, 'text') !== false) || (strpos($t, 'enum') !== false)) {
                             $conds[] = "`{$c['Field']}` LIKE '%$s%'";
                         }
                     }
@@ -265,12 +270,12 @@ try {
                 }
 
                 // معالجة VARCHAR بدون حجم
-                if ($baseType === 'VARCHAR' && !str_contains($colType, '(')) {
+                if ($baseType === 'VARCHAR' && !(strpos($colType, '(') !== false)) {
                     $colType = 'VARCHAR(255)';
                 }
 
                 // معالجة DECIMAL بدون حجم
-                if ($baseType === 'DECIMAL' && !str_contains($colType, '(')) {
+                if ($baseType === 'DECIMAL' && !(strpos($colType, '(') !== false)) {
                     $colType = 'DECIMAL(15,2)';
                 }
 

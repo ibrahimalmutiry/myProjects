@@ -1355,9 +1355,9 @@ function ensureEventsTable() {
  * @param int $transactionId معرف المعاملة
  * @param string $stage المرحلة
  * @param string $action نوع الإجراء
- * @param string|null $oldStatus الحالة السابقة
- * @param string|null $newStatus الحالة الجديدة
- * @param string|null $notes ملاحظات/سبب
+ * @param ?string $oldStatus الحالة السابقة
+ * @param ?string $newStatus الحالة الجديدة
+ * @param ?string $notes ملاحظات/سبب
  */
 function logTransactionEvent($transactionId, $stage, $action, $oldStatus = null, $newStatus = null, $notes = null) {
     $conn = db();
@@ -1539,7 +1539,7 @@ function getLastStageStatus($transactionId, $stage) {
  * تسجيل وقت بدء/انتهاء مرحلة
  * @param int $transactionId معرف المعاملة
  * @param string $stage المرحلة (creation, receiving, budget, payment, invoice)
- * @param int|null $employeeId معرف الموظف
+ * @param ?int $employeeId معرف الموظف
  * @param string $status الحالة الجديدة
  * @param bool $isStart هل هذا وقت البدء؟
  */
@@ -2101,7 +2101,10 @@ function loadPermissionsForSession($userId) {
         $allPages = ['dashboard','transactions','correspondence','bank-overview','bank-accounts','bank-investments','daily-payments','sla','performance','settings','notifications','reservations','budget-plans','archive','ceo-approvals','purchase-requests'];
     }
     
-    $r = $conn->query("SELECT role, permission_level, can_delete FROM employees WHERE id=$userId LIMIT 1");
+    // ── self-healing: توسيع ENUM + إضافة permission_level_code ──
+    @$conn->query("ALTER TABLE employees ADD COLUMN IF NOT EXISTS permission_level_code VARCHAR(50) DEFAULT NULL");
+    @$conn->query("ALTER TABLE employees MODIFY COLUMN permission_level ENUM('system_admin','sector_head','division_manager','employee_l1','employee','manager') NOT NULL DEFAULT 'employee'");
+    $r = $conn->query("SELECT role, permission_level, permission_level_code, can_delete FROM employees WHERE id=$userId LIMIT 1");
     if (!$r || !($row = $r->fetch_assoc())) return;
     
     if ($row['role'] === 'admin' && $row['permission_level'] !== 'system_admin') {
@@ -2110,7 +2113,8 @@ function loadPermissionsForSession($userId) {
         $row['can_delete'] = 1;
     }
     
-    $_SESSION['permission_level'] = $row['permission_level'];
+    $_SESSION['permission_level']      = $row['permission_level'];
+    $_SESSION['permission_level_code'] = $row['permission_level_code'] ?? $row['permission_level'];
     $_SESSION['can_delete'] = (bool)$row['can_delete'];
     
     $allPages = ['dashboard','transactions','correspondence','bank-overview','bank-accounts','bank-investments','daily-payments','sla','performance','settings','notifications','reservations','budget-plans','archive','ceo-approvals','purchase-requests'];
@@ -2125,11 +2129,15 @@ function loadPermissionsForSession($userId) {
             $r2 = $conn->query("SELECT page, can_access FROM employee_page_permissions WHERE employee_id=$userId");
             if ($r2) while ($pr = $r2->fetch_assoc()) $stored[$pr['page']] = (bool)$pr['can_access'];
         }
+        // قواعد الصلاحيات الافتراضية للمستويات الخمسة
         $defaults = [
-            'manager'  => ['dashboard'=>1,'transactions'=>1,'correspondence'=>1,'bank-deposits'=>1,'sla'=>1,'performance'=>1,'settings'=>0,'notifications'=>1,'reservations'=>1,'budget-plans'=>1,'purchase-requests'=>1],
-            'employee' => ['dashboard'=>0,'transactions'=>1,'correspondence'=>1,'bank-deposits'=>1,'sla'=>0,'performance'=>0,'settings'=>0,'notifications'=>1,'reservations'=>1,'budget-plans'=>0,'purchase-requests'=>1],
+            'sector_head'      => ['dashboard'=>1,'transactions'=>1,'correspondence'=>1,'bank-overview'=>1,'bank-accounts'=>1,'bank-investments'=>1,'daily-payments'=>1,'sla'=>1,'performance'=>1,'settings'=>0,'notifications'=>1,'reservations'=>1,'budget-plans'=>1,'archive'=>1,'ceo-approvals'=>1,'purchase-requests'=>1],
+            'division_manager' => ['dashboard'=>1,'transactions'=>1,'correspondence'=>1,'bank-overview'=>1,'bank-accounts'=>0,'bank-investments'=>0,'daily-payments'=>1,'sla'=>1,'performance'=>1,'settings'=>0,'notifications'=>1,'reservations'=>1,'budget-plans'=>1,'archive'=>1,'ceo-approvals'=>0,'purchase-requests'=>1],
+            'employee_l1'      => ['dashboard'=>0,'transactions'=>1,'correspondence'=>1,'bank-overview'=>0,'bank-accounts'=>0,'bank-investments'=>0,'daily-payments'=>1,'sla'=>0,'performance'=>1,'settings'=>0,'notifications'=>1,'reservations'=>1,'budget-plans'=>0,'archive'=>0,'ceo-approvals'=>0,'purchase-requests'=>1],
+            'manager'          => ['dashboard'=>1,'transactions'=>1,'correspondence'=>1,'bank-overview'=>1,'bank-accounts'=>1,'bank-investments'=>1,'daily-payments'=>1,'sla'=>1,'performance'=>1,'settings'=>0,'notifications'=>1,'reservations'=>1,'budget-plans'=>1,'archive'=>1,'ceo-approvals'=>1,'purchase-requests'=>1],
+            'employee'         => ['dashboard'=>0,'transactions'=>1,'correspondence'=>1,'bank-overview'=>0,'bank-accounts'=>0,'bank-investments'=>0,'daily-payments'=>0,'sla'=>0,'performance'=>0,'settings'=>0,'notifications'=>1,'reservations'=>1,'budget-plans'=>0,'archive'=>0,'ceo-approvals'=>0,'purchase-requests'=>1],
         ];
-        $def = $defaults[$row['permission_level']] ?? [];
+        $def = $defaults[$row['permission_level']] ?? $defaults['employee'];
         $pagePerms = [];
         foreach ($allPages as $p) {
             $pagePerms[$p] = isset($stored[$p]) ? $stored[$p] : (bool)($def[$p] ?? false);
@@ -2146,10 +2154,11 @@ function loadPermissionsForSession($userId) {
     }
 }
 
-// ── نظام المعاملات (طلبات الشراء) ──────────────────────────
+} // end function_exists
+
+// ── نظام المعاملات (طلبات الشراء) — خارج if(!function_exists) ──
+// يُحمَّل دائماً بغض النظر عن حالة الجلسة
 $_prFunctionsPath = __DIR__ . '/pr_functions.php';
 if (file_exists($_prFunctionsPath)) {
     require_once $_prFunctionsPath;
 }
-
-} // end function_exists

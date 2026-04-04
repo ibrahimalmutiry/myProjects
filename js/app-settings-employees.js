@@ -1,3 +1,151 @@
+function openAddEmployeeModal() {
+    DOM.modalTitle.textContent = 'إضافة موظف';
+    DOM.modalBody.innerHTML = _buildEmpForm({});
+    openModal();
+    // فلترة الأقسام حسب القطاع المختار (إن كان)
+    onSectorChange(document.getElementById('empSector'));
+}
+
+/** بناء نموذج الموظف — يُستخدم في الإضافة والتعديل */
+function _buildEmpForm(emp) {
+    const id = emp.id || '';
+    const sectors = SettingsData.sectors || [];
+    const divisions = SettingsData.divisions || [];
+    const employees = SettingsData.employees || [];
+
+    const curSector = emp.sector_id || emp.department_id || '';
+
+    const sectorOpts = sectors.map(s => {
+        const lbl = s.name + (s.name_en && s.name_en !== s.name ? ' — ' + s.name_en : '');
+        return `<option value="${s.id}" ${curSector == s.id ? 'selected' : ''}>${lbl}</option>`;
+    }).join('');
+
+    const divOpts = divisions.map(d => {
+        const sid = d.sector_id || d.parent_id || '';
+        const label = d.name + (d.name_en && d.name_en !== d.name ? ' — ' + d.name_en : '');
+        const sel = emp.division_id == d.id ? 'selected' : '';
+        const hid = (curSector && String(sid) !== String(curSector)) ? 'hidden' : '';
+        return `<option value="${d.id}" data-sector="${sid}" ${sel} ${hid}>${label}</option>`;
+    }).join('');
+
+    const supOpts = employees
+        .filter(e => e.is_active != 0 && e.id != id)
+        .map(e => `<option value="${e.id}" ${emp.supervisor_id == e.id ? 'selected' : ''}>${e.name} (${_roleLabel(e.role)})</option>`)
+        .join('');
+
+    const roleDesc = (SYSTEM_ROLES.find(r => r.value === emp.role) || {}).desc || '';
+
+    return `
+    <form id="employeeForm" onsubmit="saveEmployee(event)" autocomplete="off">
+        <input type="hidden" name="id" id="empId" value="${id}">
+
+        <!-- ① الهوية -->
+        <div class="modal-form-grid" style="grid-template-columns:1fr 1fr 1fr">
+            <div class="form-group">
+                <label class="form-label">رقم الموظف *</label>
+                <input class="form-input" name="employee_number" id="empNumber"
+                       value="${emp.employee_number || ''}" required
+                       placeholder="EMP-0001">
+            </div>
+            <div class="form-group" style="grid-column:span 2">
+                <label class="form-label">الاسم الكامل *</label>
+                <input class="form-input" name="name" id="empName"
+                       value="${emp.name || ''}" required placeholder="اسم الموظف">
+            </div>
+            <div class="form-group">
+                <label class="form-label">البريد الإلكتروني</label>
+                <input class="form-input" type="email" name="email" id="empEmail"
+                       value="${emp.email || ''}" placeholder="name@company.com">
+            </div>
+            <div class="form-group">
+                <label class="form-label">رقم الهاتف</label>
+                <input class="form-input" name="phone" id="empPhone"
+                       value="${emp.phone || ''}" placeholder="05xxxxxxxx">
+            </div>
+        </div>
+
+        <hr style="border:none;border-top:.5px solid var(--border-color);margin:.75rem 0">
+
+        <!-- ② التنظيم: القطاع → القسم -->
+        <div class="modal-form-grid" style="grid-template-columns:1fr 1fr">
+            <div class="form-group">
+                <label class="form-label">
+                    🏛️ القطاع
+                    <span class="form-hint">نطاق رؤية المعاملات</span>
+                </label>
+                <select class="form-select" name="sector_id" id="empSector"
+                        onchange="onSectorChange(this)">
+                    <option value="">— بدون قطاع —</option>
+                    ${sectorOpts}
+                </select>
+                <div id="sectorHint" class="form-hint" style="margin-top:.35rem"></div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">
+                    🏢 القسم
+                    <span class="form-hint">يُفلتر تلقائياً</span>
+                </label>
+                <select class="form-select" name="division_id" id="empDivision">
+                    <option value="">— بدون قسم —</option>
+                    ${divOpts}
+                </select>
+            </div>
+        </div>
+
+        <hr style="border:none;border-top:.5px solid var(--border-color);margin:.75rem 0">
+
+        <!-- ③ الدور والصلاحية -->
+        <div class="modal-form-grid" style="grid-template-columns:1fr 1fr">
+            <div class="form-group">
+                <label class="form-label">
+                    ⚙️ الدور *
+                    <span class="form-hint">يحدد سير العمل</span>
+                </label>
+                <select class="form-select" name="role" id="empRole"
+                        required onchange="onRoleChange(this)">
+                    <option value="">— اختر —</option>
+                    ${buildRoleOptions(emp.role || '', emp.sector_id || emp.department_id || '')}
+                </select>
+                <div id="roleHint" class="form-hint" style="margin-top:.35rem;font-style:italic">
+                    ${roleDesc}
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">
+                    🔒 الصلاحية
+                    <span class="form-hint">تُضبط تلقائياً</span>
+                </label>
+                <select class="form-select" name="permission_level_code" id="empPermLevel">
+                    ${(PERM_LEVELS_CACHE || []).map(p =>
+        `<option value="${p.code}" ${(emp.permission_level_code || emp.permission_level) == p.code ? 'selected' : ''}>${p.label}</option>`
+    ).join('')}
+                </select>
+            </div>
+        </div>
+
+        <hr style="border:none;border-top:.5px solid var(--border-color);margin:.75rem 0">
+
+        <!-- ④ المشرف -->
+        <div class="form-group">
+            <label class="form-label">
+                👤 المشرف المباشر
+                <span class="form-hint">يُصعَّد إليه عند تجاوز SLA</span>
+            </label>
+            <select class="form-select" name="supervisor_id" id="empSupervisor">
+                <option value="">— بدون مشرف —</option>
+                ${supOpts}
+            </select>
+        </div>
+
+        <div class="modal-footer" style="padding:0;border:none;margin-top:1.25rem">
+            <button type="button" class="btn btn-secondary" onclick="closeModal()">إلغاء</button>
+            <button type="submit" class="btn btn-primary">
+                ${id ? '💾 حفظ التعديلات' : '➕ إضافة الموظف'}
+            </button>
+        </div>
+    </form>`;
+}
+
 /**
  * ╔══════════════════════════════════════════════════════════════╗
  * ║      app-settings-employees.js — إدارة الموظفين والصلاحيات  ║
@@ -65,15 +213,158 @@ async function loadPermissionLevels() {
 
 /* تعريف أدوار النظام الثابتة مع ألوانها ومسمياتها */
 const SYSTEM_ROLES = [
-    { value: 'admin', label: 'مدير النظام', label_en: 'System Admin', color: '#ef4444', desc: 'صلاحية كاملة على النظام' },
-    { value: 'CEO', label: 'الرئيس التنفيذي', label_en: 'CEO', color: '#8b5cf6', desc: 'اعتماد الطلبات الكبيرة' },
-    { value: 'receiver', label: 'الاستلام', label_en: 'Receiver', color: '#3b82f6', desc: 'استلام المعاملات وتصنيفها' },
-    { value: 'budget', label: 'الموازنة', label_en: 'Budget', color: '#f59e0b', desc: 'مراجعة واعتماد الموازنة' },
-    { value: 'dispatch', label: 'التوجيه', label_en: 'Dispatcher', color: '#10b981', desc: 'توجيه المعاملات' },
-    { value: 'payment', label: 'المالية — الدفع', label_en: 'Payment', color: '#06b6d4', desc: 'تنفيذ المدفوعات' },
-    { value: 'invoice', label: 'الفوترة', label_en: 'Invoice', color: '#6366f1', desc: 'إصدار الفواتير' },
-    { value: 'employee', label: 'موظف', label_en: 'Employee', color: '#94a3b8', desc: 'موظف عادي بدون دور نظامي' },
+    { value: 'admin', label: 'مدير النظام', color: '#ef4444', desc: 'صلاحية كاملة على النظام' },
+    { value: 'CEO', label: 'الرئيس التنفيذي', color: '#8b5cf6', desc: 'اعتماد الطلبات الكبيرة' },
+    { value: 'receiver', label: 'الاستلام', color: '#3b82f6', desc: 'استلام المعاملات وتصنيفها' },
+    { value: 'budget', label: 'الموازنة', color: '#f59e0b', desc: 'مراجعة واعتماد الموازنة' },
+    { value: 'treasury_manager', label: 'مدير الخزينة', color: '#0891b2', desc: 'إدارة الخزينة والسيولة' },
+    { value: 'dispatch', label: 'التوجيه / الخزينة', color: '#10b981', desc: 'توجيه المعاملات وعمليات الخزينة' },
+    { value: 'payment', label: 'المالية — الدفع', color: '#06b6d4', desc: 'تنفيذ المدفوعات اليومية' },
+    { value: 'invoice', label: 'الفوترة', color: '#6366f1', desc: 'إصدار الفواتير والمستحقات' },
+    { value: 'purchasing', label: 'المشتريات', color: '#f97316', desc: 'إصدار أوامر الشراء والتفاوض مع الموردين' },
+    { value: 'employee', label: 'موظف', color: '#94a3b8', desc: 'موظف بدون دور نظامي محدد' },
 ];
+
+/**
+ * الأدوار المتاحة لكل قطاع بناءً على كوده
+ * الأدوار المشتركة (admin, CEO, employee) تظهر دائماً
+ * ---
+ * sector code mapping:
+ *   31xxxx = القطاع المالي (Finance)
+ *   41xxxx = سلاسل الإمداد (Supply Chain)
+ *   32xxxx = الخدمات المشتركة (Shared Services)
+ *   42xxxx = العمليات (Operations)
+ *   FIN    = القطاع المالي (بديل)
+ *   PUR    = المشتريات (بديل)
+ */
+const SECTOR_ROLES = {
+    // القطاع المالي
+    finance: {
+        match: (code, name) => code?.startsWith('31') || code === 'FIN'
+            || /مال|finance/i.test(name),
+        roles: ['admin', 'CEO', 'budget', 'treasury_manager', 'dispatch', 'payment', 'invoice', 'receiver', 'employee'],
+        label: 'القطاع المالي',
+    },
+    // سلاسل الإمداد والمشتريات
+    supply: {
+        match: (code, name) => code?.startsWith('41') || code === 'PUR'
+            || /supply|مشتريات|إمداد|لوجستي/i.test(name),
+        roles: ['admin', 'CEO', 'purchasing', 'receiver', 'employee'],
+        label: 'سلاسل الإمداد',
+    },
+    // الخدمات المشتركة (IT، HR، إدارية)
+    shared: {
+        match: (code, name) => code?.startsWith('32')
+            || /shared|مشترك|إدار|human|hr|تقني/i.test(name),
+        roles: ['admin', 'CEO', 'receiver', 'employee'],
+        label: 'الخدمات المشتركة',
+    },
+    // العمليات والإنتاج
+    operations: {
+        match: (code, name) => code?.startsWith('42')
+            || /operat|عمليات|إنتاج|production/i.test(name),
+        roles: ['admin', 'CEO', 'receiver', 'employee'],
+        label: 'العمليات',
+    },
+};
+
+/** جلب الأدوار المتاحة لقطاع معيَّن */
+function getRolesForSector(sectorId) {
+    if (!sectorId) return SYSTEM_ROLES; // بدون قطاع: أظهر الكل
+
+    const sector = (SettingsData.sectors || []).find(s => String(s.id) === String(sectorId));
+    if (!sector) return SYSTEM_ROLES;
+
+    const code = (sector.code || '').toUpperCase();
+    const name = sector.name || '';
+
+    for (const key of Object.keys(SECTOR_ROLES)) {
+        const def = SECTOR_ROLES[key];
+        if (def.match(code, name)) {
+            return SYSTEM_ROLES.filter(r => def.roles.includes(r.value));
+        }
+    }
+    // قطاع غير معروف: أظهر الأدوار العامة فقط
+    return SYSTEM_ROLES.filter(r => ['admin', 'CEO', 'receiver', 'employee'].includes(r.value));
+}
+
+
+/** خريطة: الدور → مستوى الصلاحية التلقائي (5 مستويات) */
+const ROLE_PERM_MAP = {
+    admin: 'system_admin',
+    CEO: 'sector_head',
+    budget: 'employee_l1',
+    treasury_manager: 'division_manager',
+    dispatch: 'employee_l1',
+    payment: 'employee_l1',
+    purchasing: 'employee_l1',
+    receiver: 'employee_l1',
+    invoice: 'employee',
+    employee: 'employee',
+};
+
+/** عند تغيير الدور: ضبط الصلاحية تلقائياً */
+function onRoleChange(sel) {
+    const role = sel?.value || '';
+    const perm = ROLE_PERM_MAP[role] || 'employee';
+    const permEl = document.getElementById('empPermLevel');
+    if (permEl) permEl.value = perm;
+
+    // hint توضيحي
+    const hint = document.getElementById('roleHint');
+    const desc = (SYSTEM_ROLES.find(r => r.value === role) || {}).desc || '';
+    if (hint) hint.textContent = desc;
+}
+
+/** عند تغيير القطاع: فلترة الأقسام + تحديث الأدوار المتاحة */
+function onSectorChange(sel) {
+    const sectorId = sel?.value || '';
+
+    // ── فلترة الأقسام ─────────────────────────────────────────
+    const divSel = document.getElementById('empDivision');
+    if (divSel) {
+        Array.from(divSel.options).forEach(opt => {
+            if (!opt.value) return;
+            opt.hidden = !(!sectorId || opt.dataset.sector == sectorId);
+        });
+        const cur = divSel.options[divSel.selectedIndex];
+        if (cur && cur.value && sectorId && cur.dataset.sector != sectorId) {
+            divSel.value = '';
+        }
+    }
+
+    // ── تحديث قائمة الأدوار بناءً على القطاع ─────────────────
+    const roleEl = document.getElementById('empRole');
+    if (roleEl) {
+        const currentRole = roleEl.value;
+        roleEl.innerHTML = '<option value="">— اختر —</option>'
+            + buildRoleOptions(currentRole, sectorId);
+
+        // إذا لم يعد الدور الحالي متاحاً في هذا القطاع → صفّره
+        const stillAvail = Array.from(roleEl.options).some(o => o.value === currentRole && o.value);
+        if (!stillAvail) {
+            roleEl.value = '';
+            // صفّر الصلاحية والـ hint
+            const permEl = document.getElementById('empPermLevel');
+            if (permEl) permEl.value = 'employee';
+            const hint = document.getElementById('roleHint');
+            if (hint) hint.textContent = '';
+        }
+    }
+
+    // ── hint القطاع ───────────────────────────────────────────
+    const sector = (SettingsData.sectors || []).find(s => String(s.id) === String(sectorId));
+    if (sector) {
+        for (const def of Object.values(SECTOR_ROLES)) {
+            const code = (sector.code || '').toUpperCase();
+            if (def.match(code, sector.name || '')) {
+                const hint = document.getElementById('sectorHint');
+                if (hint) hint.textContent = `أدوار ${def.label}: ${def.roles.length} دور متاح`;
+                break;
+            }
+        }
+    }
+}
 
 function renderEmployeesSection() {
     var cont = document.getElementById('settingsContent');
@@ -269,238 +560,24 @@ function _roleLabel(role) {
 
 
 /** بناء خيارات الأدوار الوظيفية مع الوصف */
-function buildRoleOptions(selectedRole) {
-    return (SYSTEM_ROLES || []).map(function (r) {
-        var sel = selectedRole === r.value ? 'selected' : '';
-        return '<option value="' + r.value + '" ' + sel + '>'
-            + r.label
-            + (r.desc ? ' — ' + r.desc : '')
-            + '</option>';
+function buildRoleOptions(selectedRole, sectorId) {
+    const roles = getRolesForSector(sectorId);
+    return roles.map(r => {
+        const sel = selectedRole === r.value ? 'selected' : '';
+        return `<option value="${r.value}" ${sel}>${r.label}${r.desc ? ' — ' + r.desc : ''}</option>`;
     }).join('');
 }
-
-function openAddEmployeeModal() {
-    const supervisorOptions = (SettingsData.employees || [])
-        .filter(e => e.is_active != 0)
-        .map(e => `<option value="${e.id}">${e.name} (${_roleLabel(e.role)})</option>`)
-        .join('');
-
-    const sectors = SettingsData.sectors || [];
-    const divisions = SettingsData.divisions || [];
-    const sectorOpts = sectors.map(s => {
-        var lbl = s.name + (s.name_en && s.name_en !== s.name ? ' — ' + s.name_en : '');
-        return `<option value="${s.id}">${lbl}</option>`;
-    }).join('');
-    const divOpts = divisions.map(d => {
-        var label = d.name + (d.name_en && d.name_en !== d.name ? ' — ' + d.name_en : '');
-        return `<option value="${d.id}" data-sector="${d.sector_id || d.parent_id || ''}">${label}</option>`;
-    }).join('');
-    const permOpts = PERM_LEVELS_CACHE.map(p =>
-        `<option value="${p.code}">${p.label}</option>`
-    ).join('');
-
-    DOM.modalTitle.textContent = 'إضافة موظف جديد';
-    DOM.modalBody.innerHTML = `
-        <form id="employeeForm" onsubmit="saveEmployee(event)">
-            <input type="hidden" name="id" id="empId" value="">
-            <div class="form-group">
-                <label class="form-label">رقم الموظف *</label>
-                <input type="text" class="form-input" name="empNumber" id="empNumber" required>
-            </div>
-            <div class="modal-form-grid">
-                <div class="form-group">
-                    <label class="form-label">اسم الموظف *</label>
-                    <input type="text" class="form-input" name="name" id="empName" required>
-                </div>
-                <div class="form-group" style="grid-column:1/-1">
-                    <label class="form-label">المسمى الوظيفي
-                        <span style="font-size:.72rem;color:var(--text-muted);font-weight:400">اختياري — يظهر في الملف الشخصي</span>
-                    </label>
-                    <input type="text" class="form-input" name="job_title" id="empJobTitle"
-                           placeholder="مثال: مدير الخزينة، مهندس صيانة، محاسب أول">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">البريد الإلكتروني</label>
-                    <input type="email" class="form-input" name="email" id="empEmail">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">رقم الهاتف</label>
-                    <input type="text" class="form-input" name="phone" id="empPhone">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">الدور الوظيفي في النظام *
-                        <span style="font-size:.72rem;color:var(--text-muted);font-weight:400">يحدد صلاحيات سير العمل</span>
-                    </label>
-                    <select class="form-select" name="role" id="empRole" required>
-                        <option value="">— اختر الدور —</option>
-                        ${buildRoleOptions('')}
-                    </select>
-                </div>
-            </div>
-            <div class="form-group">
-                <label class="form-label">🔒 مستوى الصلاحية</label>
-                <select class="form-select" name="permission_level_code" id="empPermLevel">
-                    ${permOpts}
-                </select>
-            </div>
-            <div class="form-group">
-                <label class="form-label">🏛️ القطاع
-                    <span style="font-size:.75rem;color:var(--text-muted);font-weight:400">(نطاق رؤية المعاملات)</span>
-                </label>
-                <select class="form-select" name="sector_id" id="empSector" onchange="onSectorChange(this)">
-                    <option value="">— بدون قطاع —</option>
-                    ${sectorOpts}
-                </select>
-            </div>
-            <div class="form-group">
-                <label class="form-label">🏢 القسم التنظيمي
-                    <span style="font-size:.75rem;color:var(--text-muted);font-weight:400">(الوحدة المباشرة داخل القطاع)</span>
-                </label>
-                <select class="form-select" name="division_id" id="empDivision">
-                    <option value="">— بدون قسم —</option>
-                    ${divOpts}
-                </select>
-            </div>
-            <div class="form-group">
-                <label class="form-label">👤 المشرف المباشر
-                    <span style="font-size:.75rem;color:var(--text-muted);font-weight:400">(يُصعَّد إليه عند تجاوز OLA/SLA)</span>
-                </label>
-                <select class="form-select" name="supervisor_id" id="empSupervisor">
-                    <option value="">— بدون مشرف —</option>
-                    ${supervisorOptions}
-                </select>
-            </div>
-            <div class="modal-footer" style="padding:0;border:none;margin-top:1.5rem">
-                <button type="button" class="btn btn-secondary" onclick="closeModal()">إلغاء</button>
-                <button type="submit" class="btn btn-primary">حفظ</button>
-            </div>
-        </form>
-    `;
-    openModal();
-}
-
 /** فلترة الأقسام عند تغيير القطاع */
-function onSectorChange(sel) {
-    var sectorId = sel ? sel.value : '';
-    var divSel = document.getElementById('empDivision');
-    if (!divSel) return;
-    Array.from(divSel.options).forEach(function (opt) {
-        if (!opt.value) return;
-        opt.style.display = (!sectorId || opt.dataset.sector == sectorId) ? '' : 'none';
-    });
-    // إعادة تعيين الاختيار إن لم يكن منتمياً للقطاع
-    var cur = divSel.options[divSel.selectedIndex];
-    if (cur && cur.value && sectorId && cur.dataset.sector != sectorId) {
-        divSel.value = '';
-    }
-}
-
 function editEmployee(id) {
-    var emp = SettingsData.employees.find(function (e) { return e.id == id; });
+    const emp = SettingsData.employees.find(e => e.id == id);
     if (!emp) return;
-
-    const supervisorOptions = (SettingsData.employees || [])
-        .filter(e => e.is_active != 0 && e.id != emp.id)
-        .map(e => `<option value="${e.id}" ${emp.supervisor_id == e.id ? 'selected' : ''}>${e.name} (${_roleLabel(e.role)})</option>`)
-        .join('');
-
-    const sectors = SettingsData.sectors || [];
-    const divisions = SettingsData.divisions || [];
-    const curSector = emp.sector_id || emp.department_id;
-
-    const sectorOptsEdit = sectors.map(s => {
-        var label = s.name + (s.name_en && s.name_en !== s.name ? ' — ' + s.name_en : '');
-        return `<option value="${s.id}" ${curSector == s.id ? 'selected' : ''}>${label}</option>`;
-    }).join('');
-    const divOptsEdit = divisions.map(d => {
-        var sid = d.sector_id || d.parent_id || '';
-        var hidden = (curSector && String(sid) !== String(curSector)) ? 'style="display:none"' : '';
-        var label = d.name + (d.name_en && d.name_en !== d.name ? ' — ' + d.name_en : '');
-        return `<option value="${d.id}" data-sector="${sid}" ${emp.division_id == d.id ? 'selected' : ''} ${hidden}>${label}</option>`;
-    }).join('');
-    const permOptsEdit = PERM_LEVELS_CACHE.map(p =>
-        `<option value="${p.code}" ${(emp.permission_level_code || emp.permission_level) == p.code ? 'selected' : ''}>${p.label}</option>`
-    ).join('');
-
     DOM.modalTitle.textContent = 'تعديل موظف';
-    DOM.modalBody.innerHTML = `
-        <form id="employeeForm" onsubmit="saveEmployee(event)">
-            <input type="hidden" name="id" id="empId" value="${emp.id}">
-            <div class="form-group">
-                <label class="form-label">رقم الموظف *</label>
-                <input type="text" class="form-input" name="employee_number" id="empNumber" value="${emp.employee_number}" required>
-            </div>
-            <div class="modal-form-grid">
-                <div class="form-group">
-                    <label class="form-label">اسم الموظف *</label>
-                    <input type="text" class="form-input" name="name" id="empName" value="${emp.name}" required>
-                </div>
-                <div class="form-group" style="grid-column:1/-1">
-                    <label class="form-label">المسمى الوظيفي
-                        <span style="font-size:.72rem;color:var(--text-muted);font-weight:400">اختياري — يظهر في الملف الشخصي</span>
-                    </label>
-                    <input type="text" class="form-input" name="job_title" id="empJobTitle"
-                           value="${emp.job_title || ''}"
-                           placeholder="مثال: مدير الخزينة، مهندس صيانة، محاسب أول">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">البريد الإلكتروني</label>
-                    <input type="email" class="form-input" name="email" id="empEmail" value="${emp.email || ''}">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">رقم الهاتف</label>
-                    <input type="text" class="form-input" name="phone" id="empPhone" value="${emp.phone || ''}">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">الدور الوظيفي في النظام *
-                        <span style="font-size:.72rem;color:var(--text-muted);font-weight:400">يحدد صلاحيات سير العمل</span>
-                    </label>
-                    <select class="form-select" name="role" id="empRole" required>
-                        <option value="">— اختر الدور —</option>
-                        ${buildRoleOptions(emp.role)}
-                    </select>
-                </div>
-            </div>
-            <div class="form-group">
-                <label class="form-label">🔒 مستوى الصلاحية</label>
-                <select class="form-select" name="permission_level_code" id="empPermLevel">
-                    ${permOptsEdit}
-                </select>
-            </div>
-            <div class="form-group">
-                <label class="form-label">🏛️ القطاع
-                    <span style="font-size:.75rem;color:var(--text-muted);font-weight:400">(نطاق رؤية المعاملات)</span>
-                </label>
-                <select class="form-select" name="sector_id" id="empSector" onchange="onSectorChange(this)">
-                    <option value="">— بدون قطاع —</option>
-                    ${sectorOptsEdit}
-                </select>
-            </div>
-            <div class="form-group">
-                <label class="form-label">🏢 القسم التنظيمي
-                    <span style="font-size:.75rem;color:var(--text-muted);font-weight:400">(الوحدة المباشرة داخل القطاع)</span>
-                </label>
-                <select class="form-select" name="division_id" id="empDivision">
-                    <option value="">— بدون قسم —</option>
-                    ${divOptsEdit}
-                </select>
-            </div>
-            <div class="form-group">
-                <label class="form-label">👤 المشرف المباشر
-                    <span style="font-size:.75rem;color:var(--text-muted);font-weight:400">(يُصعَّد إليه عند تجاوز OLA/SLA)</span>
-                </label>
-                <select class="form-select" name="supervisor_id" id="empSupervisor">
-                    <option value="">— بدون مشرف —</option>
-                    ${supervisorOptions}
-                </select>
-            </div>
-            <div class="modal-footer" style="padding:0;border:none;margin-top:1.5rem">
-                <button type="button" class="btn btn-secondary" onclick="closeModal()">إلغاء</button>
-                <button type="submit" class="btn btn-primary">💾 حفظ التعديلات</button>
-            </div>
-        </form>
-    `;
+    DOM.modalBody.innerHTML = _buildEmpForm(emp);
     openModal();
+    // فلترة أقسام القطاع المختار
+    onSectorChange(document.getElementById('empSector'));
+    // hint الدور
+    onRoleChange(document.getElementById('empRole'));
 }
 
 async function saveEmployee(e) {
@@ -688,22 +765,40 @@ Object.defineProperty(window, 'PERMISSION_LEVELS', {
 
 var DEFAULT_PAGES = {
     system_admin: {
-        dashboard: 1, notifications: 1, 'purchase-requests': 1,
-        transactions: 1, correspondence: 1, reservations: 1, 'budget-plans': 1,
-        'bank-overview': 1, 'bank-accounts': 1, 'bank-investments': 1, 'daily-payments': 1,
-        archive: 1, 'ceo-approvals': 1, sla: 1, performance: 1, settings: 1,
+        dashboard: 1, notifications: 1, 'purchase-requests': 1, transactions: 1, correspondence: 1,
+        reservations: 1, 'budget-plans': 1, 'bank-overview': 1, 'bank-accounts': 1,
+        'bank-investments': 1, 'daily-payments': 1, archive: 1, 'ceo-approvals': 1,
+        sla: 1, performance: 1, settings: 1,
+    },
+    sector_head: {
+        dashboard: 1, notifications: 1, 'purchase-requests': 1, transactions: 1, correspondence: 1,
+        reservations: 1, 'budget-plans': 1, 'bank-overview': 1, 'bank-accounts': 1,
+        'bank-investments': 1, 'daily-payments': 1, archive: 1, 'ceo-approvals': 1,
+        sla: 1, performance: 1, settings: 0,
+    },
+    division_manager: {
+        dashboard: 1, notifications: 1, 'purchase-requests': 1, transactions: 1, correspondence: 1,
+        reservations: 1, 'budget-plans': 1, 'bank-overview': 1, 'bank-accounts': 0,
+        'bank-investments': 0, 'daily-payments': 1, archive: 1, 'ceo-approvals': 0,
+        sla: 1, performance: 1, settings: 0,
+    },
+    employee_l1: {
+        dashboard: 0, notifications: 1, 'purchase-requests': 1, transactions: 1, correspondence: 1,
+        reservations: 1, 'budget-plans': 0, 'bank-overview': 0, 'bank-accounts': 0,
+        'bank-investments': 0, 'daily-payments': 1, archive: 0, 'ceo-approvals': 0,
+        sla: 0, performance: 1, settings: 0,
     },
     manager: {
-        dashboard: 1, notifications: 1, 'purchase-requests': 1,
-        transactions: 1, correspondence: 1, reservations: 1, 'budget-plans': 1,
-        'bank-overview': 1, 'bank-accounts': 1, 'bank-investments': 1, 'daily-payments': 1,
-        archive: 1, 'ceo-approvals': 1, sla: 1, performance: 1, settings: 0,
+        dashboard: 1, notifications: 1, 'purchase-requests': 1, transactions: 1, correspondence: 1,
+        reservations: 1, 'budget-plans': 1, 'bank-overview': 1, 'bank-accounts': 1,
+        'bank-investments': 1, 'daily-payments': 1, archive: 1, 'ceo-approvals': 1,
+        sla: 1, performance: 1, settings: 0,
     },
     employee: {
-        dashboard: 0, notifications: 1, 'purchase-requests': 1,
-        transactions: 1, correspondence: 1, reservations: 1, 'budget-plans': 0,
-        'bank-overview': 0, 'bank-accounts': 0, 'bank-investments': 0, 'daily-payments': 0,
-        archive: 0, 'ceo-approvals': 0, sla: 0, performance: 0, settings: 0,
+        dashboard: 0, notifications: 1, 'purchase-requests': 1, transactions: 1, correspondence: 1,
+        reservations: 1, 'budget-plans': 0, 'bank-overview': 0, 'bank-accounts': 0,
+        'bank-investments': 0, 'daily-payments': 0, archive: 0, 'ceo-approvals': 0,
+        sla: 0, performance: 0, settings: 0,
     },
 };
 

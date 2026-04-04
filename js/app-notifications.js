@@ -30,6 +30,31 @@
 let notificationsData = [];
 /** عدد الإشعارات غير المقروءة — يُحدّث شارة الرأس */
 let unreadNotificationsCount = 0;
+let _lastNotifCount = 0; // لكشف الإشعارات الجديدة
+
+/** طلب إذن إشعارات المتصفح (يُستدعى مرة واحدة) */
+function requestBrowserNotifPermission() {
+    if (!('Notification' in window)) return;
+    if (Notification.permission === 'default') {
+        Notification.requestPermission().catch(() => { });
+    }
+}
+
+/** إرسال إشعار للمتصفح */
+function sendBrowserNotification(title, body, icon) {
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    try {
+        const n = new Notification(title, {
+            body: body || '',
+            icon: icon || '/favicon.ico',
+            dir: 'rtl',
+            lang: 'ar',
+            tag: 'pr-system', // يُلغي الإشعار السابق بدلاً من التراكم
+        });
+        n.onclick = () => { window.focus(); n.close(); switchTab('notifications'); };
+        setTimeout(() => n.close(), 8000);
+    } catch (e) { }
+}
 /** مجموعة IDs الإشعارات المقروءة — تُخزن في localStorage */
 let readNotifications = new Set();
 
@@ -76,7 +101,19 @@ async function loadInitialNotificationCount() {
                 is_read: !!n.is_read  // الحالة من قاعدة البيانات فقط
             }));
 
-            unreadNotificationsCount = notificationsData.filter(n => !n.is_read).length;
+            const newCount = notificationsData.filter(n => !n.is_read).length;
+            // اكتشاف إشعارات جديدة → إرسال browser notification
+            if (newCount > _lastNotifCount && _lastNotifCount > 0) {
+                const newest = notificationsData.find(n => !n.is_read);
+                if (newest) {
+                    sendBrowserNotification(
+                        newest.title || 'إشعار جديد',
+                        newest.message || '',
+                    );
+                }
+            }
+            _lastNotifCount = newCount;
+            unreadNotificationsCount = newCount;
             updateNotificationBadge();
         }
     } catch (error) {
@@ -177,9 +214,26 @@ function renderNotifications(dropdown) {
     </div><div class="notif-list">`;
 
     if (unread.length > 0) {
+        // ── تجميع إشعارات نفس الطلب + النوع (grouped_id) ───────
+        const grouped = new Map();
         unread.forEach(n => {
+            const key = n.grouped_id || `${n.transaction_id}_${n.category}` || n.id;
+            if (!grouped.has(key)) {
+                grouped.set(key, { ...n, _count: 1, _ids: [n.id] });
+            } else {
+                const g = grouped.get(key);
+                g._count++;
+                g._ids.push(n.id);
+                // احتفظ بالأحدث
+                if (new Date(n.created_at) > new Date(g.created_at)) {
+                    grouped.set(key, { ...n, _count: g._count, _ids: g._ids });
+                }
+            }
+        });
+
+        grouped.forEach(n => {
             const isSla = n.category && catIcon[n.category];
-            const icon = isSla ? catIcon[n.category] : '📋';
+            const icon = isSla ? catIcon[n.category] : (n.category === 'purchase_request' ? '📋' : '🔔');
             const color = isSla ? (catColor[n.category] || 'var(--text-muted)') : 'var(--text-muted)';
             const time = formatTimeAgo(n.update_time || n.created_at);
             const txNum = n.transaction_number || n.ref_number || '—';
@@ -187,32 +241,36 @@ function renderNotifications(dropdown) {
             const stageLbl = n.stage_label || stageNames[stage] || stage;
             const catLbl = n.category_label || n.title || 'إشعار';
             const desc = n.message || (n.transaction_type ? `${n.transaction_type} — ${n.status || ''}` : '');
-            const empName = n.employee_name ? `👤 ${n.employee_name}` : '';
             const isEscalation = ['ola_breach', 'sla_breach', 'manual_escalation'].includes(n.category);
+            const countBadge = n._count > 1
+                ? `<span style="background:${color};color:#fff;border-radius:99px;font-size:.68rem;font-weight:700;padding:1px 6px;margin-right:4px">${n._count}×</span>`
+                : '';
+
+            // data-notif-ids لتعليم كلها مقروءة دفعة واحدة
+            const idsAttr = JSON.stringify(n._ids || [n.id]);
 
             html += `
-            <div class="notif-item unread" data-notif-id="${n.id}"
-                 style="border-right:3px solid ${color}">
-                <div class="notif-card-content">
-                    <div class="notif-icon" style="background:${color}18;color:${color};font-size:1.1rem;
-                         width:36px;height:36px;display:flex;align-items:center;justify-content:center;
-                         border-radius:8px;flex-shrink:0">${icon}</div>
-                    <div class="notif-content">
-                        <div class="notif-title" style="color:${color};font-weight:700;font-size:.85rem">${catLbl}</div>
-                        <div style="font-weight:600;font-size:.88rem;color:var(--text-primary);margin:.2rem 0">
-                            معاملة: ${txNum}${stageLbl ? ' — ' + stageLbl : ''}
+            <div class="notif-item unread" data-notif-id="${n.id}" data-notif-ids='${idsAttr}'
+                 onclick="handleNotificationGroupClick(this)"
+                 style="border-right:3px solid ${color};cursor:pointer">
+                <div class="notif-card-content" style="display:flex;gap:10px;align-items:flex-start;padding:10px 12px">
+                    <div style="background:${color}18;color:${color};font-size:1.1rem;
+                         width:36px;height:36px;min-width:36px;display:flex;align-items:center;justify-content:center;
+                         border-radius:8px;position:relative">
+                        ${icon}
+                        ${n._count > 1 ? `<span style="position:absolute;top:-5px;right:-5px;background:${color};color:#fff;border-radius:99px;font-size:.6rem;font-weight:700;padding:1px 5px;min-width:16px;text-align:center">${n._count}</span>` : ''}
+                    </div>
+                    <div style="flex:1;min-width:0">
+                        <div style="color:${color};font-weight:700;font-size:.84rem;display:flex;align-items:center;gap:4px">
+                            ${countBadge}${catLbl}
                         </div>
-                        ${desc ? `<div class="notif-desc" style="font-size:.78rem">${desc}</div>` : ''}
-                        ${empName ? `<div style="font-size:.75rem;color:var(--text-muted);margin-top:.2rem">${empName}</div>` : ''}
-                        ${isEscalation && n.transaction_id ? `
-                        <button onclick="event.stopPropagation();openSlaDetailModal(${n.transaction_id})"
-                            style="margin-top:.4rem;background:${color};color:#fff;border:none;
-                                   border-radius:5px;padding:.25rem .6rem;font-size:.75rem;
-                                   cursor:pointer;font-family:inherit">
-                            📊 عرض تفاصيل SLA
-                        </button>` : ''}
-                        <div class="notif-meta" style="margin-top:.35rem">
-                            <div class="notif-time">${time}</div>
+                        <div style="font-weight:600;font-size:.86rem;color:var(--text-primary);margin:.18rem 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+                            ${txNum}${stageLbl ? ' · ' + stageLbl : ''}
+                        </div>
+                        ${desc ? `<div style="font-size:.77rem;color:var(--text-muted);margin-top:2px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${desc}</div>` : ''}
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:.3rem">
+                            <span style="font-size:.72rem;color:var(--text-muted)">${time}</span>
+                            ${isEscalation && n.transaction_id ? `<button onclick="event.stopPropagation();openSlaDetailModal(${n.transaction_id})" style="background:${color};color:#fff;border:none;border-radius:4px;padding:2px 8px;font-size:.72rem;cursor:pointer">📊 SLA</button>` : ''}
                         </div>
                     </div>
                 </div>
@@ -321,11 +379,84 @@ function handleNotificationClick(notifId) {
         document.getElementById('notifications-dropdown')?.classList.remove('show');
     }, 400);
 
-    // فتح المعاملة
-    const transactionId = notif ? (notif.transaction_id || notif.id) : notifId;
+    // فتح المعاملة أو الصفحة المناسبة
     setTimeout(() => {
-        goToTransaction(transactionId);
+        if (notif?.action_url) {
+            // action_url محدد: مثل "purchase-requests#123"
+            const [tab, anchor] = notif.action_url.split('#');
+            switchTab(tab || 'notifications');
+            if (anchor) {
+                // إذا كانت صفحة طلبات الشراء افتح التفاصيل
+                if (tab === 'purchase-requests' && typeof prOpenDetail === 'function') {
+                    prOpenDetail(parseInt(anchor));
+                }
+            }
+        } else if (notif?.transaction_id && notif?.category === 'purchase_request') {
+            switchTab('purchase-requests');
+            if (typeof prOpenDetail === 'function') prOpenDetail(notif.transaction_id);
+        } else {
+            const transactionId = notif ? (notif.transaction_id || notif.id) : notifId;
+            goToTransaction(transactionId);
+        }
     }, 100);
+}
+
+/** معالجة النقر على بطاقة إشعار (مع دعم المجموعات) */
+function handleNotificationGroupClick(el) {
+    // جلب كل الـ IDs في المجموعة
+    let ids;
+    try { ids = JSON.parse(el.dataset.notifIds || '[]'); } catch { ids = []; }
+    const mainId = parseInt(el.dataset.notifId);
+    if (!ids.length) ids = [mainId];
+
+    // تعليم المجموعة كلها كمقروءة
+    ids.forEach(id => {
+        if (!readNotifications.has(id)) {
+            readNotifications.add(id);
+            if (unreadNotificationsCount > 0) unreadNotificationsCount--;
+        }
+    });
+    saveReadNotifications();
+    updateNotificationBadge();
+
+    // animation إزالة
+    el.style.transition = 'opacity .25s, transform .25s';
+    el.style.opacity = '0';
+    el.style.transform = 'translateX(-16px)';
+    setTimeout(() => {
+        el.remove();
+        if (!document.querySelectorAll('.notif-item').length) {
+            renderNotifications(document.getElementById('notifications-dropdown'));
+        }
+    }, 250);
+
+    // إرسال للخادم
+    fetch('api/?action=mark_notifications_group_read', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids })
+    }).catch(() => { });
+
+    // التوجيه
+    const notif = notificationsData.find(n => n.id === mainId);
+    setTimeout(() => {
+        if (notif?.action_url) {
+            const [tab, anchor] = notif.action_url.split('#');
+            switchTab(tab || 'notifications');
+            if (anchor && tab === 'purchase-requests' && typeof prOpenDetail === 'function') {
+                prOpenDetail(parseInt(anchor));
+            }
+        } else if (notif?.transaction_id) {
+            if (notif.category === 'purchase_request' && typeof prOpenDetail === 'function') {
+                switchTab('purchase-requests');
+                prOpenDetail(notif.transaction_id);
+            } else {
+                goToTransaction(notif.transaction_id);
+            }
+        }
+    }, 100);
+
+    document.getElementById('notifications-dropdown')?.classList.remove('show');
 }
 
 // الانتقال للمعاملة
@@ -418,7 +549,10 @@ setInterval(() => {
     if (!dropdown || !dropdown.classList.contains('show')) {
         loadInitialNotificationCount();
     }
-}, 30000);
+}, 10000); // polling كل 10 ثوانٍ
+
+// طلب إذن إشعارات المتصفح عند أول تحميل
+setTimeout(requestBrowserNotifPermission, 3000);
 
 // إغلاق القائمة عند النقر خارجها
 document.addEventListener('click', (e) => {
