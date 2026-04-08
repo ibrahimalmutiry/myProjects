@@ -2103,7 +2103,9 @@ function loadPermissionsForSession($userId) {
     
     // ── self-healing: توسيع ENUM + إضافة permission_level_code ──
     @$conn->query("ALTER TABLE employees ADD COLUMN IF NOT EXISTS permission_level_code VARCHAR(50) DEFAULT NULL");
-    @$conn->query("ALTER TABLE employees MODIFY COLUMN permission_level ENUM('system_admin','sector_head','division_manager','employee_l1','employee','manager') NOT NULL DEFAULT 'employee'");
+    @$conn->query("ALTER TABLE employees MODIFY COLUMN permission_level ENUM('system_admin','CEO','sector_head','division_manager','employee_l1','employee') NOT NULL DEFAULT 'employee'");
+    // تصحيح تلقائي: أي موظف بدور CEO → permission_level = 'CEO'
+    @$conn->query("UPDATE employees SET permission_level='CEO', permission_level_code='CEO' WHERE role='CEO' AND permission_level NOT IN ('system_admin','CEO')");
     $r = $conn->query("SELECT role, permission_level, permission_level_code, can_delete FROM employees WHERE id=$userId LIMIT 1");
     if (!$r || !($row = $r->fetch_assoc())) return;
     
@@ -2112,6 +2114,12 @@ function loadPermissionsForSession($userId) {
         $row['permission_level'] = 'system_admin';
         $row['can_delete'] = 1;
     }
+    // تصحيح تلقائي: CEO يحصل على permission_level = 'CEO'
+    if ($row['role'] === 'CEO' && !in_array($row['permission_level'], ['system_admin','CEO'])) {
+        $conn->query("UPDATE employees SET permission_level='CEO', permission_level_code='CEO' WHERE id=$userId");
+        $row['permission_level'] = 'CEO';
+        $row['permission_level_code'] = 'CEO';
+    }
     
     $_SESSION['permission_level']      = $row['permission_level'];
     $_SESSION['permission_level_code'] = $row['permission_level_code'] ?? $row['permission_level'];
@@ -2119,7 +2127,7 @@ function loadPermissionsForSession($userId) {
     
     $allPages = ['dashboard','transactions','correspondence','bank-overview','bank-accounts','bank-investments','daily-payments','sla','performance','settings','notifications','reservations','budget-plans','archive','ceo-approvals','purchase-requests'];
     
-    if ($row['permission_level'] === 'system_admin') {
+    if ($row['permission_level'] === 'system_admin' || $row['permission_level'] === 'CEO') {
         $_SESSION['page_permissions']   = array_fill_keys($allPages, true);
         $_SESSION['action_permissions'] = [];
     } else {
@@ -2129,13 +2137,15 @@ function loadPermissionsForSession($userId) {
             $r2 = $conn->query("SELECT page, can_access FROM employee_page_permissions WHERE employee_id=$userId");
             if ($r2) while ($pr = $r2->fetch_assoc()) $stored[$pr['page']] = (bool)$pr['can_access'];
         }
-        // قواعد الصلاحيات الافتراضية للمستويات الخمسة
+        // قواعد الصلاحيات الافتراضية للمستويات
+        // الأدوار الستة — نطاق الرؤية حسب الخطة
         $defaults = [
+            'system_admin'     => array_fill_keys($allPages, true),
+            'CEO'              => ['dashboard'=>1,'transactions'=>1,'correspondence'=>1,'bank-overview'=>1,'bank-accounts'=>0,'bank-investments'=>0,'daily-payments'=>1,'sla'=>1,'performance'=>1,'settings'=>0,'notifications'=>1,'reservations'=>1,'budget-plans'=>1,'archive'=>1,'ceo-approvals'=>1,'purchase-requests'=>1],
             'sector_head'      => ['dashboard'=>1,'transactions'=>1,'correspondence'=>1,'bank-overview'=>1,'bank-accounts'=>1,'bank-investments'=>1,'daily-payments'=>1,'sla'=>1,'performance'=>1,'settings'=>0,'notifications'=>1,'reservations'=>1,'budget-plans'=>1,'archive'=>1,'ceo-approvals'=>1,'purchase-requests'=>1],
-            'division_manager' => ['dashboard'=>1,'transactions'=>1,'correspondence'=>1,'bank-overview'=>1,'bank-accounts'=>0,'bank-investments'=>0,'daily-payments'=>1,'sla'=>1,'performance'=>1,'settings'=>0,'notifications'=>1,'reservations'=>1,'budget-plans'=>1,'archive'=>1,'ceo-approvals'=>0,'purchase-requests'=>1],
+            'division_manager' => ['dashboard'=>1,'transactions'=>1,'correspondence'=>1,'bank-overview'=>0,'bank-accounts'=>0,'bank-investments'=>0,'daily-payments'=>1,'sla'=>1,'performance'=>1,'settings'=>0,'notifications'=>1,'reservations'=>1,'budget-plans'=>1,'archive'=>1,'ceo-approvals'=>0,'purchase-requests'=>1],
             'employee_l1'      => ['dashboard'=>0,'transactions'=>1,'correspondence'=>1,'bank-overview'=>0,'bank-accounts'=>0,'bank-investments'=>0,'daily-payments'=>1,'sla'=>0,'performance'=>1,'settings'=>0,'notifications'=>1,'reservations'=>1,'budget-plans'=>0,'archive'=>0,'ceo-approvals'=>0,'purchase-requests'=>1],
-            'manager'          => ['dashboard'=>1,'transactions'=>1,'correspondence'=>1,'bank-overview'=>1,'bank-accounts'=>1,'bank-investments'=>1,'daily-payments'=>1,'sla'=>1,'performance'=>1,'settings'=>0,'notifications'=>1,'reservations'=>1,'budget-plans'=>1,'archive'=>1,'ceo-approvals'=>1,'purchase-requests'=>1],
-            'employee'         => ['dashboard'=>0,'transactions'=>1,'correspondence'=>1,'bank-overview'=>0,'bank-accounts'=>0,'bank-investments'=>0,'daily-payments'=>0,'sla'=>0,'performance'=>0,'settings'=>0,'notifications'=>1,'reservations'=>1,'budget-plans'=>0,'archive'=>0,'ceo-approvals'=>0,'purchase-requests'=>1],
+            'employee'         => ['dashboard'=>0,'transactions'=>1,'correspondence'=>1,'bank-overview'=>0,'bank-accounts'=>0,'bank-investments'=>0,'daily-payments'=>0,'sla'=>0,'performance'=>0,'settings'=>0,'notifications'=>1,'reservations'=>0,'budget-plans'=>0,'archive'=>0,'ceo-approvals'=>0,'purchase-requests'=>1],
         ];
         $def = $defaults[$row['permission_level']] ?? $defaults['employee'];
         $pagePerms = [];

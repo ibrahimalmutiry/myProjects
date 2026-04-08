@@ -32,24 +32,31 @@ const PRState = {
 };
 
 /** أسماء المراحل بالعربية */
-const PR_STAGE_NAMES = {
-    draft: 'مسودة',
-    budget_review: 'مراجعة موظف الموازنة',
-    treasury_review: 'مراجعة مدير الخزينة',
-    finance_review: 'مراجعة المدير المالي',
-    treasury_finance_review: 'مراجعة الخزينة والمالية',
-    ceo_approval: 'اعتماد الرئيس التنفيذي',
-    purchasing: 'المشتريات',
-    waiting_budget_approval: 'انتظار اعتماد الحجز',
-    payment: 'المالية — الدفع',
-    completed: 'مكتملة',
-    rejected: 'مرفوضة',
-    returned: 'مُرجَعة',
-};
+function getPRStageNames() {
+    return {
+        draft: tr('مسودة'),
+        reception: tr('الاستلام والتحقق'),
+        budget_review: tr('مراجعة موظف الموازنة'),
+        treasury_review: tr('مراجعة مدير الخزينة'),
+        finance_review: tr('مراجعة رئيس القطاع المالي'),
+        treasury_finance_review: tr('مراجمة الخزينة والمالية'),
+        ceo_approval: tr('موافقة مبدئية — الرئيس التنفيذي'),
+        purchasing: tr('المشتريات — إنشاء حجز'),
+        waiting_budget_approval: tr('اعتماد حجز الموازنة'),
+        accounts_review: tr('الحسابات — مراجعة وتوزيع'),
+        po_issuance: tr('إصدار أمر الشراء (PO)'),
+        payment: tr('المالية — الدفع'),
+        completed: tr('مكتملة'),
+        rejected: tr('مرفوضة'),
+        returned: tr('مُرجَعة للمنشئ'),
+    };
+}
+const PR_STAGE_NAMES = new Proxy({}, { get: (_, k) => getPRStageNames()[k] });
 
 /** ألوان المراحل */
 const PR_STAGE_COLORS = {
     draft: '#94a3b8',
+    reception: '#0891b2',
     budget_review: '#3b82f6',
     treasury_review: '#8b5cf6',
     finance_review: '#7c3aed',
@@ -57,6 +64,8 @@ const PR_STAGE_COLORS = {
     ceo_approval: '#dc2626',
     purchasing: '#f59e0b',
     waiting_budget_approval: '#f97316',
+    accounts_review: '#ec4899',
+    po_issuance: '#d97706',
     payment: '#10b981',
     completed: '#22c55e',
     rejected: '#ef4444',
@@ -153,7 +162,7 @@ async function prLoadRequestsList() {
         const data = await res.json();
 
         if (!data.success) {
-            showToast(data.message || 'خطأ في تحميل البيانات', 'error');
+            showToast(data.message || tr('خطأ في تحميل البيانات'), 'error');
             return;
         }
 
@@ -237,17 +246,17 @@ function prRenderPage() {
                 <table class="pr-table" id="pr-table">
                     <thead>
                         <tr>
-                            <th>رقم الطلب</th>
-                            <th>العنوان</th>
-                            <th>الإدارة</th>
-                            <th>المورد</th>
-                            <th>المبلغ</th>
-                            <th>الأولوية</th>
-                            <th>المرحلة</th>
-                            <th>مُسند إلى</th>
+                            <th data-tr="رقم الطلب">رقم الطلب</th>
+                            <th data-tr="العنوان">العنوان</th>
+                            <th data-tr="الإدارة">الإدارة</th>
+                            <th data-tr="المورد">المورد</th>
+                            <th data-tr="المبلغ">المبلغ</th>
+                            <th data-tr="الأولوية">الأولوية</th>
+                            <th data-tr="المرحلة">المرحلة</th>
+                            <th data-tr="مُسند إلى">مُسند إلى</th>
                             <th>SLA</th>
-                            <th>التاريخ</th>
-                            <th>إجراءات</th>
+                            <th data-tr="التاريخ">التاريخ</th>
+                            <th data-tr="الإجراءات">إجراءات</th>
                         </tr>
                     </thead>
                     <tbody id="pr-tbody">
@@ -292,7 +301,7 @@ function prRenderRows(requests) {
                 </td>
                 <td>
                     <span class="pr-priority-badge pr-priority-${req.priority}">
-                        ${req.priority === 'urgent' ? '⚡ عاجل' : 'عادي'}
+                        ${req.priority === 'urgent' ? '⚡ ' + tr('عاجل') : tr('عادي')}
                     </span>
                 </td>
                 <td>
@@ -389,7 +398,7 @@ async function prOpenDetail(requestId) {
         prRenderDetail(data.data);
 
     } catch (e) {
-        showToast('خطأ في الاتصال', 'error');
+        showToast(tr('خطأ في الاتصال'), 'error');
         console.error(e);
     }
 }
@@ -402,40 +411,43 @@ function prRenderDetail(req) {
     const stageName = PR_STAGE_NAMES[req.current_stage] || req.current_stage;
     const stageColor = PR_STAGE_COLORS[req.current_stage] || '#94a3b8';
     const canApprove = prCanApproveCurrentStage(req);
-    const canAssign = currentUser.permissionLevel !== 'employee' &&
-        req.department_id === currentUser.departmentId;
-
-    // المعاملة مكتملة أو مرفوضة — بدون أزرار إجراءات
+    const canAssign = currentUser.permissionLevel !== 'employee' && req.department_id === currentUser.departmentId;
+    const alreadyActed = (req.stage_approvals || []).some(a =>
+        a.stage === req.current_stage && parseInt(a.employee_id) === parseInt(currentUser.id) && ['approved', 'rejected'].includes(a.action));
     const isClosed = ['completed', 'rejected', 'returned'].includes(req.current_stage);
 
-    // ── أزرار الإجراءات ──────────────────────────────────────
+    // أزرار الإجراءات
     let actionBtns = '';
     if (isClosed) {
-        // عرض شارة فقط بدل الأزرار
-        const closedColor = req.current_stage === 'completed' ? '#22c55e'
-            : req.current_stage === 'rejected' ? '#ef4444' : '#f97316';
-        const closedLabel = req.current_stage === 'completed' ? '✅ مكتملة'
-            : req.current_stage === 'rejected' ? '❌ مرفوضة' : '↩️ مُرجَعة';
-        actionBtns = `<span class="d3-closed-badge" style="background:${closedColor}15;color:${closedColor};border:1.5px solid ${closedColor}30">${closedLabel} — لا تتوفر إجراءات</span>`;
+        const cc = req.current_stage === 'completed' ? '#22c55e' : req.current_stage === 'rejected' ? '#ef4444' : '#f97316';
+        const cl = req.current_stage === 'completed' ? ('✅ ' + tr('مكتملة')) : req.current_stage === 'rejected' ? ('❌ ' + tr('مرفوضة')) : ('↩️ ' + tr('مُرجَعة للمنشئ'));
+        actionBtns = `<span class="d3-closed-badge" style="background:${cc}15;color:${cc};border:1.5px solid ${cc}30">${cl}</span>`;
     } else {
-        actionBtns = `<button class="d3-btn d3-btn-ghost" onclick="prOpenReferModal(${req.id})">🔀 إحالة</button>`;
-        if (canAssign)
-            actionBtns += `<button class="d3-btn d3-btn-purple" onclick="prOpenAssignModal(${req.id})">👤 إسناد</button>`;
-        if (canApprove) {
-            actionBtns += `<button class="d3-btn d3-btn-green" onclick="prOpenApproveModal(${req.id},'${req.current_stage}')">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
-                موافقة</button>`;
-            actionBtns += `<button class="d3-btn d3-btn-red" onclick="prOpenRejectModal(${req.id},'${req.current_stage}')">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                رفض</button>`;
+        actionBtns = `<button class="d3-btn d3-btn-ghost" onclick="prOpenReferModal(${req.id})">🔀 ${tr('إحالة')}</button>`;
+        if (canAssign) actionBtns += `<button class="d3-btn d3-btn-purple" onclick="prOpenAssignModal(${req.id})">👤 ${tr('إسناد')}</button>`;
+        if (canApprove && !alreadyActed) {
+            actionBtns += `<button class="d3-btn d3-btn-green" onclick="prOpenApproveModal(${req.id},'${req.current_stage}')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg> ${tr('موافقة')}</button>`;
+            actionBtns += `<button class="d3-btn d3-btn-red" onclick="prOpenRejectModal(${req.id},'${req.current_stage}')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> ${tr('رفض')}</button>`;
+        } else if (alreadyActed) {
+            actionBtns += `<span class="d3-closed-badge" style="background:#22c55e15;color:#22c55e;border:1.5px solid #22c55e30">✅ ${tr('تمت موافقتك')}</span>`;
         }
         if (req.current_stage === 'purchasing' && prIsPurchasingUser()) {
-            actionBtns += `<button class="d3-btn d3-btn-amber" onclick="prOpenPOModal(${req.id})">📋 إصدار PO</button>`;
-            actionBtns += `<button class="d3-btn d3-btn-blue" onclick="prRequestCeoApproval(${req.id})">🔼 موافقة CEO</button>`;
+            if (!req.reservation_number) {
+                actionBtns += `<button class="d3-btn d3-btn-amber" onclick="prApprovePurchasing(${req.id})" style="background:#f59e0b;color:#fff;border-color:#f59e0b">📌 ${tr('إنشاء حجز الموازنة')}</button>`;
+            } else {
+                actionBtns += `<span class="d3-closed-badge" style="background:#f59e0b15;color:#f59e0b;border:1.5px solid #f59e0b30">📌 ${tr('الحجز مُنشأ — بانتظار الاعتماد')}</span>`;
+            }
+        }
+        if (req.current_stage === 'accounts_review' && canApprove) {
+            actionBtns += `<button class="d3-btn" style="background:#d97706;color:#fff;border-color:#d97706" onclick="prChooseRoute(${req.id},'po')">📋 ${tr('مسار PO')}</button>`;
+            actionBtns += `<button class="d3-btn d3-btn-green" onclick="prChooseRoute(${req.id},'direct')">💳 ${tr('دفع مباشر')}</button>`;
+        }
+        if (req.current_stage === 'po_issuance' && prIsPurchasingUser()) {
+            actionBtns += `<button class="d3-btn d3-btn-amber" onclick="prOpenPOModal(${req.id})">📋 ${tr('إصدار أمر الشراء')}</button>`;
         }
     }
 
-    // ── مسار المعاملة ─────────────────────────────────────────
+    // مسار المعاملة
     const stages = req.workflow_stages || [];
     const totalSteps = stages.length;
     const doneCount = stages.filter(s => ['approved', 'completed'].includes(s.status)).length;
@@ -448,16 +460,13 @@ function prRenderDetail(req) {
         const name = PR_STAGE_NAMES[s.stage_name] || s.stage_name;
         const who = s.approved_by_name || s.employee_name || '';
         const date = s.completed_at ? prFormatDate(s.completed_at) : '';
-
         let state = done ? 'done' : current ? 'active' : rejected ? 'rejected' : 'pending';
         const clr = { done: '#22c55e', active: '#3b82f6', rejected: '#ef4444', pending: '#cbd5e1' }[state];
-
-        let inner = '';
-        if (done) inner = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.5"><polyline points="20 6 9 17 4 12"/></svg>`;
-        else if (rejected) inner = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
-        else if (current) inner = `<span class="d3-pulse"></span>`;
-        else inner = `<span style="font-size:.62rem;font-weight:700;color:#94a3b8">${idx + 1}</span>`;
-
+        let inner = done
+            ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.5"><polyline points="20 6 9 17 4 12"/></svg>`
+            : rejected ? `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`
+                : current ? `<span class="d3-pulse"></span>`
+                    : `<span style="font-size:.62rem;font-weight:700;color:#94a3b8">${idx + 1}</span>`;
         return `
         <div class="d3-step d3-step-${state}">
             <div class="d3-step-circle" style="background:${clr};border-color:${clr};${current ? 'box-shadow:0 0 0 5px rgba(59,130,246,.18)' : ''}">${inner}</div>
@@ -470,15 +479,23 @@ function prRenderDetail(req) {
         ${idx < totalSteps - 1 ? `<div class="d3-step-line${done ? ' d3-step-line-done' : ''}"></div>` : ''}`;
     }).join('');
 
-    // ── سجل الأحداث ──────────────────────────────────────────
-    const eventsHTML = prRenderEvents(req.events);
+    // SLA strip فوق المسار
+    const slaStrip = prRenderSlaStrip(req.sla_status);
 
-    // ── جانب البيانات ─────────────────────────────────────────
-    const kv = (k, v) => v && v !== '—' ? `
-        <div class="d3-kv">
-            <span class="d3-k">${k}</span>
-            <span class="d3-v">${v}</span>
+    // بناء بطاقات المعلومات الموحدة
+    const kv = (k, v, opts) => v && v !== '—' ? `
+        <div class="d3-kv2">
+            <span class="d3-k2">${k}</span>
+            <span class="d3-v2 ${opts || ''}">${v}</span>
         </div>` : '';
+
+    // قسم المورد يظهر فقط إذا كان نوع الطلب يحتاج مورداً
+    // أو إذا كانت بيانات المورد موجودة فعلاً (للطلبات القديمة)
+    const typeRequiresSupplier = req.type_requires_supplier == 1 || req.type_requires_supplier === '1' || req.type_requires_supplier === true;
+    const hasSupplierData = !!(req.supplier_name_resolved || req.supplier_name_manual || req.final_supplier_name || req.final_supplier_name_resolved);
+    const hasSupplier = typeRequiresSupplier || hasSupplierData;
+
+    const hasBudget = req.cost_center_code || req.budget_category_code || req.budget_code || req.reservation_number;
 
     DOM.mainContent.innerHTML = `
     <div class="d3-root">
@@ -495,95 +512,147 @@ function prRenderDetail(req) {
                 </div>
             </div>
             <div class="d3-header-mid">
-                <span class="d3-pill" style="background:${stageColor}18;color:${stageColor};border-color:${stageColor}35">${stageName}</span>
-                ${req.priority === 'urgent' ? '<span class="d3-urgent">⚡ عاجل</span>' : ''}
+                ${!isClosed ? `<span class="d3-pill" style="background:${stageColor}18;color:${stageColor};border-color:${stageColor}35">${stageName}</span>` : ''}
+                ${req.priority === 'urgent' ? `<span class="d3-urgent">⚡ ${tr('عاجل')}</span>` : ''}
             </div>
             <div class="d3-header-actions">${actionBtns}</div>
         </div>
 
+        <!-- ══ SLA Strip فوق المسار ══════════════════════════════ -->
+        ${slaStrip}
+
         <!-- ══ Stepper ══════════════════════════════════════════ -->
         <div class="d3-stepper-card">
-            <div class="d3-card-label">مسار المعاملة
+            <div class="d3-card-label">${tr('مسار المعاملة')}
                 <span class="d3-pct-badge" style="${pct >= 100 ? 'background:#dcfce7;color:#16a34a' : 'background:#dbeafe;color:#1d4ed8'}">${pct}%</span>
                 <span class="d3-steps-count">${doneCount} / ${totalSteps}</span>
             </div>
             <div class="d3-stepper">${stepsHTML}</div>
         </div>
 
-        <!-- ══ Body ═════════════════════════════════════════════ -->
-        <div class="d3-body">
+        <!-- ══ بيانات الطلب بين المسار وسجل النشاط ══════════════ -->
+        <div class="d3-info-col">
 
-            <!-- اليسار: الأحداث -->
-            <div class="d3-events-col">
-                <div class="d3-card">
-                    <div class="d3-card-label">سجل النشاط
-                        <span class="d3-cnt">${req.events?.length || 0}</span>
+                <!-- بطاقة الطلب الموحدة -->
+                <div class="d3-card d3-info-card">
+                    <!-- المبلغ hero -->
+                    <div class="d3-amount-hero2">
+                        <div>
+                            <div class="d3-amount-main">${prFormatAmount(req.amount, req.currency)}</div>
+                            <div class="d3-amount-lbl">${tr('المبلغ التقديري')}</div>
+                        </div>
+                        ${req.final_amount ? `<div class="d3-amount-divider"></div><div>
+                            <div class="d3-amount-final">${prFormatAmount(req.final_amount, req.currency)}</div>
+                            <div class="d3-amount-lbl">${tr('المبلغ النهائي')}</div>
+                        </div>` : ''}
                     </div>
-                    <div class="d3-events">${eventsHTML}</div>
+
+                    <!-- sections grid -->
+                    <div class="d3-info-sections-grid">
+                    <div class="d3-info-section">
+                        <div class="d3-info-section-title">${tr('بيانات الطلب')}</div>
+                        <div class="d3-kv-grid">
+                            ${kv(tr('الإدارة'), req.department_name)}
+                            ${kv(tr('المنشئ'), req.created_by_name)}
+                            ${kv(tr('نوع الطلب'), req.parent_type_name ? `${req.parent_type_name} — ${req.transaction_type_name}` : (req.transaction_type_name || ''))}
+                            ${kv(tr('المسار'), req.workflow_path === 'short' ? '⚡ ' + tr('مختصر') : '📋 ' + tr('كامل'))}
+                            ${kv(tr('الأولوية'), req.priority === 'urgent' ? '⚡ ' + tr('عاجل') : '• ' + tr('عادي'))}
+                            ${kv(tr('تاريخ الإنشاء'), prFormatDate(req.created_at))}
+                            ${kv(tr('تاريخ الحاجة'), req.needed_date ? prFormatDate(req.needed_date) : '')}
+                            ${kv(tr('أمر الشراء'), req.po_number || '')}
+                        </div>
+                    </div>
+
+                    <!-- المورد / الجهة المستفيدة -->
+                    ${hasSupplier ? `
+                    <div class="d3-info-section">
+                        <div class="d3-info-section-title">🏢 ${typeRequiresSupplier ? tr('المورد') : tr('الجهة المستفيدة')}</div>
+                        <div class="d3-kv-grid">
+                            ${typeRequiresSupplier ? `
+                                ${kv(tr('المورد المبدئي'), req.supplier_name_resolved || req.supplier_name_manual || '')}
+                                ${kv(tr('المورد النهائي'), req.final_supplier_name_resolved || req.final_supplier_name || '')}
+                            ` : `
+                                ${kv(tr('الجهة / المستفيد'), req.beneficiary_name || req.supplier_name_manual || req.supplier_name_resolved || '')}
+                            `}
+                            ${req.transaction_type_name ? kv(tr('نوع الطلب'), req.parent_type_name ? `${req.parent_type_name} — ${req.transaction_type_name}` : req.transaction_type_name) : ''}
+                        </div>
+                    </div>` : ''}
+
+                    <!-- الموازنة -->
+                    ${hasBudget ? `
+                    <div class="d3-info-section">
+                        <div class="d3-info-section-title">💰 ${tr('الموازنة')}</div>
+                        <div class="d3-kv-grid">
+                            ${kv(tr('مركز التكلفة'), req.cost_center_code ? `${req.cost_center_code} — ${req.cost_center_name || ''}` : '')}
+                            ${kv(tr('بند المصروف'), req.budget_category_code ? `${req.budget_category_code} — ${req.budget_category_name || ''}` : '')}
+                            ${kv(tr('كود الميزانية'), req.budget_code || '')}
+                            ${req.reservation_number
+                ? `<div class="d3-kv2"><span class="d3-k2">${tr('رقم الحجز')}</span><span class="d3-v2" style="color:#f59e0b;font-weight:600;cursor:pointer" onclick="prOpenReservationFromPR(${req.reservation_id})">📌 ${req.reservation_number}</span></div>`
+                : (req.budget_reservation_id ? kv(tr('رقم الحجز'), `#${req.budget_reservation_id}`) : '')}
+                        </div>
+                    </div>` : ''}
+
+                    <!-- المرفقات — ملفات الطلب فقط (بدون إيصالات الدفع) -->
+                    ${(() => {
+            const regularAtts = req.attachments?.filter(a =>
+                a.attachment_type !== 'payment_order' &&
+                a.attachment_type !== 'payment_receipt'
+            ) || [];
+            return `
+                    <div class="d3-info-section">
+                        <div class="d3-info-section-title" style="display:flex;align-items:center;justify-content:space-between">
+                            <span>📎 ${tr('المرفقات')} <span class="d3-cnt" style="font-size:10px;padding:1px 6px">${regularAtts.length}</span></span>
+                            <label class="d3-attach-btn2"><input type="file" hidden onchange="prUploadFile(event,${req.id})">+ ${tr('إضافة')}</label>
+                        </div>
+                        ${prRenderAttachments(regularAtts)}
+                    </div>`;
+        })()}
+                    </div><!-- /d3-info-sections-grid -->
                 </div>
+            </div><!-- /d3-info-col -->
+
+        <!-- ══ بيانات الدفع — تظهر فقط بعد اكتمال الدفع ══════════ -->
+        ${(req.payment_ref || req.payment_executed_at || req.payment_method) ? `
+        <div class="d3-card" style="margin-top:.8rem">
+            <div class="d3-card-label">💳 ${tr('بيانات الدفع')}</div>
+
+            <!-- معلومات الدفع -->
+            <div class="d3-kv-grid" style="padding:.75rem 1rem .5rem;gap:.5rem">
+                ${req.payment_ref ? `<div class="d3-kv2"><span class="d3-k2">رقم أمر الدفع</span><span class="d3-v2" style="font-weight:700;color:#16a34a;font-family:monospace">${req.payment_ref}</span></div>` : ''}
+                ${req.payment_method ? `<div class="d3-kv2"><span class="d3-k2">طريقة الدفع</span><span class="d3-v2">${req.payment_method}</span></div>` : ''}
+                ${req.payment_executed_at ? `<div class="d3-kv2"><span class="d3-k2">تاريخ ووقت الدفع</span><span class="d3-v2">${prFormatDateTime(req.payment_executed_at)}</span></div>` : ''}
+                ${req.payment_notes ? `<div class="d3-kv2"><span class="d3-k2">ملاحظات الدفع</span><span class="d3-v2">${req.payment_notes}</span></div>` : ''}
             </div>
 
-            <!-- اليمين: البيانات -->
-            <div class="d3-info-col">
-
-                <!-- بيانات الطلب -->
-                <div class="d3-card">
-                    <div class="d3-card-label">بيانات الطلب</div>
-                    <div class="d3-amount-hero">
-                        <div class="d3-amount-main">${prFormatAmount(req.amount, req.currency)}</div>
-                        <div class="d3-amount-lbl">المبلغ التقديري</div>
-                        ${req.final_amount ? `
-                        <div class="d3-amount-final">${prFormatAmount(req.final_amount, req.currency)}</div>
-                        <div class="d3-amount-lbl">المبلغ النهائي</div>` : ''}
+            <!-- إيصالات الدفع المرفوعة من صفحة المدفوعات -->
+            ${(() => {
+                const receipts = req.attachments?.filter(a =>
+                    a.attachment_type === 'payment_receipt' ||
+                    a.attachment_type === 'payment_order'
+                ) || [];
+                return `
+                <div style="padding:.25rem 1rem .85rem">
+                    <div class="d3-payment-receipts-title">
+                        🧾 إيصالات الدفع
+                        <span class="d3-cnt">${receipts.length}</span>
                     </div>
-                    ${kv('الإدارة', req.department_name)}
-                    ${kv('المنشئ', req.created_by_name)}
-                    ${kv('المسار', req.workflow_path === 'short' ? '⚡ مختصر' : '📋 كامل')}
-                    ${kv('تاريخ الإنشاء', prFormatDate(req.created_at))}
-                    ${kv('تاريخ الحاجة', req.needed_date ? prFormatDate(req.needed_date) : '')}
-                    ${kv('أمر الشراء', req.po_number || '')}
-                    ${kv('الأولوية', req.priority === 'urgent' ? '⚡ عاجل' : 'عادي')}
-                </div>
+                    ${receipts.length
+                        ? prRenderAttachments(receipts)
+                        : '<div class="pr-no-attach" style="font-style:italic">لم يتم إرفاق إيصالات دفع بعد</div>'
+                    }
+                </div>`;
+            })()}
+        </div>` : ''}
 
-                <!-- المورد -->
-                <div class="d3-card">
-                    <div class="d3-card-label">المورد</div>
-                    ${kv('المبدئي', req.supplier_name_resolved || req.supplier_name_manual || '—')}
-                    ${kv('النهائي', req.final_supplier_name_resolved || req.final_supplier_name || '')}
-                </div>
-
-                <!-- الموازنة -->
-                <div class="d3-card">
-                    <div class="d3-card-label">الموازنة</div>
-                    ${kv('مركز التكلفة', req.cost_center_code ? `${req.cost_center_code} — ${req.cost_center_name}` : '')}
-                    ${kv('بند المصروف', req.budget_category_code ? `${req.budget_category_code} — ${req.budget_category_name}` : '')}
-                    ${kv('كود الميزانية', req.budget_code || '')}
-                    ${kv('رقم الحجز', req.budget_reservation_id ? `#${req.budget_reservation_id}` : '')}
-                </div>
-
-                <!-- SLA -->
-                ${prRenderSlaCard(req.sla_status)}
-
-                <!-- المرفقات -->
-                <div class="d3-card">
-                    <div class="d3-card-label">المرفقات <span class="d3-cnt">${req.attachments?.length || 0}</span></div>
-                    ${prRenderAttachments(req.attachments)}
-                    <label class="d3-attach-btn">
-                        <input type="file" hidden onchange="prUploadFile(event,${req.id})">
-                        + إضافة مرفق
-                    </label>
-                </div>
-
-            </div>
+        <!-- ══ سجل النشاط ════════════════════════════════════════ -->
+        <div class="d3-card" style="margin-top:.8rem">
+            <div class="d3-card-label">${tr('سجل النشاط')} <span class="d3-cnt">${req.events?.length || 0}</span></div>
+            <div class="d3-events">${prRenderEvents(req.events)}</div>
         </div>
+
     </div>`;
 }
 
-/**
- * رسم مؤشر خطوات سير العمل
- * @param {Array}  stages       مراحل سير العمل
- * @param {string} currentStage المرحلة الحالية
- */
 function prRenderStepsIndicator(stages, currentStage) {
     if (!stages || !stages.length) return '';
 
@@ -656,9 +725,9 @@ function prRenderStepsIndicator(stages, currentStage) {
         <div class="pr-stp-summary">
             <span class="pr-stp-done-badge">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-                ${completedCount} مكتملة
+                ${completedCount} ${tr('مكتملة')}
             </span>
-            <span class="pr-stp-total-badge">${totalSteps} مرحلة</span>
+            <span class="pr-stp-total-badge">${totalSteps} ${tr('مرحلة')}</span>
             <span class="pr-stp-pct">${progressPct}%</span>
         </div>
 
@@ -673,43 +742,71 @@ function prRenderStepsIndicator(stages, currentStage) {
  * @param {Array} events
  */
 function prRenderEvents(events) {
-    if (!events || !events.length) {
-        return '<div class="pr-no-events">لا توجد أحداث بعد</div>';
-    }
+    if (!events || !events.length) return '<div class="pr-no-events">' + tr('لا توجد أحداث بعد') + '</div>';
+
+    const typeConfig = {
+        created: { color: '#3b82f6', bg: 'rgba(59,130,246,.08)', label: tr('إنشاء'), icon: '🆕' },
+        submitted: { color: '#8b5cf6', bg: 'rgba(139,92,246,.08)', label: tr('تقديم'), icon: '📤' },
+        approved: { color: '#22c55e', bg: 'rgba(34,197,94,.08)', label: tr('موافقة'), icon: '✅' },
+        rejected: { color: '#ef4444', bg: 'rgba(239,68,68,.08)', label: tr('رفض'), icon: '❌' },
+        returned: { color: '#f97316', bg: 'rgba(249,115,22,.08)', label: tr('إرجاع'), icon: '↩️' },
+        referred: { color: '#f59e0b', bg: 'rgba(245,158,11,.08)', label: tr('إحالة'), icon: '🔀' },
+        assigned: { color: '#06b6d4', bg: 'rgba(6,182,212,.08)', label: tr('إسناد'), icon: '👤' },
+        stage_changed: { color: '#64748b', bg: 'rgba(100,116,139,.08)', label: tr('تغيير مرحلة'), icon: '➡️' },
+        po_issued: { color: '#0ea5e9', bg: 'rgba(14,165,233,.08)', label: tr('أمر شراء'), icon: '📋' },
+        budget_linked: { color: '#10b981', bg: 'rgba(16,185,129,.08)', label: tr('ربط موازنة'), icon: '🔗' },
+        sent_to_payment: { color: '#6366f1', bg: 'rgba(99,102,241,.08)', label: tr('للدفع'), icon: '💳' },
+        workflow_redirected: { color: '#d97706', bg: 'rgba(217,119,6,.08)', label: tr('تحويل مسار'), icon: '🔄' },
+        note_added: { color: '#94a3b8', bg: 'rgba(148,163,184,.08)', label: tr('ملاحظة'), icon: '📝' },
+        attachment_added: { color: '#94a3b8', bg: 'rgba(148,163,184,.08)', label: tr('مرفق'), icon: '📎' },
+    };
 
     return events.map(ev => {
-        const icon = PR_EVENT_ICONS[ev.event_type] || '📌';
+        const cfg = typeConfig[ev.event_type] || { color: '#94a3b8', bg: 'rgba(148,163,184,.08)', label: ev.event_type, icon: '📌' };
         const empName = ev.employee_name_resolved || ev.employee_name || 'النظام';
         const stageName = PR_STAGE_NAMES[ev.stage] || ev.stage || '';
+        const nextName = PR_STAGE_NAMES[ev.new_value] || ev.new_value || '';
         let detail = ev.description || '';
 
-        // تفاصيل إضافية حسب نوع الحدث
-        if (ev.event_type === 'referred' && ev.referred_to_emp_name) {
-            detail += ` → ${ev.referred_to_emp_name}`;
-        }
-        if (ev.event_type === 'referred' && ev.referred_to_dept_name) {
-            detail += ` (${ev.referred_to_dept_name})`;
-        }
-        if (ev.event_type === 'assigned' && ev.assigned_to_name) {
-            detail += ` → ${ev.assigned_to_name}`;
-        }
-        if (ev.referral_reason) {
-            detail += `<br><small class="pr-event-reason">السبب: ${ev.referral_reason}</small>`;
+        // تفاصيل الإحالة
+        const isRefer = ev.event_type === 'referred';
+        const toEmp = ev.referred_to_emp_name || '';
+        const toDept = ev.referred_to_dept_name || '';
+        const reason = ev.referral_reason || '';
+        const assignedTo = ev.assigned_to_name || '';
+
+        let extraHtml = '';
+        if (isRefer && (toEmp || toDept || reason)) {
+            extraHtml = `<div class="pr-ev-refer-box">`;
+            if (toEmp) extraHtml += `<div class="pr-ev-refer-row"><span class="pr-ev-refer-lbl">${tr('إلى')}</span><span class="pr-ev-refer-val">${toEmp}</span></div>`;
+            if (toDept) extraHtml += `<div class="pr-ev-refer-row"><span class="pr-ev-refer-lbl">${tr('الجهة')}</span><span class="pr-ev-refer-val">${toDept}</span></div>`;
+            if (reason) extraHtml += `<div class="pr-ev-refer-row"><span class="pr-ev-refer-lbl">${tr('السبب')}</span><span class="pr-ev-refer-val">${reason}</span></div>`;
+            extraHtml += `</div>`;
+        } else if (assignedTo) {
+            extraHtml = `<div class="pr-ev-refer-box"><div class="pr-ev-refer-row"><span class="pr-ev-refer-lbl">${tr('إسناد إلى')}</span><span class="pr-ev-refer-val">${assignedTo}</span></div></div>`;
         }
 
+        // بناء السطر الثاني: الوصف فقط بدون تكرار اسم المرحلة إذا كان في التفاصيل
+        const showDetail = detail && detail !== empName;
+
         return `
-            <div class="pr-event-item pr-event-${ev.event_type}">
-                <div class="pr-event-icon">${icon}</div>
-                <div class="pr-event-body">
-                    <div class="pr-event-header">
-                        <strong class="pr-event-who">${empName}</strong>
-                        ${stageName ? `<span class="pr-event-stage">${stageName}</span>` : ''}
-                    </div>
-                    <div class="pr-event-detail">${detail}</div>
-                    <div class="pr-event-time">${prFormatDateTime(ev.created_at)}</div>
-                </div>
+        <div class="pr-ev-item">
+            <div class="pr-ev-dot-wrap">
+                <div class="pr-ev-dot" style="background:${cfg.color}"></div>
+                <div class="pr-ev-line"></div>
             </div>
-        `;
+            <div class="pr-ev-content">
+                <div class="pr-ev-top">
+                    <span class="pr-ev-type-badge" style="background:${cfg.bg};color:${cfg.color}">${cfg.icon} ${cfg.label}</span>
+                    ${stageName ? `<span class="pr-ev-stage-chip">${stageName}</span>` : ''}
+                    ${nextName && nextName !== stageName && ev.event_type === 'approved' ? `<span class="pr-ev-arrow">←</span><span class="pr-ev-stage-chip" style="opacity:.7">${nextName}</span>` : ''}
+                    <span class="pr-ev-time">${prFormatDateTime(ev.created_at)}</span>
+                </div>
+                <div class="pr-ev-actor">${empName}</div>
+                ${showDetail ? `<div class="pr-ev-detail">${detail}</div>` : ''}
+                ${extraHtml}
+            </div>
+        </div>`;
     }).join('');
 }
 
@@ -717,14 +814,12 @@ function prRenderEvents(events) {
  * رسم بطاقة SLA
  * @param {Array} slaStatus
  */
-function prRenderSlaCard(slaStatus) {
+function prRenderSlaStrip(slaStatus) {
     if (!slaStatus || !slaStatus.length) return '';
-
-    // المرحلة النشطة أو الأخيرة
     const active = slaStatus.find(s => s.status === 'active' || s.status === 'paused');
     if (!active) return '';
 
-    const pct = parseFloat(active.elapsed_pct) || 0;
+    const pct = Math.min(parseFloat(active.elapsed_pct) || 0, 100);
     const elapsed = parseInt(active.elapsed_minutes) || 0;
     const allowed = parseInt(active.allowed_minutes) || 0;
     const remaining = Math.max(0, allowed - elapsed);
@@ -732,54 +827,47 @@ function prRenderSlaCard(slaStatus) {
     const isBreached = pct >= 100;
     const isWarn = pct >= 70 && !isBreached;
 
-    const barColor = isBreached ? '#ef4444' : isWarn ? '#f59e0b' : '#22c55e';
+    const color = isBreached ? '#ef4444' : isWarn ? '#f59e0b' : '#22c55e';
     const bgColor = isBreached ? 'rgba(239,68,68,.06)' : isWarn ? 'rgba(245,158,11,.06)' : 'rgba(34,197,94,.06)';
-    const bdColor = isBreached ? 'rgba(239,68,68,.25)' : isWarn ? 'rgba(245,158,11,.25)' : 'rgba(34,197,94,.2)';
-
-    const fmtTime = (min) => {
-        if (!min) return '0 د';
-        const h = Math.floor(min / 60), m = min % 60;
-        return h > 0 ? `${h}س ${m}د` : `${m} دقيقة`;
-    };
-
-    const statusLabel = isPaused ? '⏸️ موقوف مؤقتاً'
-        : isBreached ? '🔴 تجاوز SLA'
-            : isWarn ? '🟡 تحذير SLA'
-                : '🟢 ضمن الوقت';
+    const bdColor = isBreached ? 'rgba(239,68,68,.3)' : isWarn ? 'rgba(245,158,11,.3)' : 'rgba(34,197,94,.25)';
+    const statusLabel = isPaused ? `⏸️ ${tr('موقوف')}` : isBreached ? `🔴 ${tr('تجاوز SLA')}` : isWarn ? `🟡 ${tr('تحذير')}` : `🟢 ${tr('ضمن الوقت')}`;
+    const fmt = m => { if (!m) return '0د'; const h = Math.floor(m / 60), mn = m % 60; return h > 0 ? `${h}س ${mn}د` : `${mn}د`; };
 
     return `
-    <div class="d3-sla-wrap" style="border-color:${bdColor};background:${bgColor}">
-        <div class="d3-sla-head">
-            <span class="d3-sla-title">⏱️ مؤشر SLA</span>
-            <span class="d3-sla-status" style="color:${barColor}">${statusLabel}</span>
+    <div class="d3-sla-strip" style="border-color:${bdColor};background:${bgColor}">
+        <div class="d3-sla-strip-right">
+            <span class="d3-sla-strip-label">⏱️ SLA</span>
+            <span class="d3-sla-strip-status" style="color:${color}">${statusLabel}</span>
+            ${isPaused ? `<span class="d3-sla-strip-pause">⏸️ ${tr('متوقف — انتظار اعتماد الحجز')}</span>` : ''}
         </div>
-        ${isPaused ? `<div class="d3-sla-pause-note">⏸️ الوقت متوقف — انتظار اعتماد الحجز</div>` : ''}
-        <div class="d3-sla-bar-wrap">
-            <div class="d3-sla-bar" style="width:${Math.min(pct, 100)}%;background:${barColor}"></div>
+        <div class="d3-sla-strip-bar-wrap">
+            <div class="d3-sla-strip-bar" style="width:${pct}%;background:${color}"></div>
         </div>
-        <div class="d3-sla-pct-row">
-            <span class="d3-sla-pct" style="color:${barColor}">${pct.toFixed(1)}%</span>
-            <span class="d3-sla-of">من الوقت المسموح</span>
-        </div>
-        <div class="d3-sla-stats">
-            <div class="d3-sla-stat">
-                <div class="d3-sla-stat-v">${fmtTime(elapsed)}</div>
-                <div class="d3-sla-stat-l">منقضي</div>
+        <div class="d3-sla-strip-stats">
+            <div class="d3-sla-strip-stat">
+                <span class="d3-sla-strip-val" style="color:${color}">${pct.toFixed(0)}%</span>
+                <span class="d3-sla-strip-key">${tr('مُنقضي')}</span>
             </div>
-            <div class="d3-sla-sep"></div>
-            <div class="d3-sla-stat">
-                <div class="d3-sla-stat-v" style="${isBreached ? 'color:#ef4444' : ''}">${isBreached ? 'تجاوز' : fmtTime(remaining)}</div>
-                <div class="d3-sla-stat-l">متبقي</div>
+            <div class="d3-sla-strip-sep"></div>
+            <div class="d3-sla-strip-stat">
+                <span class="d3-sla-strip-val">${fmt(elapsed)}</span>
+                <span class="d3-sla-strip-key">${tr('مضى')}</span>
             </div>
-            <div class="d3-sla-sep"></div>
-            <div class="d3-sla-stat">
-                <div class="d3-sla-stat-v">${fmtTime(allowed)}</div>
-                <div class="d3-sla-stat-l">مسموح</div>
+            <div class="d3-sla-strip-sep"></div>
+            <div class="d3-sla-strip-stat">
+                <span class="d3-sla-strip-val" style="${isBreached ? 'color:#ef4444' : ''}">${isBreached ? tr('تجاوز') : fmt(remaining)}</span>
+                <span class="d3-sla-strip-key">${tr('متبقي')}</span>
+            </div>
+            <div class="d3-sla-strip-sep"></div>
+            <div class="d3-sla-strip-stat">
+                <span class="d3-sla-strip-val">${fmt(allowed)}</span>
+                <span class="d3-sla-strip-key">${tr('مسموح')}</span>
             </div>
         </div>
-        ${active.policy_name ? `<div class="d3-sla-policy">📋 ${active.policy_name}</div>` : ''}
     </div>`;
 }
+
+function prRenderSlaCard(slaStatus) { return prRenderSlaStrip(slaStatus); }
 
 /** قسم SLA الشامل — كل مراحل المعاملة */
 function prRenderSlaSection(slaStatus) {
@@ -824,11 +912,11 @@ function prRenderSlaSection(slaStatus) {
 
     return `
     <div class="d3-card d3-sla-section">
-        <div class="d3-card-label">⏱️ مؤشرات SLA
+        <div class="d3-card-label">⏱️ ${tr('مؤشرات SLA')}
             <span class="d3-sla-legend">
-                <span style="color:#22c55e">■</span> ضمن الوقت
-                <span style="color:#f59e0b">■</span> تحذير
-                <span style="color:#ef4444">■</span> تجاوز
+                <span style="color:#22c55e">■</span> ${tr('ضمن الوقت')}
+                <span style="color:#f59e0b">■</span> ${tr('تحذير')}
+                <span style="color:#ef4444">■</span> ${tr('تجاوز')}
             </span>
         </div>
         <div class="d3-sla-table">${stageRows}</div>
@@ -841,18 +929,35 @@ function prRenderSlaSection(slaStatus) {
  */
 function prRenderAttachments(attachments) {
     if (!attachments || !attachments.length) {
-        return '<div class="pr-no-attach">لا توجد مرفقات</div>';
+        return '<div class="pr-no-attach">' + tr('لا توجد مرفقات بعد') + '</div>';
     }
-    return attachments.map(att => `
-        <div class="pr-attach-item">
-            <span class="pr-attach-icon">${prGetFileIcon(att.file_type)}</span>
-            <a href="${att.file_path}" target="_blank" class="pr-attach-name">
-                ${att.original_name}
-            </a>
-            <span class="pr-attach-stage">${PR_STAGE_NAMES[att.stage] || att.stage}</span>
-            <span class="pr-attach-who">${att.uploader_name || ''}</span>
-        </div>
-    `).join('');
+    const fmtSize = b => b > 1048576 ? (b / 1048576).toFixed(1) + ' MB' : b > 1024 ? (b / 1024).toFixed(0) + ' KB' : b + ' B';
+    return `<div class="pr-attach-grid">`
+        + attachments.map(att => {
+            const label = att.file_label || att.original_name;
+            const stage = PR_STAGE_NAMES[att.stage] || att.stage || '';
+            const size = att.file_size ? fmtSize(parseInt(att.file_size)) : '';
+            const ext = (att.original_name || '').split('.').pop().toUpperCase();
+            const extColors = { PDF: '#ef4444', DOCX: '#3b82f6', DOC: '#3b82f6', XLSX: '#22c55e', XLS: '#22c55e', PNG: '#8b5cf6', JPG: '#f59e0b', JPEG: '#f59e0b' };
+            const extColor = extColors[ext] || '#94a3b8';
+            return `
+            <div class="pr-att-card">
+                <div class="pr-att-ext" style="background:${extColor}18;color:${extColor};border-color:${extColor}30">${ext}</div>
+                <div class="pr-att-info">
+                    <div class="pr-att-label">${label}</div>
+                    <div class="pr-att-meta">
+                        ${att.original_name !== label ? `<span class="pr-att-orig">${att.original_name}</span>` : ''}
+                        ${stage ? `<span class="pr-att-stage">${stage}</span>` : ''}
+                        ${att.uploader_name ? `<span class="pr-att-who">${att.uploader_name}</span>` : ''}
+                        ${size ? `<span class="pr-att-size">${size}</span>` : ''}
+                    </div>
+                </div>
+                <a href="${att.file_path}" target="_blank" class="pr-att-dl" title="تنزيل">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                </a>
+            </div>`;
+        }).join('')
+        + `</div>`;
 }
 
 /** صف معلومات عام */
@@ -1549,13 +1654,18 @@ function prPreviewWorkflowPath() {
 async function prSubmitCreate() {
     const title = document.getElementById('prf-title')?.value?.trim();
     const amount = parseFloat(document.getElementById('prf-amount')?.value) || 0;
-    const rtype = document.getElementById('prf-request-type')?.value || 'supplier';
-    const suppSel = document.getElementById('prf-supplier')?.value;
-    const suppMan = document.getElementById('prf-supplier-manual')?.value?.trim();
+    const rtype = document.getElementById('prf-request-type')?.value || '';
+    const suppEl = document.getElementById('prf-supplier');
+    const suppSel = suppEl?.value || '';
+    const suppMan = document.getElementById('prf-supplier-manual')?.value?.trim() || '';
 
-    // تحديد supplier_id و supplier_name_manual حسب نوع الطلب
-    const supplierId = (rtype === 'supplier' && suppSel && suppSel !== 'manual') ? suppSel : '';
-    const supplierName = (rtype !== 'supplier' || suppSel === 'manual') ? suppMan : '';
+    // القائمة ظاهرة = نوع يحتاج مورداً من قاعدة البيانات
+    const suppVisible = suppEl && suppEl.style.display !== 'none';
+
+    // supplier_id: يُرسَل فقط إذا كانت القائمة ظاهرة واختار المستخدم موردًا فعلياً (ليس manual)
+    const supplierId = (suppVisible && suppSel && suppSel !== 'manual') ? suppSel : '';
+    // supplier_name_manual: يُرسَل إما من حقل الإدخال اليدوي أو اسم المورد من القائمة إن لم يكن id
+    const supplierName = (!supplierId) ? suppMan : '';
 
     const body = {
         title: title,
@@ -1591,7 +1701,7 @@ async function prSubmitCreate() {
             showToast(data.message || 'فشل إنشاء الطلب', 'error');
         }
     } catch (e) {
-        showToast('خطأ في الاتصال', 'error');
+        showToast(tr('خطأ في الاتصال'), 'error');
     } finally {
         if (btn) { btn.disabled = false; btn.textContent = 'إرسال الطلب'; }
     }
@@ -1634,8 +1744,35 @@ async function prSubmitApprove(requestId, stage) {
     if (result?.success) {
         showToast('✅ تمت الموافقة بنجاح', 'success');
         closeModal();
+
+        // إعادة تحميل الطلب لتحديث الأزرار
         await prOpenDetail(requestId);
+
+        // بعد الموافقة على مرحلة انتظار اعتماد الحجز → اسأل عن إنشاء حجز
+        if (stage === 'waiting_budget_approval') {
+            setTimeout(() => prShowCreateReservationModal(requestId), 400);
+        }
     }
+}
+
+/** modal سؤال إنشاء حجز موازنة بعد الموافقة */
+function prShowCreateReservationModal(requestId) {
+    DOM.modalTitle.textContent = '📌 إنشاء حجز موازنة';
+    DOM.modalBody.innerHTML = `
+        <div class="pr-form">
+            <p style="margin-bottom:1rem;color:var(--color-text-primary);line-height:1.7">
+                تمت الموافقة على الطلب بنجاح.<br>
+                هل تريد إنشاء <strong>حجز موازنة</strong> لهذا الطلب الآن؟
+            </p>
+            <div class="form-actions">
+                <button class="btn btn-ghost" onclick="closeModal()">لاحقاً</button>
+                <button class="btn btn-primary" onclick="closeModal(); prCreateBudgetReservation(${requestId})" style="background:#f59e0b;border-color:#f59e0b">
+                    📌 نعم، إنشاء حجز الآن
+                </button>
+            </div>
+        </div>
+    `;
+    openModal();
 }
 
 /**
@@ -1644,21 +1781,25 @@ async function prSubmitApprove(requestId, stage) {
  * @param {string} stage
  */
 function prOpenRejectModal(requestId, stage) {
-    DOM.modalTitle.textContent = `❌ رفض الطلب`;
+    const isReception = stage === 'reception';
+    DOM.modalTitle.textContent = isReception ? '↩️ إرجاع للتصحيح' : '❌ رفض الطلب';
     DOM.modalBody.innerHTML = `
         <div class="pr-form">
             <div class="form-group">
-                <label class="form-label">سبب الرفض *</label>
+                <label class="form-label">${isReception ? 'سبب الإرجاع وما يلزم تصحيحه *' : 'سبب الرفض *'}</label>
                 <textarea id="reject-reason" class="form-control" rows="4"
-                          placeholder="اشرح سبب الرفض بوضوح..." required></textarea>
+                          placeholder="${isReception ? 'وضّح البيانات الناقصة أو الخاطئة التي تحتاج تصحيحاً...' : 'اشرح سبب الرفض بوضوح...'}" required></textarea>
             </div>
             <p class="pr-reject-note">
-                ⚠️ سيتم إرجاع الطلب لمدير الإدارة الطالبة مع سبب الرفض.
+                ${isReception
+            ? '↩️ سيُرجَع الطلب للمنشئ مع توضيح ما يلزم تصحيحه.'
+            : '⚠️ سيتم إرجاع الطلب لمدير الإدارة الطالبة مع سبب الرفض.'
+        }
             </p>
             <div class="form-actions">
                 <button class="btn btn-ghost" onclick="closeModal()">إلغاء</button>
                 <button class="btn btn-danger" onclick="prSubmitReject(${requestId}, '${stage}')">
-                    ❌ تأكيد الرفض
+                    ${isReception ? '↩️ إرجاع للتصحيح' : '❌ تأكيد الرفض'}
                 </button>
             </div>
         </div>
@@ -2015,34 +2156,72 @@ async function prSubmitPO(requestId) {
 
 
 // ════════════════════════════════════════════════════════════
-// ⑧-ب طلب موافقة الرئيس التنفيذي من المشتريات
+// ⑧-ب مرحلة المشتريات — المسار الطويل والقصير
 // ════════════════════════════════════════════════════════════
 
 /**
- * يُرسل الطلب لاعتماد CEO مباشرةً من مرحلة المشتريات
- * يُستخدم عندما يرى موظف المشتريات ضرورة الحصول على موافقة عليا
+ * المسار الطويل: موظف المشتريات يطلب موافقة CEO المبدئية
  */
 async function prRequestCeoApproval(requestId) {
-    const notes = prompt('ملاحظات طلب موافقة الرئيس التنفيذي (اختيارية):');
-    if (notes === null) return; // ألغى المستخدم
+    DOM.modalTitle.textContent = 'طلب موافقة الرئيس التنفيذي';
+    DOM.modalBody.innerHTML = `
+        <div class="pr-form" style="padding:1.25rem">
+            <div style="padding:.85rem 1rem;background:var(--bg-surface);border-radius:10px;border:1px solid var(--border-color);margin-bottom:1rem">
+                <div style="font-size:.95rem;font-weight:600;margin-bottom:.25rem">🔼 طلب موافقة مبدئية</div>
+                <div style="font-size:.82rem;color:var(--text-muted)">سيُرسل الطلب للرئيس التنفيذي للاعتماد المبدئي قبل إنشاء حجز الموازنة</div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">ملاحظات (اختيارية)</label>
+                <textarea id="pr-ceo-notes" class="form-input" rows="3" placeholder="أي ملاحظات للرئيس التنفيذي..."></textarea>
+            </div>
+            <div class="modal-footer" style="padding:0;border:none;margin-top:1rem">
+                <button class="btn btn-secondary" onclick="closeModal()">إلغاء</button>
+                <button class="btn btn-primary" onclick="prSubmitCeoApproval(${requestId})" style="background:#f59e0b;border-color:#f59e0b">
+                    إرسال للرئيس التنفيذي
+                </button>
+            </div>
+        </div>`;
+    openModal();
+}
 
-    const btn = event?.target;
-    if (btn) { btn.disabled = true; btn.textContent = '...جاري الإرسال'; }
-
+async function prSubmitCeoApproval(requestId) {
+    const notes = document.getElementById('pr-ceo-notes')?.value?.trim() || '';
+    closeModal();
     try {
-        const result = await prPostAction('request_ceo_approval', {
-            request_id: requestId,
-            notes: notes || '',
-        });
-
+        const result = await prPostAction('request_ceo_approval', { request_id: requestId, notes });
         if (result?.success) {
-            showToast('✅ تم إرسال الطلب لاعتماد الرئيس التنفيذي', 'success');
+            showToast('✅ تم إرسال الطلب للرئيس التنفيذي', 'success');
             await prOpenDetail(requestId);
         } else {
             showToast(result?.message || 'حدث خطأ', 'error');
         }
-    } finally {
-        if (btn) { btn.disabled = false; btn.textContent = '🔼 موافقة CEO'; }
+    } catch (e) {
+        showToast('خطأ في الاتصال', 'error');
+    }
+}
+
+/**
+ * المسار القصير: موظف المشتريات ينتقل مباشرة لإنشاء حجز الموازنة
+ */
+async function prApprovePurchasing(requestId) {
+    showToast('جارٍ فتح صفحة الحجوزات...', 'info');
+    try {
+        const res = await fetch(`api/purchase_requests_api.php?action=get&id=${requestId}`);
+        const data = await res.json();
+        if (!data.success) { showToast('خطأ في جلب بيانات الطلب', 'error'); return; }
+
+        BudgetState.activeTab = 'reservations';
+        await loadBudgetReservationsPage();
+        setTimeout(() => {
+            if (typeof openAddReservationModalWithData === 'function') {
+                openAddReservationModalWithData(data.data);
+            } else if (typeof openAddReservationModal === 'function') {
+                openAddReservationModal();
+            }
+        }, 900);
+    } catch (err) {
+        showToast('خطأ في فتح صفحة الحجوزات', 'error');
+        console.error(err);
     }
 }
 
@@ -2055,24 +2234,64 @@ async function prRequestCeoApproval(requestId) {
  * @param {Event}  event
  * @param {number} requestId
  */
-async function prUploadFile(event, requestId) {
+function prUploadFile(event, requestId) {
     const file = event.target.files[0];
     if (!file) return;
+    // إعادة ضبط الـ input حتى يمكن اختيار نفس الملف مجدداً
+    event.target.value = '';
 
+    // فتح modal التسمية
+    const suggestedLabel = file.name.replace(/\.[^/.]+$/, '');
+    DOM.modalTitle.textContent = 'رفع مرفق';
+    DOM.modalBody.innerHTML = `
+    <div style="padding:1.25rem;display:flex;flex-direction:column;gap:1rem">
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--bg-surface);border-radius:8px;border:1px solid var(--border-color)">
+            <span style="font-size:1.5rem">${prGetFileIcon(file.type)}</span>
+            <div>
+                <div style="font-size:13px;font-weight:600;color:var(--text-primary)">${file.name}</div>
+                <div style="font-size:11px;color:var(--text-muted)">${(file.size / 1024).toFixed(0)} KB</div>
+            </div>
+        </div>
+        <div class="form-group">
+            <label class="form-label">تسمية المرفق *</label>
+            <input class="form-input" id="pr-attach-label" value="${suggestedLabel}"
+                   placeholder="مثال: عرض أسعار، فاتورة، اعتماد..." style="font-size:13px">
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px">اسم واضح يُسهّل التعرف على المرفق لاحقاً</div>
+        </div>
+        <div class="modal-footer" style="padding:0;border:none;margin-top:.25rem">
+            <button class="btn btn-secondary" onclick="closeModal()">إلغاء</button>
+            <button class="btn btn-primary" onclick="prDoUpload(${requestId})">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                رفع الملف
+            </button>
+        </div>
+    </div>`;
+    openModal();
+    // حفظ الملف مؤقتاً
+    window._prPendingFile = file;
+    window._prPendingRequestId = requestId;
+    setTimeout(() => document.getElementById('pr-attach-label')?.focus(), 100);
+}
+
+async function prDoUpload(requestId) {
+    const file = window._prPendingFile;
+    const label = document.getElementById('pr-attach-label')?.value?.trim() || file?.name || '';
+    if (!file) return;
+    if (!label) { showToast('أدخل تسمية للمرفق', 'error'); return; }
+
+    closeModal();
     const formData = new FormData();
     formData.append('action', 'upload_attachment');
     formData.append('request_id', requestId);
     formData.append('file', file);
+    formData.append('file_label', label);
 
     showToast('جارٍ رفع الملف...', 'info');
-
     try {
         const res = await fetch('api/purchase_requests_api.php?action=upload_attachment', {
-            method: 'POST',
-            body: formData,
+            method: 'POST', body: formData,
         });
         const data = await res.json();
-
         if (data.success) {
             showToast('✅ تم رفع الملف بنجاح', 'success');
             await prOpenDetail(requestId);
@@ -2080,8 +2299,9 @@ async function prUploadFile(event, requestId) {
             showToast(data.message || 'فشل رفع الملف', 'error');
         }
     } catch (e) {
-        showToast('خطأ في الاتصال', 'error');
+        showToast(tr('خطأ في الاتصال'), 'error');
     }
+    window._prPendingFile = null;
 }
 
 
@@ -2125,24 +2345,130 @@ function prCanApproveCurrentStage(req) {
     if (level === 'system_admin') return true;
 
     const stagePermissions = {
-        budget_review: ['budget'],
-        treasury_review: ['dispatch', 'treasury_manager', 'manager'],
-        finance_review: ['manager'],
+        reception: ['receiver', 'employee_l1', 'division_manager', 'sector_head', 'system_admin'],
+        budget_review: ['budget', 'division_manager', 'sector_head'],
+        treasury_review: ['dispatch', 'treasury_manager', 'division_manager', 'sector_head'],
+        finance_review: ['division_manager', 'sector_head'],
+        waiting_budget_approval: ['budget', 'CEO', 'admin', 'sector_head'],
         ceo_approval: ['admin', 'CEO'],
-        purchasing: ['dispatch', 'purchasing'],   // سلاسل الإمداد والمشتريات
-        payment: ['payment'],
+        purchasing: ['dispatch', 'purchasing'],
+        accounts_review: ['accountant', 'division_manager', 'sector_head'],
+        po_issuance: ['dispatch', 'purchasing'],
+        payment: ['payment', 'division_manager'],
     };
 
     const allowed = stagePermissions[stage] || [];
     if (allowed.includes(role) || allowed.includes(level)) return true;
 
-    // موظفو سلاسل الإمداد — استخدم نتيجة DB إذا متاحة
+    // مرحلة الاستلام — القطاع المالي فقط
+    if (stage === 'reception') {
+        const isFinance = PRState.userAccess?.is_finance_sector
+            || (currentUser.departmentCode || '').startsWith('31')
+            || (currentUser.sectorCode || '') === 'FIN';
+        if (isFinance) return true;
+    }
+
+    // القطاع المالي بمستوى division_manager أو أعلى → يعتمد مرحلة انتظار الحجز
+    if (stage === 'waiting_budget_approval') {
+        const isFinance = PRState.userAccess?.is_finance_sector
+            || (currentUser.departmentCode || '').startsWith('31')
+            || (currentUser.sectorCode || '') === 'FIN';
+        if (isFinance && ['division_manager', 'sector_head', 'CEO', 'system_admin'].includes(level)) return true;
+    }
+
+    // موظفو سلاسل الإمداد
     if (stage === 'purchasing') {
         if (PRState.userAccess?.is_supply_chain) return true;
         const deptCode = (currentUser.departmentCode || '').toString();
         if (deptCode === 'PUR' || deptCode.startsWith('41')) return true;
     }
     return false;
+}
+
+/** فتح تفاصيل الحجز من صفحة الطلب */
+async function prOpenReservationFromPR(reservationId) {
+    if (!reservationId) return;
+    BudgetState.activeTab = 'reservations';
+    await loadBudgetReservationsPage();
+    setTimeout(() => {
+        if (typeof openReservationDetails === 'function') {
+            openReservationDetails(reservationId);
+        }
+    }, 900);
+}
+
+/** اختيار مسار الحسابات: PO أو دفع مباشر */
+async function prChooseRoute(requestId, route) {
+    const label = route === 'po' ? 'إصدار أمر الشراء (PO)' : 'الدفع المباشر';
+    DOM.modalTitle.textContent = 'اختيار مسار الصرف';
+    DOM.modalBody.innerHTML = `
+        <div class="pr-form" style="padding:1.25rem">
+            <div style="padding:.85rem 1rem;background:var(--bg-surface);border-radius:10px;border:1px solid var(--border-color);margin-bottom:1rem">
+                <div style="font-size:.95rem;font-weight:600;color:var(--text-primary);margin-bottom:.25rem">
+                    ${route === 'po' ? '📋 مسار إصدار أمر الشراء' : '💳 مسار الدفع المباشر'}
+                </div>
+                <div style="font-size:.82rem;color:var(--text-muted)">
+                    ${route === 'po' ? 'سيُرسل الطلب للمشتريات لإصدار أمر الشراء ثم للمالية للدفع' : 'سيُرسل الطلب مباشرة للمالية للدفع'}
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">ملاحظات (اختياري)</label>
+                <textarea id="pr-route-notes" class="form-input" rows="2" placeholder="أي ملاحظات..."></textarea>
+            </div>
+            <div class="modal-footer" style="padding:0;border:none;margin-top:1rem">
+                <button class="btn btn-secondary" onclick="closeModal()">إلغاء</button>
+                <button class="btn btn-primary" onclick="prSubmitRoute(${requestId},'${route}')">
+                    تأكيد — ${label}
+                </button>
+            </div>
+        </div>`;
+    openModal();
+}
+
+async function prSubmitRoute(requestId, route) {
+    const notes = document.getElementById('pr-route-notes')?.value?.trim() || '';
+    closeModal();
+    try {
+        const res = await prPostAction('accounts_choose_route', { request_id: requestId, route, notes });
+        if (res?.success) {
+            showToast('✅ تم إرسال الطلب: ' + (route === 'po' ? 'مسار PO' : 'دفع مباشر'), 'success');
+            await prOpenDetail(requestId);
+        } else {
+            showToast('❌ ' + (res?.message || 'خطأ'), 'error');
+        }
+    } catch (e) {
+        showToast('❌ خطأ في الاتصال', 'error');
+    }
+}
+
+/** إنشاء حجز موازنة من طلب الشراء */
+async function prCreateBudgetReservation(requestId) {
+    try {
+        // جلب بيانات الطلب
+        const res = await fetch(`api/purchase_requests_api.php?action=get&id=${requestId}`);
+        const data = await res.json();
+        if (!data.success) { showToast('خطأ في جلب بيانات الطلب', 'error'); return; }
+        const req = data.data;
+
+        showToast('جارٍ فتح صفحة الحجوزات...', 'info');
+
+        // الانتقال لصفحة حجوزات الموازنة
+        BudgetState.activeTab = 'reservations';
+        await loadBudgetReservationsPage();
+
+        // فتح نموذج الحجز مع البيانات المعبأة مسبقاً
+        setTimeout(() => {
+            if (typeof openAddReservationModalWithData === 'function') {
+                openAddReservationModalWithData(req);
+            } else if (typeof openAddReservationModal === 'function') {
+                openAddReservationModal();
+            }
+        }, 900);
+
+    } catch (err) {
+        showToast('خطأ في إنشاء الحجز', 'error');
+        console.error(err);
+    }
 }
 
 /** هل المستخدم الحالي من موظفي سلاسل الإمداد أو المشتريات */

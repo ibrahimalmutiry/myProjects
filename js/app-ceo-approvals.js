@@ -16,10 +16,10 @@ const CeoState = {
 
 // ── ثوابت الإجراءات ─────────────────────────────────────────
 const CEO_ACTIONS = [
-    { key: 'اعتماد', cls: 'approve', icon: '✅', label: 'اعتماد' },
-    { key: 'مراجعة', cls: 'review', icon: '🔍', label: 'مراجعة' },
-    { key: 'توجيه', cls: 'route', icon: '↪️', label: 'توجيه' },
-    { key: 'رفض', cls: 'reject', icon: '❌', label: 'رفض' },
+    { key: 'اعتماد', cls: 'approve', icon: '✅', label: tr('اعتماد') },
+    { key: 'مراجعة', cls: 'review', icon: '🔍', label: tr('مراجعة') },
+    { key: 'توجيه', cls: 'route', icon: '↪️', label: tr('توجيه') },
+    { key: 'رفض', cls: 'reject', icon: '❌', label: tr('رفض') },
 ];
 
 const ACTION_HISTORY_CLASSES = { 'اعتماد': 'approve', 'مراجعة': 'review', 'توجيه': 'route', 'رفض': 'reject' };
@@ -1544,7 +1544,7 @@ async function saveCeoStampSettings() {
             showToast('❌ ' + data.message, 'error');
         }
     } catch (e) {
-        showToast('خطأ في الاتصال', 'error');
+        showToast(tr('خطأ في الاتصال'), 'error');
         console.error('[CEO] saveStamp:', e);
     }
 }

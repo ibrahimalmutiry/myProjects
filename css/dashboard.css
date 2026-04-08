@@ -1,9 +1,5 @@
-/* المحتوى الرئيسي */
-.main-content {
-    max-width: 1400px;
-    margin: 0 auto;
-    padding: 2rem 1.5rem;
-}
+/* المحتوى الرئيسي — تم نقل margin هنا لـ sidebar.css لتجنب التعارض */
+/* .main-content padding يُعرَّف فقط في sidebar.css */
 
 /* البطاقات الإحصائية */
 .stats-grid {

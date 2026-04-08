@@ -85,10 +85,10 @@ async function loadTransactions(page) {
 
             renderTransactions();
         } else {
-            showToast('خطأ في تحميل المعاملات', 'error');
+            showToast(tr('خطأ في تحميل المعاملات'), 'error');
         }
     } catch (error) {
-        showToast('خطأ في الاتصال', 'error');
+        showToast(tr('خطأ في الاتصال'), 'error');
         console.error(error);
     }
 }
@@ -103,17 +103,17 @@ function renderTransactions() {
                         <circle cx="11" cy="11" r="8"></circle>
                         <path d="m21 21-4.35-4.35"></path>
                     </svg>
-                    <input type="text" id="searchInput" placeholder="بحث في المعاملات..."
+                    <input type="text" id="searchInput" placeholder="${tr('بحث في المعاملات...')}"
                            value="${TxState.search}"
                            oninput="filterTransactions()">
                 </div>
                 <select id="statusFilter" class="filter-select" onchange="filterTransactions()">
-                    <option value="">جميع الحالات</option>
-                    <option value="عاجل"    ${TxState.status === 'عاجل' ? 'selected' : ''}>عاجل</option>
-                    <option value="متابعة"  ${TxState.status === 'متابعة' ? 'selected' : ''}>يحتاج متابعة</option>
-                    <option value="مكتمل"   ${TxState.status === 'مكتمل' ? 'selected' : ''}>مكتمل</option>
-                    <option value="تم الدفع"${TxState.status === 'تم الدفع' ? 'selected' : ''}>تم الدفع</option>
-                    <option value="معلق"    ${TxState.status === 'معلق' ? 'selected' : ''}>معلق</option>
+                    <option value="">${tr('جميع الحالات')}</option>
+                    <option value="عاجل" ${TxState.status === 'عاجل' ? 'selected' : ''}>${tr('عاجل')}</option>
+                    <option value="متابعة" ${TxState.status === 'متابعة' ? 'selected' : ''}>${tr('متابعة')} متابعة</option>
+                    <option value="مكتمل" ${TxState.status === 'مكتمل' ? 'selected' : ''}>${tr('مكتمل')}</option>
+                    <option value="تم الدفع" ${TxState.status === 'تم الدفع' ? 'selected' : ''}>${tr('تم الدفع')}دفع</option>
+                    <option value="معلق" ${TxState.status === 'معلق' ? 'selected' : ''}>${tr('معلق')}</option>
                 </select>
             </div>
             <button class="btn btn-primary" onclick="openAddModal()">
@@ -591,7 +591,7 @@ async function openAddModal() {
         const dateStr = now.toLocaleDateString('ar-SA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
         const timeStr = now.toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
 
-        DOM.modalTitle.textContent = 'إضافة معاملة جديدة';
+        DOM.modalTitle.textContent = tr('إضافة معاملة جديدة');
         DOM.modalBody.innerHTML = `
             <form id="addForm" onsubmit="submitAddForm(event)" enctype="multipart/form-data">
                 <input type="hidden" name="type_id" id="tx_type_id_hidden" value="">
@@ -663,7 +663,7 @@ async function openAddModal() {
             if (curEl) curEl.addEventListener('change', e => _onTxCurrencyChange(e.target.value));
         });
     } catch (error) {
-        showToast('خطأ في تحميل البيانات', 'error');
+        showToast(tr('خطأ في تحميل البيانات'), 'error');
     }
 }
 
@@ -853,7 +853,7 @@ function renderAttachmentsSection(txId, atts) {
 /** مودال رفع مرفق لمعاملة موجودة */
 function openUploadModal(txId) {
     _pendingAttachments = [];
-    DOM.modalTitle.textContent = 'إضافة مرفقات';
+    DOM.modalTitle.textContent = tr('إضافة مرفقات');
     DOM.modalBody.innerHTML = `
         <div style="margin-bottom:1.2rem">
             <p style="font-size:.85rem;color:var(--text-muted);margin-bottom:1rem">أضف مرفقات للمعاملة. يمكنك إضافة عدة ملفات دفعة واحدة وتسمية كل منها.</p>
@@ -872,7 +872,7 @@ function openUploadModal(txId) {
 }
 
 async function saveUploadedAttachments(txId) {
-    if (!_pendingAttachments.length) { showToast('اختر ملفاً على الأقل', 'error'); return; }
+    if (!_pendingAttachments.length) { showToast(tr('اختر ملفاً على الأقل'), 'error'); return; }
     var fd = new FormData();
     fd.append('transaction_id', txId);
     appendAttachmentsToFormData(fd);
@@ -880,11 +880,11 @@ async function saveUploadedAttachments(txId) {
         var res = await fetch('api/?action=upload_attachment', { method: 'POST', body: fd });
         var data = await res.json();
         if (data.success) {
-            showToast('تم رفع المرفقات بنجاح', 'success');
+            showToast(tr('تم رفع المرفقات بنجاح'), 'success');
             closeModal();
             loadTransactions();
         } else { showToast(data.message || 'خطأ في الرفع', 'error'); }
-    } catch { showToast('خطأ في الاتصال', 'error'); }
+    } catch { showToast(tr('خطأ في الاتصال'), 'error'); }
 }
 
 async function deleteOneAttachment(attId, txId) {
@@ -896,9 +896,9 @@ async function deleteOneAttachment(attId, txId) {
             body: JSON.stringify({ attachment_id: attId, transaction_id: txId })
         });
         var data = await res.json();
-        if (data.success) { showToast('تم حذف المرفق', 'success'); loadTransactions(); }
+        if (data.success) { showToast(tr('تم حذف المرفق'), 'success'); loadTransactions(); }
         else showToast(data.message || 'خطأ', 'error');
-    } catch { showToast('خطأ في الاتصال', 'error'); }
+    } catch { showToast(tr('خطأ في الاتصال'), 'error'); }
 }
 
 // --- توافق مع الكود القديم ---
@@ -911,7 +911,7 @@ async function submitAddForm(e) {
     const form = e.target;
     const typeId = document.getElementById('tx_type_id_hidden')?.value;
     if (!typeId) {
-        showToast('⚠️ اختر نوع المعاملة', 'warning');
+        showToast(tr('⚠️ اختر نوع المعاملة'), 'warning');
         return;
     }
     const formData = new FormData(form);
@@ -927,11 +927,11 @@ async function submitAddForm(e) {
         const result = await res.json();
         if (result.success) {
             _pendingAttachments = [];
-            showToast('تم إضافة المعاملة بنجاح', 'success');
+            showToast(tr('تم إضافة المعاملة بنجاح'), 'success');
             closeModal();
             loadTransactions();
-        } else { showToast(result.message || 'خطأ في الإضافة', 'error'); }
-    } catch { showToast('خطأ في الاتصال', 'error'); }
+        } else { showToast(result.message || tr(tr('خطأ في تحميل البيانات')), 'error'); }
+    } catch { showToast(tr('خطأ في الاتصال'), 'error'); }
 }
 
 // فتح ملف
@@ -1432,7 +1432,7 @@ async function editTransaction(id) {
 
         openModal();
     } catch (err) {
-        showToast('خطأ في تحميل البيانات', 'error');
+        showToast(tr('خطأ في تحميل البيانات'), 'error');
         console.error(err);
     }
 }
@@ -1500,7 +1500,7 @@ async function submitUpdateForm(e, type) {
             showToast(result.message || 'خطأ في الحفظ', 'error');
         }
     } catch (error) {
-        showToast('خطأ في الاتصال', 'error');
+        showToast(tr('خطأ في الاتصال'), 'error');
     }
 }
 
@@ -1547,7 +1547,7 @@ async function submitDispatch(e, txId) {
             if (btn) { btn.disabled = false; btn.textContent = '🔀 توجيه المعاملة'; }
         }
     } catch (err) {
-        showToast('خطأ في الاتصال', 'error');
+        showToast(tr('خطأ في الاتصال'), 'error');
         if (btn) { btn.disabled = false; btn.textContent = '🔀 توجيه المعاملة'; }
     }
 }
@@ -1603,7 +1603,7 @@ async function confirmResumeDispatch(txId, btn) {
             btn.textContent = '▶️ استئناف';
         }
     } catch (err) {
-        showToast('خطأ في الاتصال', 'error');
+        showToast(tr('خطأ في الاتصال'), 'error');
         btn.disabled = false;
         btn.textContent = '▶️ استئناف';
     }

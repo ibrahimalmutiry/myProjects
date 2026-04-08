@@ -32,7 +32,16 @@
 // ════════════════════════════════════════════════════════════
 //  الودائع البنكية — Bank Deposits
 // ════════════════════════════════════════════════════════════
-async function loadBankDepositsPage() {
+
+// المتغيرات العامة — تُهيَّأ هنا لتجنب ReferenceError
+var bankAccounts = [];
+var bankDeposits = [];
+var monthlyDeposits = [];
+var depositAlerts = [];
+var activeBankTab = 'overview';
+var investments = [];
+
+async function loadBankDepositsPage(targetTab) {
     const container = document.getElementById('main-content');
     if (!container) return;
 
@@ -45,9 +54,9 @@ async function loadBankDepositsPage() {
         loadInvestments(),
     ]);
 
-    // تحديد التبويب المطلوب من السايدبار (لو نقر عليه)
+    // الأولوية: المعامل المباشر → data-bank-sub القديم → overview
     const activeSubBtn = document.querySelector('.nav-child-btn[data-bank-sub].active');
-    const startTab = activeSubBtn ? activeSubBtn.dataset.bankSub : 'overview';
+    const startTab = targetTab || (activeSubBtn ? activeSubBtn.dataset.bankSub : 'overview');
 
     switchBankTab(startTab);
     startDepositAlertChecker();
@@ -66,7 +75,7 @@ function renderBankPageSkeleton() {
             <div class="bank-page-title">
                 <div class="bank-page-icon">🏦</div>
                 <div>
-                    <h1>نظام الودائع البنكية</h1>
+                    <h1>${tr('نظام الودائع البنكية')}</h1>
                     <p class="bank-page-subtitle">${monthName}</p>
                 </div>
             </div>
@@ -105,11 +114,11 @@ function switchBankTab(tabName) {
 
     // تحديث عنوان الصفحة حسب التبويب
     const tabTitles = {
-        overview: 'نظرة عامة',
-        deposits: 'الحسابات البنكية',
-        monthly: 'ودائع الشهر',
-        accounts: 'الحسابات البنكية',
-        investments: 'الودائع الاستثمارية',
+        overview: tr('نظرة عامة'),
+        deposits: tr('الحسابات البنكية'),
+        monthly: tr('ودائع الشهر'),
+        accounts: tr('الحسابات البنكية'),
+        investments: tr('الودائع الاستثمارية'),
     };
     const titleEl = document.querySelector('.bank-page-title h1');
     if (titleEl && tabTitles[tabName]) titleEl.textContent = tabTitles[tabName];
@@ -192,7 +201,7 @@ function renderOverviewTab() {
                     <span class="bov2-kpi-tag">${bankAccounts.length} حساب</span>
                 </div>
                 <div class="bov2-kpi-val">${formatMoneyWithSAR(totalBalance)}</div>
-                <div class="bov2-kpi-lbl">إجمالي أرصدة الحسابات</div>
+                <div class="bov2-kpi-lbl">${tr('إجمالي أرصدة الحسابات')}</div>
             </div>
             <div class="bov2-kpi" style="--kpi-accent:#a78bfa">
                 <div class="bov2-kpi-top">
@@ -200,7 +209,7 @@ function renderOverviewTab() {
                     <span class="bov2-kpi-tag">${activeInv.length} نشطة</span>
                 </div>
                 <div class="bov2-kpi-val">${formatMoneyWithSAR(totalInvested)}</div>
-                <div class="bov2-kpi-lbl">إجمالي الاستثمارات النشطة</div>
+                <div class="bov2-kpi-lbl">${tr('إجمالي الاستثمارات النشطة')}</div>
             </div>
             <div class="bov2-kpi" style="--kpi-accent:#22c55e">
                 <div class="bov2-kpi-top">
@@ -208,7 +217,7 @@ function renderOverviewTab() {
                     <span class="bov2-kpi-tag">${doneInv.length} منتهية</span>
                 </div>
                 <div class="bov2-kpi-val">${formatMoneyWithSAR(totalProfit)}</div>
-                <div class="bov2-kpi-lbl">إجمالي الأرباح المحققة</div>
+                <div class="bov2-kpi-lbl">${tr('إجمالي الأرباح المحققة')}</div>
             </div>
             <div class="bov2-kpi" style="--kpi-accent:#f59e0b">
                 <div class="bov2-kpi-top">
@@ -218,7 +227,7 @@ function renderOverviewTab() {
                     </span>
                 </div>
                 <div class="bov2-kpi-val">${upcoming[0] ? formatMoneyWithSAR(upcoming[0].amount) : '—'}</div>
-                <div class="bov2-kpi-lbl">أقرب استحقاق</div>
+                <div class="bov2-kpi-lbl">${tr('أقرب استحقاق')}</div>
             </div>
         </div>
 
@@ -229,12 +238,12 @@ function renderOverviewTab() {
             <div class="bov2-card bov2-chart-card">
                 <div class="bov2-card-hdr">
                     <div>
-                        <div class="bov2-card-title">نشاط الودائع الاستثمارية</div>
+                        <div class="bov2-card-title">${tr('نشاط الودائع الاستثمارية')}</div>
                         <div class="bov2-card-sub">آخر 6 أشهر · إجمالي ${formatMoneyWithSAR(monthlyData.reduce((s, m) => s + m.amount, 0))}</div>
                     </div>
                     <div class="bov2-legend">
                         <span class="bov2-legend-dot" style="background:#4dabf7"></span>
-                        <span>الودائع الاستثمارية الشهرية</span>
+                        <span>${tr('الودائع الاستثمارية الشهرية')}</span>
                     </div>
                 </div>
                 <div class="bov2-chart-wrap">
@@ -269,10 +278,10 @@ function renderOverviewTab() {
             <div class="bov2-card bov2-upcoming-card">
                 <div class="bov2-card-hdr">
                     <div>
-                        <div class="bov2-card-title">الاستحقاقات القادمة</div>
-                        <div class="bov2-card-sub">${activeInv.length} وديعة نشطة</div>
+                        <div class="bov2-card-title">${tr('الاستحقاقات القادمة')}</div>
+                        <div class="bov2-card-sub">${activeInv.length} ${tr('وديعة')} نشطة</div>
                     </div>
-                    <button class="bov2-link" onclick="switchBankTab('investments')">عرض الكل ←</button>
+                    <button class="bov2-link" onclick="switchBankTab('investments')">${tr('عرض الكل')}</button>
                 </div>
                 <div class="bov2-upcoming-list">
                     ${upcoming.length ? upcoming.map(inv => {
@@ -318,10 +327,10 @@ function renderOverviewTab() {
             <div class="bov2-card bov2-accounts-card">
                 <div class="bov2-card-hdr">
                     <div>
-                        <div class="bov2-card-title">الحسابات البنكية</div>
+                        <div class="bov2-card-title">${tr('الحسابات البنكية')}</div>
                         <div class="bov2-card-sub">${bankAccounts.length} حساب · ${formatMoneyWithSAR(totalBalance)} إجمالي</div>
                     </div>
-                    <button class="bov2-link" onclick="switchBankTab('accounts')">إدارة ←</button>
+                    <button class="bov2-link" onclick="switchBankTab('accounts')">${tr('عرض الكل')}</button>
                 </div>
                 <div class="bov2-acc-grid">
                     ${bankAccounts.length ? bankAccounts.slice(0, 4).map(acc => {
@@ -352,7 +361,7 @@ function renderOverviewTab() {
             <div class="bov2-card bov2-deps-card">
                 <div class="bov2-card-hdr">
                     <div>
-                        <div class="bov2-card-title">آخر الودائع</div>
+                        <div class="bov2-card-title">${tr('آخر الودائع')}</div>
                         <div class="bov2-card-sub">ودائع الشهر الحالي: ${formatMoneyWithSAR(thisMonth)}</div>
                     </div>
                 </div>
@@ -371,7 +380,7 @@ function renderOverviewTab() {
                                 <div class="bov2-dep-badge" style="color:${ok ? '#22c55e' : '#f59e0b'};background:${ok ? 'rgba(34,197,94,.1)' : 'rgba(245,158,11,.1)'}">${dep.status}</div>
                             </div>
                         </div>`;
-    }).join('') : `<div class="bov2-empty">لا توجد ودائع</div>`}
+    }).join('') : `<div class="bov2-empty">${tr('لا توجد ودائع')}</div>`}
                 </div>
             </div>
 
@@ -403,7 +412,7 @@ function renderAccountCards() {
 // ─── قائمة آخر الودائع ──────────────────────────────────
 function renderRecentDepositsList(deposits) {
     if (!deposits.length) {
-        return `<div class="empty-state-sm">لا توجد ودائع مسجلة</div>`;
+        return `<div class="empty-state-sm">${tr('لا توجد ودائع مسجلة')}</div>`;
     }
 
     return `<div class="deposits-list">` +
@@ -434,7 +443,7 @@ function renderUpcomingDepositsTimeline() {
         .slice(0, 6);
 
     if (!upcoming.length) {
-        return `<div class="empty-state-sm">لا توجد ودائع مجدولة هذا الشهر</div>`;
+        return `<div class="empty-state-sm">${tr('لا توجد ودائع مجدولة هذا الشهر')}</div>`;
     }
 
     const today = new Date();
@@ -510,7 +519,7 @@ function renderDepositsTab() {
                     <div style="font-size:.78rem;color:var(--text-muted)">${thisMonthConfirmed.length} إيداع</div>
                 </div>
                 <div class="acc-daily-stat" style="border-right:3px solid var(--accent-orange)">
-                    <div style="font-size:.8rem;color:var(--text-muted)">في الانتظار</div>
+                    <div style="font-size:.8rem;color:var(--text-muted)">${tr('في الانتظار')}</div>
                     <div style="font-size:1.3rem;font-weight:700;color:var(--accent-orange)">${formatMoneyWithSAR(totalPending)}</div>
                     <div style="font-size:.78rem;color:var(--text-muted)">${thisMonthPending.length} إيداع</div>
                 </div>
@@ -673,10 +682,10 @@ async function renderAccountsTab() {
         <!-- ═══ الحسابات ═══ -->
         <div class="bank-section">
             <div class="bank-section-header">
-                <div class="bsh-title"><span>🏦</span><h3>الحسابات البنكية</h3><span class="bsh-badge">${bankAccounts.length}</span></div>
+                <div class="bsh-title"><span>🏦</span><h3>${tr('الحسابات البنكية')}</h3><span class="bsh-badge">${bankAccounts.length}</span></div>
                 <div style="display:flex;gap:.5rem">
-                    <button class="bsh-btn green" onclick="openRecordAllBalancesModal()">📊 تسجيل أرصدة اليوم</button>
-                    <button class="bsh-btn" onclick="openAddAccountModal()" style="${showIf('bank.add_account')}">+ إضافة حساب</button>
+                    <button class="bsh-btn green" onclick="openRecordAllBalancesModal()">📊 ${tr('تسجيل رصيد اليوم')}</button>
+                    <button class="bsh-btn" onclick="openAddAccountModal()" style="${showIf('bank.add_account')}">+ ${tr('إضافة حساب')}</button>
                 </div>
             </div>
             <div class="bank-rows-list">
@@ -721,39 +730,129 @@ async function renderAccountsTab() {
             </div>
         </div>
 
-        <!-- ═══ سجل الأرصدة اليومية ═══ -->
-        <div class="bank-section">
-            <div class="bank-section-header">
-                <div class="bsh-title"><span>📈</span><h3>سجل الأرصدة اليومية</h3></div>
-                <button class="bsh-btn green" onclick="openRecordAllBalancesModal()">+ تسجيل جديد</button>
+        <!-- ═══ سجل الأرصدة اليومية — تصميم د ═══ -->
+        <style id="dbl-css">
+        .dbl-wrap{border:0.5px solid var(--border-color);border-radius:12px;overflow:hidden;background:var(--bg-card)}
+        .dbl-header{display:flex;align-items:center;justify-content:space-between;padding:.8rem 1.1rem;border-bottom:0.5px solid var(--border-color);background:var(--bg-surface)}
+        .dbl-title{font-size:13px;font-weight:600;color:var(--text-primary);display:flex;align-items:center;gap:.5rem}
+        .dbl-title svg{color:var(--text-muted)}
+        .dbl-add-btn{font-size:12px;color:#185FA5;background:#E6F1FB;border:none;border-radius:6px;padding:5px 12px;cursor:pointer;font-family:inherit;font-weight:600;display:inline-flex;align-items:center;gap:4px}
+        .dbl-add-btn:hover{background:#B5D4F4}
+        .dbl-date-divider{display:flex;align-items:center;gap:.75rem;padding:.4rem 1.1rem;background:var(--bg-surface);border-bottom:0.5px solid var(--border-color)}
+        .dbl-date-chip{font-size:11px;font-weight:600;color:var(--text-muted);background:var(--bg-card);border:0.5px solid var(--border-color);border-radius:20px;padding:2px 10px;white-space:nowrap;display:flex;align-items:center;gap:4px}
+        .dbl-date-line{flex:1;height:0.5px;background:var(--border-color)}
+        .dbl-count{font-size:10.5px;color:var(--text-muted);white-space:nowrap}
+        .dbl-row{display:flex;padding:1rem 1.05rem;align-items:stretch;border-bottom:0.5px solid var(--border-color)}
+        .dbl-row:last-child{border-bottom:none}
+        .dbl-row:hover{background:var(--bg-surface)}
+        .dbl-accent{width:3px;flex-shrink:0;align-self:stretch;border-radius:0}
+        .dbl-icon-col{width:44px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+        .dbl-icon{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+        .dbl-icon-up{background:#EAF3DE;color:#3B6D11}
+        .dbl-icon-dn{background:#FCEBEB;color:#791F1F}
+        .dbl-icon-eq{background:var(--bg-surface);color:var(--text-muted);border:0.5px solid var(--border-color)}
+        .dbl-main{flex:1;padding:.65rem .75rem .65rem 0;min-width:0;display:flex;flex-direction:column;gap:2px}
+        .dbl-acc{font-size:13px;font-weight:600;color:var(--text-primary)}
+        .dbl-bank{font-size:11.5px;color:var(--text-muted)}
+        .dbl-note{font-size:11px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px}
+        .dbl-nums{display:flex;flex-direction:column;align-items:flex-end;padding:.65rem 1rem .65rem 0;gap:3px;flex-shrink:0}
+        .dbl-closing{font-size:14px;font-weight:600;color:#185FA5;font-variant-numeric:tabular-nums;direction:ltr;white-space:nowrap}
+        .dbl-diff-up{font-size:11.5px;font-weight:600;color:#27500A;direction:ltr;white-space:nowrap}
+        .dbl-diff-dn{font-size:11.5px;font-weight:600;color:#791F1F;direction:ltr;white-space:nowrap}
+        .dbl-diff-eq{font-size:11.5px;color:var(--text-muted)}
+        .dbl-opening{font-size:11px;color:var(--text-muted);direction:ltr;white-space:nowrap}
+        .dbl-empty{padding:3rem 1rem;text-align:center;color:var(--text-muted);display:flex;flex-direction:column;align-items:center;gap:.75rem}
+        .dbl-empty-icon{font-size:2rem;opacity:.25}
+        .dbl-empty-text{font-size:13px}
+        </style>
+
+        <div class="dbl-wrap">
+            <div class="dbl-header">
+                <div class="dbl-title">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                    ${tr('سجل الأرصدة اليومية')}
+                </div>
+                <button class="dbl-add-btn" onclick="openRecordAllBalancesModal()">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                    ${tr('سجل رصيد جديد')}
+                </button>
             </div>
-            <div class="bank-rows-list">
-                ${dailyBalances.length ? dailyBalances.slice(0, 20).map(b => {
-        const diff = parseFloat(b.closing_balance) - parseFloat(b.opening_balance);
-        const color = diff >= 0 ? 'var(--accent-green)' : 'var(--accent-red)';
-        return `
-                    <div class="bank-row">
-                        <div class="br-indicator" style="background:${color}"></div>
-                        <div class="br-icon">📅</div>
-                        <div class="br-main">
-                            <span class="br-title">${b.account_name}</span>
-                            <span class="br-sub">${b.bank_name || ''} · ${fmtDate(b.balance_date)} ${b.notes ? '· ' + b.notes : ''}</span>
-                        </div>
-                        <div class="br-meta">
-                            <span class="br-amount">${formatMoneyWithSAR(b.closing_balance)}</span>
-                            <span class="br-sub-meta" style="color:${color}">${diff >= 0 ? '+' : ''}${formatMoneyWithSAR(diff)}</span>
-                        </div>
-                        <div class="br-stat-group">
-                            <div class="br-stat"><span>${formatMoneyWithSAR(b.opening_balance)}</span><small>افتتاح</small></div>
-                            <div class="br-stat green"><span>+${formatMoneyWithSAR(b.total_deposits)}</span><small>ودائع</small></div>
-                        </div>
+
+            ${(() => {
+            const records = dailyBalances.slice(0, 30);
+            if (!records.length) return `
+                    <div class="dbl-empty">
+                        <div class="dbl-empty-icon">📋</div>
+                        <div class="dbl-empty-text">${tr('لم يتم تسجيل أي أرصدة يومية بعد')}</div>
+                        <button class="dbl-add-btn" onclick="openRecordAllBalancesModal()">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                            ${tr('سجل الرصيد الآن')}
+                        </button>
                     </div>`;
-    }).join('') : `
-                <div class="bank-empty" style="padding:2rem;text-align:center">
-                    لم يتم تسجيل أي أرصدة يومية بعد<br><br>
-                    <button class="bsh-btn green" onclick="openRecordAllBalancesModal()">📊 سجّل الرصيد الآن</button>
-                </div>`}
-            </div>
+
+            // تجميع السجلات حسب التاريخ
+            const grouped = {};
+            records.forEach(b => {
+                const d = b.balance_date;
+                if (!grouped[d]) grouped[d] = [];
+                grouped[d].push(b);
+            });
+
+            const dayNames = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+
+            return Object.keys(grouped).sort((a, b) => b.localeCompare(a)).map(date => {
+                const items = grouped[date];
+                const dateObj = new Date(date);
+                const dayName = dayNames[dateObj.getDay()];
+                const dateLabel = dateObj.toLocaleDateString('ar-SA', { day: 'numeric', month: 'long', year: 'numeric' });
+
+                const rows = items.map(b => {
+                    const diff = parseFloat(b.closing_balance) - parseFloat(b.opening_balance);
+                    const isUp = diff > 0, isDn = diff < 0;
+                    const accentColor = isUp ? '#1D9E75' : isDn ? '#E24B4A' : 'var(--border-color)';
+                    const iconCls = isUp ? 'dbl-icon-up' : isDn ? 'dbl-icon-dn' : 'dbl-icon-eq';
+                    const iconSvg = isUp
+                        ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>`
+                        : isDn
+                            ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg>`
+                            : `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/></svg>`;
+                    const diffHtml = isUp
+                        ? `<div class="dbl-diff-up">▲ +${formatMoneyWithSAR(diff)}</div>`
+                        : isDn
+                            ? `<div class="dbl-diff-dn">▼ ${formatMoneyWithSAR(diff)}</div>`
+                            : `<div class="dbl-diff-eq">لا تغيير</div>`;
+
+                    return `
+                        <div class="dbl-row">
+                            <div class="dbl-accent" style="background:${accentColor}"></div>
+                            <div class="dbl-icon-col">
+                                <div class="dbl-icon ${iconCls}">${iconSvg}</div>
+                            </div>
+                            <div class="dbl-main">
+                                <div class="dbl-acc">${b.account_name || '—'}</div>
+                                <div class="dbl-bank">${b.bank_name || ''} · ${b.account_type || 'جاري'}</div>
+                                ${b.notes ? `<div class="dbl-note">${b.notes}</div>` : ''}
+                            </div>
+                            <div class="dbl-nums">
+                                <div class="dbl-closing">${formatMoneyWithSAR(b.closing_balance)} ﷼</div>
+                                ${diffHtml}
+                                <div class="dbl-opening">من: ${formatMoneyWithSAR(b.opening_balance)}</div>
+                            </div>
+                        </div>`;
+                }).join('');
+
+                return `
+                    <div class="dbl-date-divider">
+                        <div class="dbl-date-chip">
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                            ${dayName} ${dateLabel}
+                        </div>
+                        <div class="dbl-date-line"></div>
+                        <div class="dbl-count">${items.length} ${items.length === 1 ? 'سجل' : 'سجلات'}</div>
+                    </div>
+                    ${rows}`;
+            }).join('');
+        })()}
         </div>
 
     </div>`;
@@ -770,53 +869,81 @@ function openRecordBalanceModal(accountId) {
     const today = new Date().toISOString().split('T')[0];
     const last = dailyBalances.find(b => b.account_id == accountId);
 
-    DOM.modalTitle.textContent = `📊 تسجيل رصيد اليوم — ${acc.bank_name} · ${acc.account_name}`;
+    DOM.modalTitle.textContent = `${tr('تسجيل رصيد اليوم')} — ${acc.bank_name} · ${acc.account_name}`;
     DOM.modalBody.innerHTML = `
-        <div style="background:var(--bg-surface);border-radius:10px;padding:1rem;margin-bottom:1rem;display:flex;justify-content:space-between">
-            <div>
-                <div style="font-size:.8rem;color:var(--text-muted)">الرصيد الحالي في النظام</div>
-                <div style="font-size:1.2rem;font-weight:700;color:var(--accent-blue)">${formatMoneyWithSAR(acc.current_balance)}</div>
+        <style>
+        .rb-modal-wrap{display:flex;flex-direction:column;gap:1rem;direction:rtl}
+        .rb-header-card{background:var(--bg-surface,#F8F8F8);border:0.5px solid var(--border-color);border-radius:12px;padding:.9rem 1.1rem;display:flex;justify-content:space-between;align-items:center}
+        .rb-hc-label{font-size:11px;color:var(--text-muted);margin-bottom:3px;font-weight:500}
+        .rb-hc-value{font-size:17px;font-weight:600;color:var(--accent-blue);direction:ltr;text-align:right}
+        .rb-hc-tag{font-size:10.5px;background:rgba(59,130,246,.1);color:var(--accent-blue);border-radius:4px;padding:2px 7px;display:inline-block;margin-top:4px}
+        .rb-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:.75rem}
+        .rb-form-group{display:flex;flex-direction:column;gap:4px}
+        .rb-form-group.full{grid-column:1/-1}
+        .rb-label{font-size:12px;font-weight:500;color:var(--text-muted)}
+        .rb-label .req{color:#E24B4A}
+        .rb-input{height:36px;border-radius:8px;border:0.5px solid var(--border-color);background:var(--bg-card,#fff);padding:0 10px;font-size:13px;color:var(--text-primary);width:100%;font-family:inherit;direction:ltr;text-align:right}
+        .rb-input:focus{outline:none;border-color:var(--accent-blue);box-shadow:0 0 0 3px rgba(59,130,246,.1)}
+        .rb-diff-badge{display:inline-flex;align-items:center;gap:4px;font-size:12px;margin-top:4px;padding:4px 9px;border-radius:6px}
+        .rb-diff-up{background:rgba(16,185,129,.1);color:#059669}
+        .rb-diff-down{background:rgba(239,68,68,.1);color:#DC2626}
+        .rb-footer{display:flex;gap:.6rem;justify-content:flex-end;padding-top:.75rem;border-top:0.5px solid var(--border-color);margin-top:.25rem}
+        .rb-btn{height:34px;padding:0 1rem;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;border:0.5px solid var(--border-color);background:transparent;color:var(--text-primary);font-family:inherit;display:inline-flex;align-items:center;gap:5px}
+        .rb-btn:hover{background:var(--bg-surface)}
+        .rb-btn-primary{background:var(--accent-blue,#2563EB);color:#fff;border-color:transparent}
+        .rb-btn-primary:hover{opacity:.9}
+        .rb-btn-success{background:#059669;color:#fff;border-color:transparent}
+        .rb-btn-success:hover{opacity:.9}
+        </style>
+        <div class="rb-modal-wrap">
+            <div class="rb-header-card">
+                <div>
+                    <div class="rb-hc-label">${tr('الرصيد الحالي في النظام')}</div>
+                    <div class="rb-hc-value">${formatMoneyWithSAR(acc.current_balance)}</div>
+                </div>
+                ${last ? `<div style="text-align:left">
+                    <div class="rb-hc-label">آخر تسجيل</div>
+                    <div style="font-size:12.5px;font-weight:500;color:var(--text-primary)">${fmtDate(last.balance_date)}</div>
+                    <span class="rb-hc-tag">${formatMoneyWithSAR(last.closing_balance)}</span>
+                </div>` : ''}
             </div>
-            ${last ? `<div style="text-align:left">
-                <div style="font-size:.8rem;color:var(--text-muted)">آخر تسجيل (${fmtDate(last.balance_date)})</div>
-                <div style="font-size:1rem;font-weight:600">${formatMoneyWithSAR(last.closing_balance)}</div>
-            </div>` : ''}
-        </div>
 
-        <div class="modal-form-grid">
-            <div class="form-group">
-                <label class="form-label">التاريخ *</label>
-                <input type="date" id="rb-date" class="form-input" value="${today}">
+            <div class="rb-form-grid">
+                <div class="rb-form-group">
+                    <label class="rb-label">${tr('التاريخ')} <span class="req">*</span></label>
+                    <input type="date" id="rb-date" class="rb-input" value="${today}">
+                </div>
+                <div class="rb-form-group">
+                    <label class="rb-label">${tr('رصيد الافتتاح')}</label>
+                    <input type="number" id="rb-opening" class="rb-input" step="0.01"
+                        value="${last ? parseFloat(last.closing_balance).toFixed(2) : parseFloat(acc.current_balance).toFixed(2)}"
+                        placeholder="0.00">
+                </div>
+                <div class="rb-form-group full">
+                    <label class="rb-label">${tr('رصيد الإغلاق الفعلي')} <span class="req">*</span></label>
+                    <input type="number" id="rb-closing" class="rb-input" step="0.01"
+                        value="${parseFloat(acc.current_balance).toFixed(2)}"
+                        placeholder="أدخل الرصيد الفعلي من كشف البنك"
+                        oninput="calcBalanceDiff(${parseFloat(acc.current_balance)})">
+                    <div id="rb-diff"></div>
+                </div>
+                <div class="rb-form-group full">
+                    <label class="rb-label">ملاحظات</label>
+                    <input type="text" id="rb-notes" class="rb-input" style="direction:rtl;text-align:right" placeholder="مثال: كشف البنك بتاريخ اليوم">
+                </div>
             </div>
-            <div class="form-group">
-                <label class="form-label">رصيد الافتتاح</label>
-                <input type="number" id="rb-opening" class="form-input" step="0.01"
-                    value="${last ? parseFloat(last.closing_balance).toFixed(2) : parseFloat(acc.current_balance).toFixed(2)}"
-                    placeholder="0.00">
-            </div>
-            <div class="form-group full-span">
-                <label class="form-label">رصيد الإغلاق الفعلي *</label>
-                <input type="number" id="rb-closing" class="form-input" step="0.01"
-                    value="${parseFloat(acc.current_balance).toFixed(2)}"
-                    placeholder="أدخل الرصيد الفعلي من كشف البنك"
-                    oninput="calcBalanceDiff(${parseFloat(acc.current_balance)})">
-                <div id="rb-diff" style="margin-top:6px;font-size:.85rem"></div>
-            </div>
-            <div class="form-group full-span">
-                <label class="form-label">ملاحظات</label>
-                <input type="text" id="rb-notes" class="form-input" placeholder="مثال: كشف البنك بتاريخ اليوم">
-            </div>
-        </div>
 
-        <div style="display:flex;gap:.75rem;margin-top:1.25rem;justify-content:flex-end">
-            <button class="btn btn-secondary" onclick="closeModal()">إلغاء</button>
-            <button class="btn btn-primary" onclick="submitRecordBalance(${accountId}, false)">
-                💾 حفظ الرصيد
-            </button>
-            <button class="btn" style="background:var(--accent-green);color:#fff"
-                onclick="submitRecordBalance(${accountId}, true)">
-                💾 حفظ وتحديث رصيد النظام
-            </button>
+            <div class="rb-footer">
+                <button class="rb-btn" onclick="closeModal()">إلغاء</button>
+                <button class="rb-btn rb-btn-primary" onclick="submitRecordBalance(${accountId}, false)">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                    ${tr('حفظ الرصيد')}
+                </button>
+                <button class="rb-btn rb-btn-success" onclick="submitRecordBalance(${accountId}, true)">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.51"/></svg>
+                    ${tr('حفظ وتحديث رصيد النظام')}
+                </button>
+            </div>
         </div>`;
     openModal();
 }
@@ -827,8 +954,9 @@ function calcBalanceDiff(currentBalance) {
     const el = document.getElementById('rb-diff');
     if (!el) return;
     if (isNaN(diff) || diff === 0) { el.textContent = ''; return; }
-    el.innerHTML = `<span style="color:${diff > 0 ? 'var(--accent-green)' : 'var(--accent-red)'}">
-        ${diff > 0 ? '▲ زيادة' : '▼ نقص'} ${formatMoneyWithSAR(Math.abs(diff))} عن رصيد النظام
+    const up = diff > 0;
+    el.innerHTML = `<span class="rb-diff-badge ${up ? 'rb-diff-up' : 'rb-diff-down'}">
+        ${up ? '▲' : '▼'} ${up ? 'زيادة' : 'نقص'} ${formatMoneyWithSAR(Math.abs(diff))} عن رصيد النظام
     </span>`;
 }
 
@@ -889,13 +1017,13 @@ function openRecordAllBalancesModal() {
                         style="flex:1">
                     <label style="display:flex;align-items:center;gap:.4rem;font-size:.83rem;white-space:nowrap">
                         <input type="checkbox" class="all-update" data-id="${acc.id}" checked>
-                        تحديث رصيد النظام
+                        ${tr('تحديث رصيد النظام')}
                     </label>
                 </div>
             </div>`;
         }).join('');
 
-    DOM.modalTitle.textContent = '📊 تسجيل أرصدة اليوم — جميع الحسابات';
+    DOM.modalTitle.textContent = `📊 ${tr('تسجيل رصيد اليوم')} — ${tr('جميع الحسابات')}`;
     DOM.modalBody.innerHTML = `
         <div class="form-group" style="margin-bottom:1rem">
             <label class="form-label">التاريخ</label>
@@ -903,13 +1031,13 @@ function openRecordAllBalancesModal() {
         </div>
         <div style="max-height:380px;overflow-y:auto;padding-left:2px">${rows}</div>
         <div class="form-group" style="margin-top:1rem">
-            <label class="form-label">ملاحظة عامة (اختياري)</label>
+            <label class="form-label">${tr('ملاحظة عامة')} (${tr('اختياري')})</label>
             <input type="text" id="all-notes" class="form-input" placeholder="مثال: مراجعة نهاية اليوم">
         </div>
         <div style="display:flex;gap:.75rem;margin-top:1.25rem;justify-content:flex-end">
             <button class="btn btn-secondary" onclick="closeModal()">إلغاء</button>
             <button class="btn btn-primary" onclick="submitAllBalances()">
-                💾 حفظ جميع الأرصدة
+                💾 ${tr('حفظ جميع الأرصدة')}
             </button>
         </div>`;
     openModal();
@@ -968,35 +1096,62 @@ function openEditBalanceModal(accountId) {
     const acc = bankAccounts.find(a => a.id == accountId);
     if (!acc) return;
 
-    DOM.modalTitle.textContent = `✏️ تعديل رصيد — ${acc.bank_name} · ${acc.account_name}`;
+    DOM.modalTitle.textContent = `تعديل رصيد — ${acc.bank_name} · ${acc.account_name}`;
     DOM.modalBody.innerHTML = `
-        <div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:10px;padding:.85rem 1rem;margin-bottom:1rem;font-size:.9rem">
-            ⚠️ هذا يُعدّل الرصيد الحالي في النظام مباشرة، وسيُسجَّل في تاريخ الأرصدة اليومية تلقائياً.
-        </div>
-        <div class="modal-form-grid">
-            <div class="form-group full-span">
-                <label class="form-label">الرصيد الحالي</label>
-                <div style="font-size:1.4rem;font-weight:700;color:var(--accent-blue);padding:.5rem 0">
-                    ${formatMoneyWithSAR(acc.current_balance)}
+        <style>
+        .eb-wrap{display:flex;flex-direction:column;gap:1rem;direction:rtl}
+        .eb-warn{background:rgba(245,158,11,.08);border:0.5px solid rgba(245,158,11,.4);border-radius:10px;padding:.7rem 1rem;font-size:12.5px;color:#92400E;display:flex;align-items:flex-start;gap:.5rem;line-height:1.55}
+        .eb-warn svg{flex-shrink:0;margin-top:1px}
+        .eb-balance-card{background:var(--bg-surface,#F8F8F8);border:0.5px solid var(--border-color);border-radius:12px;padding:.9rem 1.1rem}
+        .eb-bc-label{font-size:11px;color:var(--text-muted);margin-bottom:4px;font-weight:500}
+        .eb-bc-amount{font-size:22px;font-weight:600;color:var(--accent-blue);direction:ltr}
+        .eb-bc-date{font-size:11.5px;color:var(--text-muted);margin-top:4px;display:flex;align-items:center;gap:4px}
+        .eb-form-group{display:flex;flex-direction:column;gap:4px}
+        .eb-label{font-size:12px;font-weight:500;color:var(--text-muted)}
+        .eb-label .req{color:#E24B4A}
+        .eb-input{height:36px;border-radius:8px;border:0.5px solid var(--border-color);background:var(--bg-card,#fff);padding:0 10px;font-size:13px;color:var(--text-primary);width:100%;font-family:inherit;direction:ltr;text-align:right}
+        .eb-input:focus{outline:none;border-color:var(--accent-blue);box-shadow:0 0 0 3px rgba(59,130,246,.1)}
+        .eb-input-rtl{direction:rtl;text-align:right}
+        .eb-footer{display:flex;gap:.6rem;justify-content:flex-end;padding-top:.75rem;border-top:0.5px solid var(--border-color);margin-top:.25rem}
+        .eb-btn{height:34px;padding:0 1rem;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;border:0.5px solid var(--border-color);background:transparent;color:var(--text-primary);font-family:inherit;display:inline-flex;align-items:center;gap:5px}
+        .eb-btn:hover{background:var(--bg-surface)}
+        .eb-btn-primary{background:var(--accent-blue,#2563EB);color:#fff;border-color:transparent}
+        .eb-btn-primary:hover{opacity:.9}
+        </style>
+        <div class="eb-wrap">
+            <div class="eb-warn">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                <span>هذا الإجراء يُعدّل الرصيد الحالي في النظام مباشرة، وسيُسجَّل تلقائياً في سجل الأرصدة اليومية.</span>
+            </div>
+
+            <div class="eb-balance-card">
+                <div class="eb-bc-label">الرصيد الحالي في النظام</div>
+                <div class="eb-bc-amount">${formatMoneyWithSAR(acc.current_balance)}</div>
+                <div class="eb-bc-date">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                    آخر تحديث: اليوم
                 </div>
             </div>
-            <div class="form-group full-span">
-                <label class="form-label">الرصيد الجديد (ريال) *</label>
-                <input type="number" id="eb-new-balance" class="form-input" step="0.01"
+
+            <div class="eb-form-group">
+                <label class="eb-label">الرصيد الجديد (ريال) <span class="req">*</span></label>
+                <input type="number" id="eb-new-balance" class="eb-input" step="0.01"
                     value="${parseFloat(acc.current_balance).toFixed(2)}"
                     placeholder="0.00">
             </div>
-            <div class="form-group full-span">
-                <label class="form-label">سبب التعديل *</label>
-                <input type="text" id="eb-reason" class="form-input"
+            <div class="eb-form-group">
+                <label class="eb-label">سبب التعديل <span class="req">*</span></label>
+                <input type="text" id="eb-reason" class="eb-input eb-input-rtl"
                     placeholder="مثال: تصحيح بناءً على كشف البنك">
             </div>
-        </div>
-        <div style="display:flex;gap:.75rem;margin-top:1.25rem;justify-content:flex-end">
-            <button class="btn btn-secondary" onclick="closeModal()">إلغاء</button>
-            <button class="btn btn-primary" onclick="submitEditBalance(${accountId})">
-                ✏️ تحديث الرصيد
-            </button>
+
+            <div class="eb-footer">
+                <button class="eb-btn" onclick="closeModal()">إلغاء</button>
+                <button class="eb-btn eb-btn-primary" onclick="submitEditBalance(${accountId})">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                    تحديث الرصيد
+                </button>
+            </div>
         </div>`;
     openModal();
 }
@@ -1043,36 +1198,73 @@ function openBalanceHistoryModal(accountId) {
     const acc = bankAccounts.find(a => a.id == accountId);
     const history = dailyBalances.filter(b => b.account_id == accountId);
 
-    DOM.modalTitle.textContent = `📜 سجل الأرصدة — ${acc?.bank_name} · ${acc?.account_name}`;
+    DOM.modalTitle.textContent = `سجل الأرصدة — ${acc?.bank_name} · ${acc?.account_name}`;
     DOM.modalBody.innerHTML = history.length > 0 ? `
-        <div style="max-height:450px;overflow-y:auto">
-            <table class="deposits-table">
-                <thead>
-                    <tr><th>التاريخ</th><th>افتتاح</th><th>ودائع</th><th>إغلاق</th><th>الفرق</th><th>ملاحظات</th></tr>
-                </thead>
-                <tbody>
-                    ${history.map(b => {
+        <style>
+        .bh-wrap{direction:rtl}
+        .bh-table-wrap{border-radius:10px;border:0.5px solid var(--border-color);overflow:hidden}
+        .bh-table{width:100%;border-collapse:collapse;font-size:12.5px}
+        .bh-table thead tr{background:var(--bg-surface,#F8F8F8)}
+        .bh-table th{padding:.55rem .85rem;text-align:right;font-weight:500;font-size:11px;color:var(--text-muted);border-bottom:0.5px solid var(--border-color);white-space:nowrap}
+        .bh-table td{padding:.6rem .85rem;border-bottom:0.5px solid var(--border-color);color:var(--text-primary);text-align:right}
+        .bh-table tr:last-child td{border-bottom:none}
+        .bh-table tr:hover td{background:var(--bg-surface)}
+        .bh-td-date{font-weight:500;font-size:12.5px}
+        .bh-td-mono{direction:ltr;text-align:left;font-variant-numeric:tabular-nums}
+        .bh-td-green{color:#059669;font-weight:500;direction:ltr;text-align:left}
+        .bh-td-bold{font-weight:600;direction:ltr;text-align:left}
+        .bh-td-up{color:#059669;direction:ltr;text-align:left}
+        .bh-td-down{color:#DC2626;direction:ltr;text-align:left}
+        .bh-td-notes{color:var(--text-muted);font-size:11.5px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .bh-footer{display:flex;align-items:center;justify-content:space-between;padding-top:.75rem;border-top:0.5px solid var(--border-color);margin-top:.75rem}
+        .bh-count{font-size:11.5px;color:var(--text-muted)}
+        .bh-btn{height:34px;padding:0 1rem;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;border:0.5px solid var(--border-color);background:transparent;color:var(--text-primary);font-family:inherit}
+        .bh-btn:hover{background:var(--bg-surface)}
+        </style>
+        <div class="bh-wrap">
+            <div style="max-height:380px;overflow-y:auto;border-radius:10px">
+                <div class="bh-table-wrap">
+                    <table class="bh-table" role="table" aria-label="سجل الأرصدة اليومية">
+                        <thead>
+                            <tr>
+                                <th>التاريخ</th>
+                                <th>${tr('افتتاح')}</th>
+                                <th>${tr('ودائع')}</th>
+                                <th>${tr('إغلاق')}</th>
+                                <th>${tr('الفرق')}</th>
+                                <th>ملاحظات</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${history.map(b => {
         const diff = parseFloat(b.closing_balance) - parseFloat(b.opening_balance);
-        const color = diff >= 0 ? 'var(--accent-green)' : 'var(--accent-red)';
+        const up = diff >= 0;
         return `<tr>
-                            <td style="font-weight:600">${fmtDate(b.balance_date)}</td>
-                            <td>${formatMoneyWithSAR(b.opening_balance)}</td>
-                            <td style="color:var(--accent-green)">+${formatMoneyWithSAR(b.total_deposits)}</td>
-                            <td style="font-weight:700">${formatMoneyWithSAR(b.closing_balance)}</td>
-                            <td style="color:${color};font-weight:600">${diff >= 0 ? '+' : ''}${formatMoneyWithSAR(diff)}</td>
-                            <td style="font-size:.82rem;color:var(--text-muted)">${b.notes || '—'}</td>
-                        </tr>`;
+                                <td class="bh-td-date">${fmtDate(b.balance_date)}</td>
+                                <td class="bh-td-mono">${formatMoneyWithSAR(b.opening_balance)}</td>
+                                <td class="bh-td-green">+${formatMoneyWithSAR(b.total_deposits)}</td>
+                                <td class="bh-td-bold">${formatMoneyWithSAR(b.closing_balance)}</td>
+                                <td class="${up ? 'bh-td-up' : 'bh-td-down'}">${up ? '+' : ''}${formatMoneyWithSAR(diff)}</td>
+                                <td class="bh-td-notes" title="${b.notes || ''}">${b.notes || '—'}</td>
+                            </tr>`;
     }).join('')}
-                </tbody>
-            </table>
-        </div>` : `<div class="empty-state-sm" style="padding:2rem;text-align:center;color:var(--text-muted)">
-            لا يوجد سجل أرصدة لهذا الحساب بعد
-        </div>`;
-
-    DOM.modalBody.innerHTML += `
-        <div style="margin-top:1rem;text-align:left">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="bh-footer">
+                <span class="bh-count">إجمالي ${history.length} سجل</span>
+                <button class="bh-btn" onclick="closeModal()">إغلاق</button>
+            </div>
+        </div>` : `
+        <div style="padding:2.5rem 1rem;text-align:center;color:var(--text-muted);direction:rtl">
+            <div style="font-size:2rem;margin-bottom:.75rem;opacity:.4">📋</div>
+            <div style="font-size:13.5px">${tr('لا يوجد سجل أرصدة لهذا الحساب بعد')}</div>
+        </div>
+        <div style="text-align:left;padding-top:.5rem;border-top:0.5px solid var(--border-color)">
             <button class="btn btn-secondary" onclick="closeModal()">إغلاق</button>
         </div>`;
+
     openModal();
 }
 
@@ -1232,7 +1424,7 @@ function renderDepositCalendar() {
         calHtml += `
         <div class="${cls}" onclick="${hasDep ? `showDayDeposits(${day})` : ''}">
             <span class="cal-day-num">${day}</span>
-            ${hasDep ? `<span class="cal-dep-dot" title="${depCount} وديعة">${depCount}</span>` : ''}
+            ${hasDep ? `<span class="cal-dep-dot" title="${depCount} ${tr('وديعة')}">${depCount}</span>` : ''}
         </div>`;
     }
 
@@ -1243,7 +1435,7 @@ function renderDepositCalendar() {
 // ─── صفوف الودائع المجدولة ──────────────────────────────
 function renderMonthlyDepositCards() {
     if (!monthlyDeposits.length) {
-        return `<div class="bank-empty">لا توجد ودائع مجدولة لهذا الشهر — أضف وديعة جديدة</div>`;
+        return `<div class="bank-empty">${tr('لا توجد ودائع مجدولة هذا الشهر')}</div>`;
     }
 
     const today = new Date();
@@ -1321,32 +1513,36 @@ function showDayDeposits(day) {
 async function loadBankAccounts() {
     try {
         const res = await fetch('api/?action=bank_accounts');
+        if (!res.ok) { bankAccounts = []; return; }
         const result = await res.json();
         if (result.success) bankAccounts = result.data || [];
+        else bankAccounts = [];
     } catch (e) {
-        console.error('loadBankAccounts:', e);
+        bankAccounts = [];
+        console.warn('loadBankAccounts:', e);
     }
 }
 
 async function loadDeposits() {
     try {
         const res = await fetch('api/?action=bank_deposits');
+        if (!res.ok) { bankDeposits = []; return; }
         const result = await res.json();
         if (result.success) bankDeposits = result.data || [];
+        else bankDeposits = [];
     } catch (e) {
-        console.error('loadDeposits:', e);
+        bankDeposits = [];
+        console.warn('loadDeposits:', e);
     }
 }
 
 async function loadMonthlyDeposits() {
     try {
         const res = await fetch('api/?action=monthly_deposits');
-        const result = await res.json();
-        if (result.success) {
-            monthlyDeposits = result.data || [];
-        } else {
-            // إذا لم يكن الـ API موجوداً بعد، نستخدم بيانات محلية مؤقتة
-            monthlyDeposits = [];
+        if (!res.ok) { monthlyDeposits = []; }
+        else {
+            const result = await res.json();
+            monthlyDeposits = result.success ? (result.data || []) : [];
         }
     } catch (e) {
         monthlyDeposits = [];
@@ -1375,7 +1571,7 @@ function updateQuickStats(totalBalance, thisMonth, pending, confirmed) {
         <div class="quick-stat-card qsc-blue">
             <div class="qsc-icon">🏦</div>
             <div class="qsc-value">${formatMoneyWithSAR(totalBalance)}</div>
-            <div class="qsc-label">إجمالي الأرصدة</div>
+            <div class="qsc-label">${tr('إجمالي الأرصدة')}</div>
         </div>
         <div class="quick-stat-card qsc-green">
             <div class="qsc-icon">📈</div>
@@ -1404,27 +1600,27 @@ function openAddDepositModal() {
         `<option value="${acc.id}">${acc.account_name} — ${acc.bank_name}</option>`
     ).join('');
 
-    DOM.modalTitle.textContent = '📥 إضافة إيداع بنكي';
+    DOM.modalTitle.textContent = `📥 ${tr('إضافة إيداع بنكي')}`;
     DOM.modalBody.innerHTML = `
         <form id="deposit-form" onsubmit="submitDeposit(event)">
             <div class="modal-form-grid">
                 <div class="form-group">
-                    <label class="form-label">الحساب البنكي *</label>
+                    <label class="form-label">${tr('الحساب البنكي')} *</label>
                     <select name="account_id" class="form-input" required>
                         <option value="">اختر الحساب</option>
                         ${accountsOptions}
                     </select>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">المبلغ *</label>
+                    <label class="form-label">${tr('المبلغ')} *</label>
                     <input type="number" name="amount" step="0.01" min="0" class="form-input" placeholder="0.00" required>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">تاريخ الإيداع *</label>
+                    <label class="form-label">${tr('تاريخ الإيداع')} *</label>
                     <input type="date" name="deposit_date" class="form-input" value="${new Date().toISOString().split('T')[0]}" required>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">نوع الإيداع *</label>
+                    <label class="form-label">${tr('نوع الإيداع')} *</label>
                     <select name="deposit_type" class="form-input" required>
                         <option value="إيداع نقدي">إيداع نقدي</option>
                         <option value="إيداع شيك">إيداع شيك</option>
@@ -1464,7 +1660,7 @@ function openAddMonthlyDepositModal() {
     const month = String(now.getMonth() + 1).padStart(2, '0');
     const lastDay = new Date(year, now.getMonth() + 1, 0).getDate();
 
-    DOM.modalTitle.textContent = '📅 جدولة وديعة شهرية';
+    DOM.modalTitle.textContent = `📅 ${tr('جدولة وديعة شهرية')}`;
     DOM.modalBody.innerHTML = `
         <form id="monthly-deposit-form" onsubmit="submitMonthlyDeposit(event)">
             <div class="modal-form-grid">
@@ -1474,7 +1670,7 @@ function openAddMonthlyDepositModal() {
                         placeholder="مثال: مرتبات يناير، إيراد الفروع..." required>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">الحساب البنكي *</label>
+                    <label class="form-label">${tr('الحساب البنكي')} *</label>
                     <select name="account_id" class="form-input" required>
                         <option value="">اختر الحساب</option>
                         ${accountsOptions}
@@ -1526,32 +1722,32 @@ function openAddMonthlyDepositModal() {
 
 // ─── إضافة حساب بنكي ─────────────────────────────────────
 function openAddAccountModal() {
-    DOM.modalTitle.textContent = '🏛️ إضافة حساب بنكي';
+    DOM.modalTitle.textContent = `🏛️ ${tr('إضافة حساب بنكي')}`;
     DOM.modalBody.innerHTML = `
         <form id="account-form" onsubmit="submitAccount(event)">
             <div class="modal-form-grid">
                 <div class="form-group">
-                    <label class="form-label">اسم الحساب *</label>
+                    <label class="form-label">${tr('اسم الحساب')} *</label>
                     <input type="text" name="account_name" class="form-input" required>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">رقم الحساب *</label>
+                    <label class="form-label">${tr('رقم الحساب')} *</label>
                     <input type="text" name="account_number" class="form-input" required>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">اسم البنك *</label>
+                    <label class="form-label">${tr('اسم البنك')} *</label>
                     <input type="text" name="bank_name" class="form-input" required>
                 </div>
                 <div class="form-group">
                     <label class="form-label">نوع الحساب</label>
                     <select name="account_type" class="form-input">
-                        <option value="جاري">جاري</option>
-                        <option value="توفير">توفير</option>
+                        <option value="جاري">${tr('جاري')}</option>
+                        <option value="توفير">${tr('توفير')}</option>
                         <option value="استثماري">استثماري</option>
                     </select>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">الرصيد الافتتاحي</label>
+                    <label class="form-label">${tr('الرصيد الافتتاحي')}</label>
                     <input type="number" name="initial_balance" step="0.01" value="0" class="form-input">
                 </div>
                 <div class="form-group">
@@ -1717,14 +1913,14 @@ function viewDepositDetails(id) {
     DOM.modalBody.innerHTML = `
         <div class="deposit-details-view">
             <div class="ddv-row"><span>رقم الإيداع</span><strong>${dep.deposit_number}</strong></div>
-            <div class="ddv-row"><span>الحساب</span><strong>${dep.account_name}</strong></div>
-            <div class="ddv-row"><span>البنك</span><strong>${dep.bank_name || '—'}</strong></div>
+            <div class="ddv-row"><span>${tr('الحساب')}</span><strong>${dep.account_name}</strong></div>
+            <div class="ddv-row"><span>${tr('البنك')}</span><strong>${dep.bank_name || '—'}</strong></div>
             <div class="ddv-row"><span>التاريخ</span><strong>${formatDate(dep.deposit_date)}</strong></div>
             <div class="ddv-row"><span>النوع</span><strong>${dep.deposit_type}</strong></div>
             <div class="ddv-row"><span>المبلغ</span><strong class="dep-amount-lg">+${formatMoneyWithSAR(dep.amount)}</strong></div>
             <div class="ddv-row"><span>الحالة</span>${getDepositStatusBadge(dep.status)}</div>
             ${dep.depositor_name ? `<div class="ddv-row"><span>المودع</span><strong>${dep.depositor_name}</strong></div>` : ''}
-            ${dep.reference_number ? `<div class="ddv-row"><span>المرجع</span><strong>${dep.reference_number}</strong></div>` : ''}
+            ${dep.reference_number ? `<div class="ddv-row"><span>${tr('المرجع')}</span><strong>${dep.reference_number}</strong></div>` : ''}
             ${dep.notes ? `<div class="ddv-row full"><span>ملاحظات</span><p>${dep.notes}</p></div>` : ''}
         </div>
         <div class="modal-footer">
@@ -1848,22 +2044,22 @@ function editAccount(id) {
         <form id="edit-account-form" onsubmit="submitEditAccount(event, ${id})">
             <div class="modal-form-grid">
                 <div class="form-group">
-                    <label class="form-label">اسم الحساب *</label>
+                    <label class="form-label">${tr('اسم الحساب')} *</label>
                     <input type="text" name="account_name" class="form-input" value="${acc.account_name}" required>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">رقم الحساب *</label>
+                    <label class="form-label">${tr('رقم الحساب')} *</label>
                     <input type="text" name="account_number" class="form-input" value="${acc.account_number}" required>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">اسم البنك *</label>
+                    <label class="form-label">${tr('اسم البنك')} *</label>
                     <input type="text" name="bank_name" class="form-input" value="${acc.bank_name}" required>
                 </div>
                 <div class="form-group">
                     <label class="form-label">نوع الحساب</label>
                     <select name="account_type" class="form-input">
-                        <option value="جاري" ${acc.account_type === 'جاري' ? 'selected' : ''}>جاري</option>
-                        <option value="توفير" ${acc.account_type === 'توفير' ? 'selected' : ''}>توفير</option>
+                        <option value="جاري" ${acc.account_type === 'جاري' ? 'selected' : ''}>${tr('جاري')}</option>
+                        <option value="توفير" ${acc.account_type === 'توفير' ? 'selected' : ''}>${tr('توفير')}</option>
                         <option value="استثماري" ${acc.account_type === 'استثماري' ? 'selected' : ''}>استثماري</option>
                     </select>
                 </div>
@@ -1935,7 +2131,7 @@ function formatDateAr(dateStr) {
 // ═══════════════════════════════════════════════════════════════
 
 // ─── متغيرات عامة ──────────────────────────────────────────
-let investments = [];  // الودائع الاستثمارية المحملة
+// investments مُعرَّف في أعلى الملف
 
 
 
@@ -1995,66 +2191,150 @@ function renderInvestmentsTab() {
     const totalDoneProfit = done.reduce((s, i) => s + parseFloat(i.actual_profit || 0), 0);
 
     panel.innerHTML = `
-        <div class="inv-stats-grid">
-            <div class="inv-stat-card inv-stat-blue">
-                <div class="inv-stat-top">
-                    <div class="inv-stat-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-4 0v2"/></svg></div>
-                    <span class="inv-stat-badge">${active.length} وديعة</span>
-                </div>
-                <div class="inv-stat-value">${formatMoneyWithSAR(totalInv)}</div>
-                <div class="inv-stat-label">إجمالي مُستثمر</div>
-            </div>
-            <div class="inv-stat-card inv-stat-green">
-                <div class="inv-stat-top">
-                    <div class="inv-stat-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg></div>
-                    <span class="inv-stat-badge">حتى اليوم</span>
-                </div>
-                <div class="inv-stat-value">${formatMoneyWithSAR(totalPro)}</div>
-                <div class="inv-stat-label">ربح متراكم</div>
-            </div>
-            <div class="inv-stat-card ${overdue > 0 ? 'inv-stat-red' : 'inv-stat-muted'}">
-                <div class="inv-stat-top">
-                    <div class="inv-stat-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
-                    <span class="inv-stat-badge ${overdue > 0 ? 'inv-badge-red' : ''}">${overdue > 0 ? 'تنتظر إغلاق' : 'لا شيء'}</span>
-                </div>
-                <div class="inv-stat-value">${overdue}</div>
-                <div class="inv-stat-label">مستحقة الإغلاق</div>
-            </div>
-            <div class="inv-stat-card ${expiring > 0 ? 'inv-stat-orange' : 'inv-stat-muted'}">
-                <div class="inv-stat-top">
-                    <div class="inv-stat-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></div>
-                    <span class="inv-stat-badge ${expiring > 0 ? 'inv-badge-orange' : ''}">${expiring > 0 ? 'خلال 3 أيام' : 'لا شيء'}</span>
-                </div>
-                <div class="inv-stat-value">${expiring}</div>
-                <div class="inv-stat-label">قريبة الاستحقاق</div>
-            </div>
-            <div class="inv-stat-card inv-stat-teal">
-                <div class="inv-stat-top">
-                    <div class="inv-stat-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div>
-                    <span class="inv-stat-badge">${done.length} وديعة</span>
-                </div>
-                <div class="inv-stat-value">${formatMoneyWithSAR(totalDoneProfit)}</div>
-                <div class="inv-stat-label">أرباح محققة</div>
-            </div>
-        </div>
+        <style id="inv-redesign-css">
+        /* ══ صفحة الودائع الاستثمارية — تصميم محترف ══ */
+        .inv-page{display:flex;flex-direction:column;gap:1.5rem;padding:.25rem 0}
 
-        <div class="inv-toolbar">
-            <div class="search-input" style="max-width:280px">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-                <input type="text" id="inv-search" placeholder="بحث في الودائع..." oninput="filterInvestmentTables()">
-            </div>
-            <button class="btn btn-primary" onclick="openAddInvestmentModal()">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
-                ربط وديعة جديدة
-            </button>
-        </div>
+        /* بطاقات الإحصاء */
+        .inv-kpi-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:.75rem}
+        .inv-kpi{background:var(--bg-card);border:.5px solid var(--border-color);border-radius:12px;padding:.9rem 1rem;display:flex;flex-direction:column;gap:.4rem;position:relative;overflow:hidden}
+        .inv-kpi::before{content:'';position:absolute;inset:0;opacity:.04;pointer-events:none}
+        .inv-kpi-blue::before{background:var(--accent-blue)}
+        .inv-kpi-green::before{background:var(--accent-green)}
+        .inv-kpi-red::before{background:#E24B4A}
+        .inv-kpi-orange::before{background:#F59E0B}
+        .inv-kpi-teal::before{background:#0F9B8E}
+        .inv-kpi-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:.1rem}
+        .inv-kpi-icon{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:15px}
+        .inv-kpi-icon-blue{background:rgba(24,95,165,.1);color:#185FA5}
+        .inv-kpi-icon-green{background:rgba(15,110,86,.1);color:#0F6E56}
+        .inv-kpi-icon-red{background:rgba(226,75,74,.1);color:#A32D2D}
+        .inv-kpi-icon-orange{background:rgba(245,158,11,.1);color:#854F0B}
+        .inv-kpi-icon-teal{background:rgba(15,155,142,.1);color:#0F9B8E}
+        .inv-kpi-tag{font-size:10px;font-weight:500;border-radius:4px;padding:2px 7px}
+        .inv-kpi-tag-blue{background:#E6F1FB;color:#185FA5}
+        .inv-kpi-tag-green{background:#E1F5EE;color:#0F6E56}
+        .inv-kpi-tag-red{background:#FCEBEB;color:#A32D2D}
+        .inv-kpi-tag-orange{background:#FAEEDA;color:#854F0B}
+        .inv-kpi-tag-teal{background:#E1F5EE;color:#0F6E56}
+        .inv-kpi-value{font-size:17px;font-weight:600;color:var(--text-primary);direction:ltr;line-height:1.2}
+        .inv-kpi-label{font-size:11px;color:var(--text-muted);font-weight:500}
 
-        <div class="inv-root" id="inv-root">
-            <div class="inv-table-col">
-                <table class="data-table">
-                    <colgroup>
-                        <col/><col/><col/><col/><col/><col/><col/>
-                    </colgroup>
+        /* شريط الأدوات */
+        .inv-bar{display:flex;align-items:center;justify-content:space-between;gap:1rem}
+        .inv-search-wrap{position:relative;display:flex;align-items:center}
+        .inv-search-wrap svg{position:absolute;right:10px;color:var(--text-muted);pointer-events:none}
+        .inv-search-input{height:34px;border:.5px solid var(--border-color);border-radius:8px;background:var(--bg-card);padding:0 34px 0 10px;font-size:13px;color:var(--text-primary);width:260px;font-family:inherit;direction:rtl}
+        .inv-search-input:focus{outline:none;border-color:var(--accent-blue);box-shadow:0 0 0 3px rgba(59,130,246,.08)}
+        .inv-add-btn{height:34px;padding:0 1rem;background:#185FA5;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;display:inline-flex;align-items:center;gap:5px;font-family:inherit}
+        .inv-add-btn:hover{background:#0C447C}
+
+        /* الجدول */
+        .inv-table-wrap{border:.5px solid var(--border-color);border-radius:12px;overflow:hidden}
+        .inv-table{width:100%;border-collapse:collapse;font-size:13px}
+        .inv-table thead tr{background:var(--bg-surface)}
+        .inv-table th{padding:.6rem 1rem;text-align:right;font-size:11px;font-weight:600;color:var(--text-muted);border-bottom:.5px solid var(--border-color);white-space:nowrap;letter-spacing:.02em}
+        .inv-table td{padding:.7rem 1rem;border-bottom:.5px solid var(--border-color);vertical-align:middle}
+        .inv-table tr:last-child td{border-bottom:none}
+        .inv-table tr:hover td{background:var(--bg-surface);cursor:pointer}
+        .inv-table tr.row-selected td{background:rgba(24,95,165,.05);border-bottom:.5px solid rgba(24,95,165,.15)}
+
+        /* فاصل المجموعات */
+        .inv-grp-sep td{padding:.35rem 1rem;background:var(--bg-surface);border-bottom:.5px solid var(--border-color)}
+        .inv-grp-label{font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;display:inline-flex;align-items:center;gap:.4rem}
+        .inv-grp-active{color:#0F6E56}
+        .inv-grp-done{color:#185FA5}
+        .inv-grp-cancelled{color:var(--text-muted)}
+
+        /* حالات الصفوف */
+        .inv-row-overdue td:first-child{border-right:3px solid #E24B4A}
+        .inv-row-expiring td:first-child{border-right:3px solid #F59E0B}
+        .inv-row-active td:first-child{border-right:3px solid #1D9E75}
+        .inv-row-done td:first-child{border-right:3px solid #185FA5}
+        .inv-row-cancelled{opacity:.6}
+
+        /* badge الحالة */
+        .inv-badge{display:inline-flex;align-items:center;gap:3px;font-size:10.5px;font-weight:600;border-radius:5px;padding:2px 8px;white-space:nowrap}
+        .inv-badge-overdue{background:#FCEBEB;color:#A32D2D}
+        .inv-badge-expiring{background:#FAEEDA;color:#854F0B}
+        .inv-badge-active{background:#E1F5EE;color:#0F6E56}
+        .inv-badge-done{background:#E6F1FB;color:#185FA5}
+        .inv-badge-cancelled{background:var(--bg-surface);color:var(--text-muted);border:.5px solid var(--border-color)}
+
+        /* حالة فارغة */
+        .inv-empty{padding:3.5rem 1rem;text-align:center;color:var(--text-muted)}
+        .inv-empty-icon{font-size:2.5rem;opacity:.25;margin-bottom:.75rem}
+        .inv-empty-text{font-size:13.5px;margin-bottom:1.25rem}
+        </style>
+
+        <div class="inv-page">
+
+            <div class="inv-kpi-grid">
+                <div class="inv-kpi inv-kpi-blue">
+                    <div class="inv-kpi-top">
+                        <div class="inv-kpi-icon inv-kpi-icon-blue">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-4 0v2"/></svg>
+                        </div>
+                        <span class="inv-kpi-tag inv-kpi-tag-blue">${active.length} ${tr('وديعة')}</span>
+                    </div>
+                    <div class="inv-kpi-value">${formatMoneyWithSAR(totalInv)}</div>
+                    <div class="inv-kpi-label">${tr('إجمالي مُستثمر')}</div>
+                </div>
+                <div class="inv-kpi inv-kpi-green">
+                    <div class="inv-kpi-top">
+                        <div class="inv-kpi-icon inv-kpi-icon-green">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+                        </div>
+                        <span class="inv-kpi-tag inv-kpi-tag-green">${tr('حتى اليوم')}</span>
+                    </div>
+                    <div class="inv-kpi-value">${formatMoneyWithSAR(totalPro)}</div>
+                    <div class="inv-kpi-label">${tr('ربح متراكم')}</div>
+                </div>
+                <div class="inv-kpi ${overdue > 0 ? 'inv-kpi-red' : ''}">
+                    <div class="inv-kpi-top">
+                        <div class="inv-kpi-icon ${overdue > 0 ? 'inv-kpi-icon-red' : ''}">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                        </div>
+                        <span class="inv-kpi-tag ${overdue > 0 ? 'inv-kpi-tag-red' : ''}">${overdue > 0 ? tr('تنتظر إغلاق') : tr('لا شيء')}</span>
+                    </div>
+                    <div class="inv-kpi-value">${overdue}</div>
+                    <div class="inv-kpi-label">${tr('مستحقة الإغلاق')}</div>
+                </div>
+                <div class="inv-kpi ${expiring > 0 ? 'inv-kpi-orange' : ''}">
+                    <div class="inv-kpi-top">
+                        <div class="inv-kpi-icon ${expiring > 0 ? 'inv-kpi-icon-orange' : ''}">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                        </div>
+                        <span class="inv-kpi-tag ${expiring > 0 ? 'inv-kpi-tag-orange' : ''}">${expiring > 0 ? tr('خلال 3 أيام') : tr('لا شيء')}</span>
+                    </div>
+                    <div class="inv-kpi-value">${expiring}</div>
+                    <div class="inv-kpi-label">${tr('قريبة الاستحقاق')}</div>
+                </div>
+                <div class="inv-kpi inv-kpi-teal">
+                    <div class="inv-kpi-top">
+                        <div class="inv-kpi-icon inv-kpi-icon-teal">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                        </div>
+                        <span class="inv-kpi-tag inv-kpi-tag-teal">${done.length} ${tr('وديعة')}</span>
+                    </div>
+                    <div class="inv-kpi-value">${formatMoneyWithSAR(totalDoneProfit)}</div>
+                    <div class="inv-kpi-label">${tr('أرباح محققة')}</div>
+                </div>
+            </div>
+
+            <div class="inv-bar">
+                <div class="inv-search-wrap">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                    <input type="text" id="inv-search" class="inv-search-input" placeholder="${tr('بحث في الودائع')}..." oninput="filterInvestmentTables()">
+                </div>
+                <button class="inv-add-btn" onclick="openAddInvestmentModal()">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                    ربط وديعة جديدة
+                </button>
+            </div>
+
+            <div class="inv-table-wrap">
+                <table class="inv-table" role="table" aria-label="الودائع الاستثمارية">
                     <thead><tr>
                         <th>الاسم</th>
                         <th>الحساب</th>
@@ -2098,9 +2378,12 @@ function filterInvestmentTables() {
 
 function renderInvestmentRows(list) {
     if (!list || !list.length) {
-        return `<tr><td colspan="7" style="text-align:center;padding:3rem;color:var(--text-muted)">
-            لا توجد ودائع<br><br>
-            <button class="btn btn-primary" onclick="openAddInvestmentModal()">ربط وديعة جديدة</button>
+        return `<tr><td colspan="7">
+            <div class="inv-empty">
+                <div class="inv-empty-icon">📋</div>
+                <div class="inv-empty-text">لا توجد ودائع مسجلة</div>
+                <button class="inv-add-btn" onclick="openAddInvestmentModal()">ربط وديعة جديدة</button>
+            </div>
         </td></tr>`;
     }
 
@@ -2108,71 +2391,76 @@ function renderInvestmentRows(list) {
     let lastStatus = null;
 
     list.forEach(inv => {
-        const status = inv.status;   // نشط / منتهي / ملغي
+        const status = inv.status;
         const ms = inv.maturity_status;
 
-        // ── فاصل مجموعة ──────────────────────────────────
+        // ── فاصل المجموعة ──
         if (status !== lastStatus) {
             const sepConfig = {
-                'نشط': { cls: 'spill-green', label: '● النشطة' },
-                'منتهي': { cls: 'spill-blue', label: '✔ المنتهية' },
-                'ملغي': { cls: 'spill-muted', label: '✖ الملغاة' },
+                'نشط': { cls: 'inv-grp-active', dot: '●', label: tr('● النشطة') },
+                'منتهي': { cls: 'inv-grp-done', dot: '✔', label: tr('✔ المنتهية') },
+                'ملغي': { cls: 'inv-grp-cancelled', dot: '✖', label: tr('✖ الملغاة') },
             };
-            const sc = sepConfig[status] || { cls: 'spill-muted', label: status };
-            html += `<tr class="grp-sep">
+            const sc = sepConfig[status] || { cls: 'inv-grp-cancelled', label: status };
+            html += `<tr class="inv-grp-sep">
                 <td colspan="7">
-                    <span class="spill ${sc.cls}">${sc.label}</span>
+                    <span class="inv-grp-label ${sc.cls}">${sc.label}</span>
                 </td>
             </tr>`;
             lastStatus = status;
         }
 
-        // ── تحديد class الصف ──────────────────────────────
+        // ── class الصف ──
         let rowCls = '';
-        if (status === 'منتهي') rowCls = 'inv-done';
-        else if (status === 'ملغي') rowCls = 'inv-cancelled';
-        else if (ms === 'مستحق') rowCls = 'inv-overdue';
-        else if (ms === 'قريب_الاستحقاق') rowCls = 'inv-expiring';
-        else rowCls = 'inv-active';
+        if (status === 'منتهي') rowCls = 'inv-row-done';
+        else if (status === 'ملغي') rowCls = 'inv-row-cancelled';
+        else if (ms === 'مستحق') rowCls = 'inv-row-overdue';
+        else if (ms === 'قريب_الاستحقاق') rowCls = 'inv-row-expiring';
+        else rowCls = 'inv-row-active';
 
         if (expandedInvestment == inv.id) rowCls += ' row-selected';
 
-        // ── badge الحالة ──────────────────────────────────
+        // ── badge الحالة ──
         const badge =
-            ms === 'مستحق' ? '<span class="spill spill-red">⏰ مستحقة</span>' :
-                ms === 'قريب_الاستحقاق' ? '<span class="spill spill-orange">🔔 قريبة</span>' :
-                    status === 'نشط' ? '<span class="spill spill-green">نشطة</span>' :
-                        status === 'منتهي' ? '<span class="spill spill-blue">منتهية</span>' :
-                            '<span class="spill spill-muted">ملغاة</span>';
+            ms === 'مستحق'
+                ? `<span class="inv-badge inv-badge-overdue">⏰ مستحقة</span>` :
+                ms === 'قريب_الاستحقاق'
+                    ? `<span class="inv-badge inv-badge-expiring">🔔 قريبة</span>` :
+                    status === 'نشط'
+                        ? `<span class="inv-badge inv-badge-active">● نشطة</span>` :
+                        status === 'منتهي'
+                            ? `<span class="inv-badge inv-badge-done">✔ منتهية</span>` :
+                            `<span class="inv-badge inv-badge-cancelled">✖ ملغاة</span>`;
 
-        // ── المتبقي / المنقضي ─────────────────────────────
+        // ── المتبقي ──
         const sub =
             status === 'نشط' && ms === 'مستحق'
-                ? `<br><span style="color:#ff6b6b;font-size:.7rem">متأخر ${Math.abs(inv.days_remaining)} يوم</span>`
+                ? `<div style="color:#A32D2D;font-size:11px;margin-top:2px">متأخر ${Math.abs(inv.days_remaining)} يوم</div>`
                 : status === 'نشط'
-                    ? `<br><span style="color:var(--text-muted);font-size:.7rem">بعد ${inv.days_remaining} يوم</span>`
+                    ? `<div style="color:var(--text-muted);font-size:11px;margin-top:2px">بعد ${inv.days_remaining} يوم</div>`
                     : '';
 
-        // ── الربح المعروض ─────────────────────────────────
+        // ── الربح ──
         const profitVal = status === 'منتهي' && inv.actual_profit != null
             ? formatMoneyWithSAR(inv.actual_profit)
             : formatMoneyWithSAR(inv.expected_profit);
 
         html += `<tr class="${rowCls}" data-inv-id="${inv.id}" onclick="toggleInvestment(${inv.id})">
             <td>
-                <div style="font-weight:600;overflow:hidden;text-overflow:ellipsis">${inv.deposit_name || inv.reference_number}</div>
-                <div style="font-size:.71rem;color:var(--text-muted);font-family:var(--font-primary)">${inv.reference_number}</div>
+                <div style="font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px">${inv.deposit_name || inv.reference_number}</div>
+                <div style="font-size:11px;color:var(--text-muted);margin-top:2px;font-family:monospace">${inv.reference_number}</div>
             </td>
             <td>
-                <div style="font-size:.83rem;font-weight:500;overflow:hidden;text-overflow:ellipsis">${inv.bank_name || '—'}</div>
-                <div style="font-size:.71rem;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis">${inv.account_name || ''}</div>
+                <div style="font-size:12.5px;font-weight:500">${inv.bank_name || '—'}</div>
+                <div style="font-size:11px;color:var(--text-muted);margin-top:2px">${inv.account_name || ''}</div>
             </td>
-            <td style="font-weight:700;color:var(--accent-blue);font-variant-numeric:tabular-nums;direction:ltr;text-align:left">${formatMoneyWithSAR(inv.amount)}</td>
-            <td style="font-weight:600;color:var(--accent-green);text-align:center">${parseFloat(inv.interest_rate)}%</td>
+            <td style="font-weight:600;color:#185FA5;font-variant-numeric:tabular-nums;direction:ltr;text-align:left;white-space:nowrap">${formatMoneyWithSAR(inv.amount)}</td>
+            <td style="font-weight:600;color:#0F6E56;text-align:center">${parseFloat(inv.interest_rate)}%</td>
             <td>
-                <div style="font-size:.83rem">${fmtDate(inv.maturity_date)}</div>${sub}
+                <div style="font-size:12.5px">${fmtDate(inv.maturity_date)}</div>
+                ${sub}
             </td>
-            <td style="color:var(--accent-green);font-weight:600;font-variant-numeric:tabular-nums;direction:ltr;text-align:left">+${profitVal}</td>
+            <td style="color:#0F6E56;font-weight:600;font-variant-numeric:tabular-nums;direction:ltr;text-align:left;white-space:nowrap">+${profitVal}</td>
             <td style="text-align:center">${badge}</td>
         </tr>`;
     });
@@ -2209,11 +2497,11 @@ function openInvDetailModal(inv) {
     const pColor = ms === 'مستحق' ? '#ff6b6b' : ms === 'قريب_الاستحقاق' ? '#ffa94d' : '#40c057';
 
     const statusPill =
-        ms === 'مستحق' ? '<span class="idm-pill idm-pill-red">⏰ مستحقة الإغلاق</span>' :
-            ms === 'قريب_الاستحقاق' ? '<span class="idm-pill idm-pill-orange">🔔 قريبة الاستحقاق</span>' :
-                inv.status === 'نشط' ? '<span class="idm-pill idm-pill-green">● نشطة</span>' :
-                    inv.status === 'منتهي' ? '<span class="idm-pill idm-pill-blue">✔ منتهية</span>' :
-                        '<span class="idm-pill idm-pill-muted">✖ ملغاة</span>';
+        ms === 'مستحق' ? `<span class="idm-status-pill idm-pill-overdue">⏰ ${tr('مستحقة الإغلاق')}</span>` :
+            ms === 'قريب_الاستحقاق' ? `<span class="idm-status-pill idm-pill-expiring">🔔 ${tr('قريبة الاستحقاق')}</span>` :
+                inv.status === 'نشط' ? `<span class="idm-status-pill idm-pill-active">● ${tr('نشطة')}</span>` :
+                    inv.status === 'منتهي' ? `<span class="idm-status-pill idm-pill-done">✔ ${tr('منتهية')}</span>` :
+                        `<span class="idm-status-pill idm-pill-muted">✖ ${tr('ملغاة')}</span>`;
 
     const overlay = document.createElement('div');
     overlay.id = 'inv-detail-modal';
@@ -2221,43 +2509,99 @@ function openInvDetailModal(inv) {
     overlay.onclick = e => { if (e.target === overlay) closeInvDetailModal(); };
 
     overlay.innerHTML = `
-        <div class="idm-box">
+        <style id="idm-css">
+        .idm-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:9999;opacity:0;transition:opacity .2s}
+        .idm-overlay.idm-visible{opacity:1}
+        .idm-overlay.idm-closing{opacity:0}
+        .idm-box{background:var(--bg-card);border-radius:16px;width:540px;max-width:96vw;max-height:90vh;overflow-y:auto;display:flex;flex-direction:column;border:.5px solid var(--border-color);box-shadow:0 8px 40px rgba(0,0,0,.18);transform:translateY(8px);transition:transform .2s}
+        .idm-overlay.idm-visible .idm-box{transform:translateY(0)}
 
-            <!-- Header -->
-            <div class="idm-header">
-                <div class="idm-header-left">
+        /* header */
+        .idm-hd{padding:1.1rem 1.25rem .9rem;border-bottom:.5px solid var(--border-color);display:flex;justify-content:space-between;align-items:flex-start;gap:1rem}
+        .idm-hd-left{display:flex;flex-direction:column;gap:.35rem;flex:1;min-width:0}
+        .idm-status-pill{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;border-radius:5px;padding:3px 9px;width:fit-content}
+        .idm-pill-overdue{background:#FCEBEB;color:#A32D2D}
+        .idm-pill-expiring{background:#FAEEDA;color:#854F0B}
+        .idm-pill-active{background:#E1F5EE;color:#0F6E56}
+        .idm-pill-done{background:#E6F1FB;color:#185FA5}
+        .idm-pill-muted{background:var(--bg-surface);color:var(--text-muted);border:.5px solid var(--border-color)}
+        .idm-dep-name{font-size:16px;font-weight:600;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .idm-dep-ref{font-size:11.5px;color:var(--text-muted);font-family:monospace}
+        .idm-hd-amount{font-size:22px;font-weight:700;color:#185FA5;direction:ltr;white-space:nowrap;margin-top:.15rem}
+        .idm-close-btn{width:30px;height:30px;border-radius:8px;border:.5px solid var(--border-color);background:transparent;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text-muted);flex-shrink:0;margin-top:2px}
+        .idm-close-btn:hover{background:var(--bg-surface)}
+
+        /* progress */
+        .idm-prog-wrap{padding:.85rem 1.25rem;border-bottom:.5px solid var(--border-color);background:var(--bg-surface)}
+        .idm-prog-meta{display:flex;justify-content:space-between;font-size:11.5px;color:var(--text-muted);margin-bottom:.5rem}
+        .idm-prog-pct{font-weight:600}
+        .idm-prog-track{height:5px;background:var(--border-color);border-radius:99px;overflow:hidden}
+        .idm-prog-fill{height:100%;border-radius:99px;transition:width .4s ease}
+        .idm-prog-days{text-align:center;font-size:11px;margin-top:.4rem}
+
+        /* body */
+        .idm-body{padding:1rem 1.25rem;display:grid;grid-template-columns:1fr 1fr;gap:.75rem 1.25rem}
+        .idm-section{display:flex;flex-direction:column;gap:.35rem}
+        .idm-section-full{grid-column:1/-1}
+        .idm-sec-title{font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);margin-bottom:.1rem;padding-bottom:.3rem;border-bottom:.5px solid var(--border-color)}
+        .idm-row{display:flex;justify-content:space-between;align-items:baseline;gap:.5rem;padding:.22rem 0}
+        .idm-row span{font-size:12px;color:var(--text-muted);white-space:nowrap}
+        .idm-row strong{font-size:12.5px;font-weight:600;color:var(--text-primary);text-align:left;direction:ltr}
+
+        /* amounts grid */
+        .idm-amounts-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.5rem}
+        .idm-amt-card{background:var(--bg-surface);border:.5px solid var(--border-color);border-radius:9px;padding:.6rem .75rem}
+        .idm-amt-label{font-size:10.5px;color:var(--text-muted);margin-bottom:3px;font-weight:500}
+        .idm-amt-val{font-size:14px;font-weight:700;direction:ltr}
+        .idm-amt-total{border:.5px solid var(--border-color);background:var(--bg-card)}
+
+        /* notes */
+        .idm-notes{font-size:13px;color:var(--text-primary);line-height:1.6;margin:0}
+
+        /* footer */
+        .idm-foot{display:flex;gap:.5rem;padding:.9rem 1.25rem;border-top:.5px solid var(--border-color);background:var(--bg-surface)}
+        .idm-foot-end{margin-right:auto}
+        .idm-btn{height:34px;padding:0 .9rem;border-radius:8px;font-size:12.5px;font-weight:500;cursor:pointer;border:.5px solid var(--border-color);background:transparent;color:var(--text-primary);font-family:inherit;display:inline-flex;align-items:center;gap:4px}
+        .idm-btn:hover{background:var(--bg-surface)}
+        .idm-btn-green{background:#1D9E75;color:#fff;border-color:transparent}
+        .idm-btn-green:hover{background:#0F6E56}
+        .idm-btn-blue{background:#185FA5;color:#fff;border-color:transparent}
+        .idm-btn-blue:hover{background:#0C447C}
+        .idm-btn-danger{background:transparent;color:#A32D2D;border-color:#F7C1C1}
+        .idm-btn-danger:hover{background:#FCEBEB}
+        </style>
+
+        <div class="idm-box">
+            <div class="idm-hd">
+                <div class="idm-hd-left">
                     ${statusPill}
-                    <div class="idm-amount"><span class="sar-symbol"></span> ${formatMoneyWithSAR(inv.amount)}</div>
                     <div class="idm-dep-name">${inv.deposit_name || inv.reference_number}</div>
+                    <div class="idm-dep-ref">${inv.reference_number}</div>
+                    <div class="idm-hd-amount">${formatMoneyWithSAR(inv.amount)} ﷼</div>
                 </div>
-                <button class="idm-close" onclick="closeInvDetailModal()">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                    </svg>
+                <button class="idm-close-btn" onclick="closeInvDetailModal()" aria-label="إغلاق">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                 </button>
             </div>
 
-            <!-- Progress bar (للنشطة فقط) -->
             ${isActive ? `
-            <div class="idm-progress-wrap">
-                <div class="idm-progress-meta">
+            <div class="idm-prog-wrap">
+                <div class="idm-prog-meta">
                     <span>${fmtDate(inv.start_date)}</span>
-                    <span style="font-weight:700;color:${pColor}">${progress}% مكتمل</span>
+                    <span class="idm-prog-pct" style="color:${pColor}">${progress}% مكتمل</span>
                     <span>${fmtDate(inv.maturity_date)}</span>
                 </div>
-                <div class="idm-progress-track">
-                    <div class="idm-progress-fill" style="width:${progress}%;background:${pColor}"></div>
+                <div class="idm-prog-track">
+                    <div class="idm-prog-fill" style="width:${progress}%;background:${pColor}"></div>
                 </div>
-                <div style="text-align:center;font-size:.75rem;color:${ms === 'مستحق' ? '#ff6b6b' : 'var(--text-muted)'};margin-top:.3rem">
-                    ${ms === 'مستحق' ? `متأخرة ${Math.abs(inv.days_remaining)} يوم` : `متبقٍ ${inv.days_remaining} يوم`}
+                <div class="idm-prog-days" style="color:${ms === 'مستحق' ? '#A32D2D' : 'var(--text-muted)'}">
+                    ${ms === 'مستحق' ? `⚠ متأخرة ${Math.abs(inv.days_remaining)} يوم` : `متبقٍ ${inv.days_remaining} يوم`}
                 </div>
             </div>` : ''}
 
-            <!-- Grid التفاصيل -->
             <div class="idm-body">
-
                 <div class="idm-section">
-                    <div class="idm-section-title">التواريخ</div>
+                    <div class="idm-sec-title">التواريخ</div>
                     <div class="idm-row"><span>البداية</span><strong>${fmtDate(inv.start_date)}</strong></div>
                     <div class="idm-row"><span>الاستحقاق</span><strong>${fmtDate(inv.maturity_date)}</strong></div>
                     <div class="idm-row"><span>المدة</span><strong>${inv.days} يوم</strong></div>
@@ -2265,71 +2609,67 @@ function openInvDetailModal(inv) {
                 </div>
 
                 <div class="idm-section">
-                    <div class="idm-section-title">الحساب</div>
+                    <div class="idm-sec-title">الحساب</div>
                     <div class="idm-row"><span>البنك</span><strong>${inv.bank_name || '—'}</strong></div>
                     <div class="idm-row"><span>الحساب</span><strong>${inv.account_name || '—'}</strong></div>
-                    <div class="idm-row"><span>الرقم</span><strong style="font-family:var(--font-primary);color:var(--accent-blue);font-size:.8rem">${inv.account_number || '—'}</strong></div>
-                    <div class="idm-row"><span>المرجع</span><strong style="font-family:var(--font-primary);color:#ffa94d;font-size:.8rem">${inv.reference_number}</strong></div>
+                    <div class="idm-row"><span>الرقم</span><strong style="color:#185FA5;font-family:monospace;font-size:11.5px">${inv.account_number || '—'}</strong></div>
                     ${inv.return_account_name && inv.return_account_name !== inv.account_name
             ? `<div class="idm-row"><span>إعادة لـ</span><strong>${inv.return_account_name}</strong></div>` : ''}
                 </div>
 
                 <div class="idm-section idm-section-full">
-                    <div class="idm-section-title">المبالغ والربح</div>
+                    <div class="idm-sec-title">المبالغ والربح</div>
                     <div class="idm-amounts-grid">
-                        <div class="idm-amount-card">
-                            <div class="idm-amount-label">المبلغ الأصلي</div>
-                            <div class="idm-amount-val" style="color:var(--accent-blue)">${formatMoneyWithSAR(inv.amount)}</div>
+                        <div class="idm-amt-card">
+                            <div class="idm-amt-label">المبلغ الأصلي</div>
+                            <div class="idm-amt-val" style="color:#185FA5">${formatMoneyWithSAR(inv.amount)}</div>
                         </div>
-                        <div class="idm-amount-card">
-                            <div class="idm-amount-label">معدل الفائدة</div>
-                            <div class="idm-amount-val" style="color:var(--accent-green)">${parseFloat(inv.interest_rate)}%</div>
+                        <div class="idm-amt-card">
+                            <div class="idm-amt-label">معدل الفائدة</div>
+                            <div class="idm-amt-val" style="color:#0F6E56">${parseFloat(inv.interest_rate)}%</div>
                         </div>
-                        <div class="idm-amount-card">
-                            <div class="idm-amount-label">الربح المتوقع</div>
-                            <div class="idm-amount-val" style="color:var(--accent-green)">+${formatMoneyWithSAR(expected)}</div>
+                        <div class="idm-amt-card">
+                            <div class="idm-amt-label">الربح المتوقع</div>
+                            <div class="idm-amt-val" style="color:#0F6E56">+${formatMoneyWithSAR(expected)}</div>
                         </div>
-                        ${isActive ? `<div class="idm-amount-card">
-                            <div class="idm-amount-label">الربح المتراكم</div>
-                            <div class="idm-amount-val" style="color:var(--accent-blue)">+${formatMoneyWithSAR(accrued)}</div>
+                        ${isActive ? `<div class="idm-amt-card">
+                            <div class="idm-amt-label">الربح المتراكم</div>
+                            <div class="idm-amt-val" style="color:#185FA5">+${formatMoneyWithSAR(accrued)}</div>
                         </div>` : ''}
-                        ${actual !== null ? `<div class="idm-amount-card">
-                            <div class="idm-amount-label">الربح الفعلي</div>
-                            <div class="idm-amount-val" style="color:#40c057;font-size:1.1rem">+${formatMoneyWithSAR(actual)}</div>
+                        ${actual !== null ? `<div class="idm-amt-card">
+                            <div class="idm-amt-label">الربح الفعلي</div>
+                            <div class="idm-amt-val" style="color:#0F6E56;font-size:15px">+${formatMoneyWithSAR(actual)}</div>
                         </div>` : ''}
-                        <div class="idm-amount-card idm-amount-total">
-                            <div class="idm-amount-label">الإجمالي</div>
-                            <div class="idm-amount-val">${formatMoneyWithSAR(parseFloat(inv.amount) + (actual !== null ? actual : expected))}</div>
+                        <div class="idm-amt-card idm-amt-total">
+                            <div class="idm-amt-label">الإجمالي</div>
+                            <div class="idm-amt-val" style="color:var(--text-primary)">${formatMoneyWithSAR(parseFloat(inv.amount) + (actual !== null ? actual : expected))}</div>
                         </div>
                     </div>
                 </div>
 
                 ${inv.notes ? `<div class="idm-section idm-section-full">
-                    <div class="idm-section-title">ملاحظات</div>
+                    <div class="idm-sec-title">ملاحظات</div>
                     <p class="idm-notes">${inv.notes}</p>
                 </div>` : ''}
-
             </div>
 
-            <!-- Footer الأزرار -->
-            ${isActive ? `<div class="idm-footer">
+            ${isActive ? `<div class="idm-foot">
                 ${(ms === 'مستحق' || ms === 'قريب_الاستحقاق') ? `
                 <button class="idm-btn idm-btn-green" onclick="closeInvDetailModal();openMatureInvestmentModal(${inv.id})">
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
                     إغلاق واسترداد
                 </button>` : ''}
                 <button class="idm-btn idm-btn-blue" onclick="closeInvDetailModal();openEditInvestmentModal(${inv.id})">
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                     تعديل
                 </button>
-                <button class="idm-btn idm-btn-danger" onclick="closeInvDetailModal();openCancelInvestmentModal(${inv.id})">
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+                <button class="idm-btn idm-btn-danger idm-foot-end" onclick="closeInvDetailModal();openCancelInvestmentModal(${inv.id})">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
                     إلغاء مبكر
                 </button>
-            </div>` : `<div class="idm-footer">
-                <button class="idm-btn idm-btn-muted" onclick="closeInvDetailModal()">إغلاق</button>
+            </div>` : `<div class="idm-foot">
+                <button class="idm-btn" onclick="closeInvDetailModal()">إغلاق</button>
             </div>`}
-
         </div>
     `;
 
@@ -2363,7 +2703,7 @@ function openAddInvestmentModal() {
 
     if (!opts) { showToast('لا توجد حسابات بنكية نشطة', 'error'); return; }
 
-    DOM.modalTitle.textContent = '💰 ربط وديعة استثمارية جديدة';
+    DOM.modalTitle.textContent = `💰 ${tr('ربط وديعة استثمارية جديدة')}`;
     DOM.modalBody.innerHTML = `
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
             <div class="form-group" style="grid-column:1/-1">
@@ -2494,7 +2834,7 @@ function openMatureInvestmentModal(id) {
 
     const expected = parseFloat(inv.expected_profit || 0);
 
-    DOM.modalTitle.textContent = '🏁 إغلاق الوديعة واسترداد المبلغ';
+    DOM.modalTitle.textContent = `🏁 ${tr('إغلاق الوديعة واسترداد المبلغ')}`;
     DOM.modalBody.innerHTML = `
         <div style="background:rgba(105,219,124,.08);border:1px solid rgba(105,219,124,.25);border-radius:10px;padding:1rem;margin-bottom:1rem">
             <div style="font-size:.9rem;color:var(--text-primary);line-height:1.7">
@@ -2549,7 +2889,7 @@ function openCancelInvestmentModal(id) {
     const inv = investments.find(i => i.id == id);
     if (!inv) return;
 
-    DOM.modalTitle.textContent = '⚠️ إلغاء الوديعة مبكراً';
+    DOM.modalTitle.textContent = `⚠️ ${tr('إلغاء الوديعة مبكراً')}`;
     DOM.modalBody.innerHTML = `
         <div style="display:flex;gap:1rem;align-items:flex-start;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);border-radius:10px;padding:1rem;margin-bottom:1rem">
             <span style="font-size:1.75rem">⚠️</span>

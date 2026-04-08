@@ -33,12 +33,12 @@ const SLA_TYPE_LABELS = {
 };
 
 const SLA_STAGE_LABELS = {
-    'creation': 'الإنشاء',
-    'receiving': 'الاستلام',
-    'budget': 'الموازنة',
-    'dispatch': 'التوجيه',
-    'payment': 'الدفع',
-    'invoice': 'الفوترة',
+    'creation': tr('إنشاء'),
+    'receiving': tr('الاستلام'),
+    'budget': tr('الموازنة'),
+    'dispatch': tr('التوجيه'),
+    'payment': tr('الدفع'),
+    'invoice': tr('الفوترة'),
     'sla_total': 'SLA الكلي',
 };
 
@@ -299,7 +299,7 @@ async function escalateStage(txId, stage, stageLabel, btn) {
         btn.disabled = false;
         btn.textContent = '🔔 تصعيد للمشرف';
         btn.style.opacity = '1';
-        showToast('خطأ في الاتصال', 'error');
+        showToast(tr('خطأ في الاتصال'), 'error');
     }
 }
 
@@ -493,7 +493,7 @@ async function resolveBreach(id) {
         const data = await res.json();
         if (data.success) { showToast('تم تعليم التجاوزكمحلول ✓', 'success'); loadSlaBreaches(); }
         else showToast('فشل تحديث التجاوز', 'error');
-    } catch (e) { showToast('خطأ في الاتصال', 'error'); }
+    } catch (e) { showToast(tr('خطأ في الاتصال'), 'error'); }
 }
 
 // ─── إعدادات SLA/OLA المتقدمة ────────────────────────────────
@@ -741,7 +741,7 @@ async function _openSlaTypeEditor(typeId, typeName, policyId) {
 
 function _renderSlaEditor(policy, typeId, typeName) {
     const stages = ['receiving', 'budget', 'dispatch', 'payment', 'invoice'];
-    const stageLabels = { receiving: 'الاستلام', budget: 'الموازنة', dispatch: 'التوجيه', payment: 'الدفع', invoice: 'الفوترة' };
+    const stageLabels = { receiving: tr('الاستلام'), budget: tr('الموازنة'), dispatch: tr('التوجيه'), payment: tr('الدفع'), invoice: tr('الفوترة') };
     const stageIcons = { receiving: '📥', budget: '🏛️', dispatch: '🚀', payment: '💳', invoice: '🧾' };
     const defaults = { receiving: 4, budget: 8, dispatch: 2, payment: 4, invoice: 2 };
 
@@ -914,7 +914,7 @@ async function saveSlaSettings(policyId) {
     const realPolicyId = slaData.id || policyId;
 
     // ── حفظ قواعد OLA ──
-    const stageLabels = { receiving: 'الاستلام', budget: 'الموازنة', dispatch: 'التوجيه', payment: 'الدفع', invoice: 'الفوترة' };
+    const stageLabels = { receiving: tr('الاستلام'), budget: tr('الموازنة'), dispatch: tr('التوجيه'), payment: tr('الدفع'), invoice: tr('الفوترة') };
     const olaInputs = document.querySelectorAll('.ola-hours');
     let saved = 0;
     for (const inp of olaInputs) {
@@ -956,7 +956,7 @@ async function _deleteSlaTypePolicy(typeId, policyId, typeName) {
         } else {
             showToast(data.error || 'خطأ في الحذف', 'error');
         }
-    } catch (e) { showToast('خطأ في الاتصال', 'error'); }
+    } catch (e) { showToast(tr('خطأ في الاتصال'), 'error'); }
 }
 
 // ─── صفحة SLA/OLA المستقلة ───────────────────────────────────
@@ -1760,3 +1760,293 @@ function renderSlaEmailEscalationsTable(rows) {
     `;
     document.head.appendChild(s);
 })();
+// ══════════════════════════════════════════════════════════════
+// نظام SLA المركزي الجديد — يغطي المعاملات + الشراء + الحجوزات
+// ══════════════════════════════════════════════════════════════
+
+var SlaC = {
+    activeSystem: 'purchase',
+    policies: {},  // { system: [policies] }
+};
+
+async function loadSlaCentralPage() {
+    DOM.mainContent.innerHTML = `
+    <div class="performance-page">
+        <div class="perf-header">
+            <div class="perf-header-content">
+                <div class="perf-title">
+                    <div class="perf-icon" style="background:var(--btn-primary-bg);display:flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:12px">
+                        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--btn-primary-text)" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <h1>نظام SLA المركزي</h1>
+                        <p>إدارة مستويات الخدمة — المعاملات المالية، طلبات الشراء، حجوزات الموازنة</p>
+                    </div>
+                </div>
+                <div class="perf-header-stats">
+                    <div class="header-stat">
+                        <span class="stat-number" id="slac-breach" style="color:var(--accent-red)">—</span>
+                        <span class="stat-label">تجاوزات نشطة</span>
+                    </div>
+                    <div class="header-stat">
+                        <span class="stat-number" id="slac-warn" style="color:#f59e0b">—</span>
+                        <span class="stat-label">تحذيرات</span>
+                    </div>
+                    <div class="header-stat">
+                        <span class="stat-number" id="slac-active" style="color:var(--accent-green)">—</span>
+                        <span class="stat-label">نشطة ضمن المدة</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- تبويبات الأنظمة -->
+        <div class="perf-tabs" id="slac-sys-tabs">
+            <button class="perf-tab" onclick="slacSwitchSystem('transactions',this)">📊 المعاملات المالية</button>
+            <button class="perf-tab active" onclick="slacSwitchSystem('purchase',this)">📋 طلبات الشراء</button>
+            <button class="perf-tab" onclick="slacSwitchSystem('reservations',this)">📅 حجوزات الموازنة</button>
+            <button class="perf-tab" onclick="slacSwitchSystem('breaches',this)">⚠️ سجل التجاوزات</button>
+        </div>
+
+        <!-- محتوى التبويب -->
+        <div id="slac-content" style="margin-top:1rem"></div>
+    </div>`;
+
+    await slacLoadStats();
+    await slacSwitchSystem('purchase', document.querySelector('#slac-sys-tabs .perf-tab.active'));
+}
+
+async function slacLoadStats() {
+    try {
+        var r = await fetch('api/sla_central.php?action=dashboard_stats');
+        var d = await r.json();
+        if (!d.success) return;
+        var totalBreach = 0, totalWarn = 0, totalActive = 0;
+        Object.values(d.data).forEach(function (s) {
+            totalBreach += s.breach || 0;
+            totalWarn += s.warning || 0;
+            totalActive += Math.max(0, (s.active || 0) - (s.breach || 0) - (s.warning || 0));
+        });
+        var el = function (id) { return document.getElementById(id); };
+        if (el('slac-breach')) el('slac-breach').textContent = totalBreach;
+        if (el('slac-warn')) el('slac-warn').textContent = totalWarn;
+        if (el('slac-active')) el('slac-active').textContent = totalActive;
+    } catch (e) { }
+}
+
+async function slacSwitchSystem(system, btn) {
+    SlaC.activeSystem = system;
+    document.querySelectorAll('#slac-sys-tabs .perf-tab').forEach(function (t) { t.classList.remove('active'); });
+    if (btn) btn.classList.add('active');
+
+    var cont = document.getElementById('slac-content');
+    if (!cont) return;
+
+    if (system === 'breaches') {
+        await slacLoadBreaches(cont);
+        return;
+    }
+
+    cont.innerHTML = '<div class="loading-inline">⏳ جاري التحميل...</div>';
+    try {
+        var r = await fetch('api/sla_central.php?action=get_policies&system=' + system);
+        var d = await r.json();
+        if (!d.success) { cont.innerHTML = '<div style="color:var(--accent-red);padding:1rem">خطأ في التحميل</div>'; return; }
+        SlaC.policies[system] = d.data;
+        slacRenderPolicies(cont, system, d.data);
+    } catch (e) {
+        cont.innerHTML = '<div style="color:var(--accent-red);padding:1rem">خطأ في الاتصال</div>';
+    }
+}
+
+function slacRenderPolicies(cont, system, policies) {
+    var sysLabels = { transactions: tr('المعاملات المالية'), purchase: tr('طلبات الشراء'), reservations: tr('حجوزات الموازنة') };
+
+    var html = '<div class="slac-wrap">'
+        + '<div class="slac-header">'
+        + '<div class="slac-header-title">⚙️ إعدادات SLA / OLA — ' + (sysLabels[system] || system) + '</div>'
+        + '<button class="btn btn-primary btn-sm" onclick="slacSaveAll(\'' + system + '\')">'
+        + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>'
+        + ' حفظ التعديلات</button>'
+        + '</div>';
+
+    // ── SLA ──────────────────────────────────────────────────
+    html += '<div class="slac-section-title">⏱ SLA — الوقت الكلي المسموح لإنجاز المرحلة</div>'
+        + '<table class="slac-table"><thead><tr>'
+        + '<th>المرحلة</th>'
+        + '<th style="width:140px">المدة الكلية</th>'
+        + '<th style="width:95px">تحذير %</th>'
+        + '<th style="width:95px">تصعيد %</th>'
+        + '</tr></thead><tbody>';
+
+    policies.forEach(function (p) {
+        var slaH = p.sla_hours || p.allowed_hours || 24;
+        var slaW = p.sla_warning_pct || p.warning_pct || 70;
+        var slaE = p.sla_escalate_pct || p.escalate_pct || 100;
+        html += '<tr data-id="' + p.id + '">'
+            + '<td><span class="slac-stage-name">' + (p.stage_label || p.stage_name) + '</span>'
+            + '<br><code class="slac-stage-code">' + p.stage_name + '</code></td>'
+            + '<td><div style="display:flex;align-items:center;gap:5px">'
+            + '<input type="number" class="slac-inp" data-field="sla_hours" value="' + slaH + '" min="0" step="0.5" style="width:65px">'
+            + '<span class="slac-unit">ساعة</span></div></td>'
+            + '<td><div style="display:flex;align-items:center;gap:3px">'
+            + '<input type="number" class="slac-inp" data-field="sla_warning_pct" value="' + slaW + '" min="0" max="100" style="width:52px">'
+            + '<span class="slac-unit">%</span></div></td>'
+            + '<td><div style="display:flex;align-items:center;gap:3px">'
+            + '<input type="number" class="slac-inp" data-field="sla_escalate_pct" value="' + slaE + '" min="0" max="100" style="width:52px">'
+            + '<span class="slac-unit">%</span></div></td>'
+            + '</tr>';
+    });
+    html += '</tbody></table>';
+
+    // ── OLA ──────────────────────────────────────────────────
+    html += '<div class="slac-section-title" style="border-top:1px solid var(--border-color)">'
+        + '👁 OLA — وقت الانتظار قبل الاستلام · وقت المعالجة بعد الاستلام</div>'
+        + '<table class="slac-table"><thead><tr>'
+        + '<th>المرحلة</th>'
+        + '<th style="width:130px">انتظار قبل الاستلام</th>'
+        + '<th style="width:130px">معالجة بعد الاستلام</th>'
+        + '<th style="width:95px">تحذير %</th>'
+        + '<th style="width:95px">تصعيد %</th>'
+        + '</tr></thead><tbody>';
+
+    policies.forEach(function (p) {
+        var olaW = p.ola_wait_hours || 2;
+        var olaP = p.ola_process_hours || 22;
+        var olaWP = p.ola_warning_pct || 70;
+        var olaEP = p.ola_escalate_pct || 100;
+        html += '<tr data-id-ola="' + p.id + '">'
+            + '<td><span class="slac-stage-name">' + (p.stage_label || p.stage_name) + '</span></td>'
+            + '<td><div style="display:flex;align-items:center;gap:5px">'
+            + '<input type="number" class="slac-inp" data-field="ola_wait_hours" value="' + olaW + '" min="0" step="0.5" style="width:55px">'
+            + '<span class="slac-unit">ساعة</span></div></td>'
+            + '<td><div style="display:flex;align-items:center;gap:5px">'
+            + '<input type="number" class="slac-inp" data-field="ola_process_hours" value="' + olaP + '" min="0" step="0.5" style="width:55px">'
+            + '<span class="slac-unit">ساعة</span></div></td>'
+            + '<td><div style="display:flex;align-items:center;gap:3px">'
+            + '<input type="number" class="slac-inp" data-field="ola_warning_pct" value="' + olaWP + '" min="0" max="100" style="width:52px">'
+            + '<span class="slac-unit">%</span></div></td>'
+            + '<td><div style="display:flex;align-items:center;gap:3px">'
+            + '<input type="number" class="slac-inp" data-field="ola_escalate_pct" value="' + olaEP + '" min="0" max="100" style="width:52px">'
+            + '<span class="slac-unit">%</span></div></td>'
+            + '</tr>';
+    });
+
+    html += '</tbody></table>'
+        + '<div class="slac-hint" style="border-top:1px solid var(--border-color);border-bottom:none;border-radius:0 0 12px 12px">'
+        + 'SLA: من وصول المرحلة · OLA انتظار: من الوصول حتى استلام المسؤول · OLA معالجة: من الاستلام حتى الإنجاز'
+        + '</div></div>';
+
+    cont.innerHTML = html;
+    slacInjectStyles();
+}
+
+
+async function slacSaveAll(system) {
+    // جمع صفوف SLA
+    var slaRows = document.querySelectorAll('#slac-content .slac-table tbody tr[data-id]');
+    // جمع صفوف OLA
+    var olaRows = document.querySelectorAll('#slac-content .slac-table tbody tr[data-id-ola]');
+
+    // بناء map: id -> policy object
+    var pMap = {};
+
+    slaRows.forEach(function (row) {
+        var id = parseInt(row.dataset.id); if (!id) return;
+        if (!pMap[id]) pMap[id] = { id: id };
+        row.querySelectorAll('.slac-inp').forEach(function (inp) {
+            var f = inp.dataset.field, v = parseFloat(inp.value) || 0;
+            pMap[id][f] = v;
+        });
+    });
+
+    olaRows.forEach(function (row) {
+        var id = parseInt(row.dataset.idOla); if (!id) return;
+        if (!pMap[id]) pMap[id] = { id: id };
+        row.querySelectorAll('.slac-inp').forEach(function (inp) {
+            var f = inp.dataset.field, v = parseFloat(inp.value) || 0;
+            pMap[id][f] = v;
+        });
+    });
+
+    var policies = Object.values(pMap);
+    if (!policies.length) { showToast('لا توجد سياسات للحفظ', 'warning'); return; }
+
+    try {
+        var r = await fetch('api/sla_central.php?action=save_policies_bulk', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ policies: policies })
+        });
+        var d = await r.json();
+        if (d.success) {
+            showToast('✅ تم حفظ إعدادات SLA', 'success');
+        } else {
+            showToast('❌ ' + (d.message || 'خطأ'), 'error');
+        }
+    } catch (e) {
+        showToast('❌ خطأ في الاتصال', 'error');
+    }
+}
+
+async function slacLoadBreaches(cont) {
+    cont.innerHTML = '<div class="loading-inline">⏳</div>';
+    try {
+        var r = await fetch('api/sla_central.php?action=breaches&limit=100');
+        var d = await r.json();
+        if (!d.success || !d.data.length) {
+            cont.innerHTML = '<div class="empty-state-sm" style="padding:2rem">لا توجد تجاوزات مسجلة</div>';
+            return;
+        }
+        var sysLabels = { transactions: 'المعاملات', purchase: tr('طلبات الشراء'), reservations: 'الحجوزات' };
+        var html = '<table class="slac-table"><thead><tr>'
+            + '<th>النظام</th><th>المرحلة</th><th>النسبة</th><th>النوع</th><th>الوقت</th>'
+            + '</tr></thead><tbody>';
+        d.data.forEach(function (b) {
+            var typeColor = b.breach_type === 'escalation' ? '#ef4444' : '#f59e0b';
+            var typeLabel = b.breach_type === 'escalation' ? '🔴 تصعيد' : '⚠️ تحذير';
+            html += '<tr>'
+                + '<td><span class="slac-sys-badge">' + (sysLabels[b.system_type] || b.system_type) + '</span></td>'
+                + '<td>' + b.stage_name + '</td>'
+                + '<td><span style="color:' + typeColor + ';font-weight:600">' + parseFloat(b.elapsed_pct).toFixed(1) + '%</span></td>'
+                + '<td><span style="color:' + typeColor + '">' + typeLabel + '</span></td>'
+                + '<td style="font-size:.78rem;color:var(--text-muted)">' + (b.notified_at || '—') + '</td>'
+                + '</tr>';
+        });
+        html += '</tbody></table>';
+        cont.innerHTML = '<div class="slac-wrap">' + html + '</div>';
+        slacInjectStyles();
+    } catch (e) {
+        cont.innerHTML = '<div style="color:var(--accent-red);padding:1rem">خطأ في التحميل</div>';
+    }
+}
+
+function slacInjectStyles() {
+    if (document.getElementById('slac-css')) return;
+    var s = document.createElement('style'); s.id = 'slac-css';
+    s.textContent = [
+        '.slac-wrap{background:var(--bg-card);border:1px solid var(--border-color);border-radius:12px;overflow:hidden}',
+        '.slac-header{display:flex;align-items:center;justify-content:space-between;padding:.85rem 1rem;border-bottom:1px solid var(--border-color);background:var(--bg-surface)}',
+        '.slac-header-title{font-size:.9rem;font-weight:600;color:var(--text-primary)}',
+        '.slac-hint{font-size:.75rem;color:var(--text-muted);padding:.5rem 1rem;background:var(--bg-surface);border-bottom:1px solid var(--border-color)}',
+        '.slac-table{width:100%;border-collapse:collapse;font-size:.82rem}',
+        '.slac-table th{text-align:right;padding:.55rem 1rem;background:var(--bg-surface);color:var(--text-muted);font-weight:600;font-size:.74rem;text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid var(--border-color)}',
+        '.slac-table td{padding:.55rem 1rem;border-bottom:1px solid var(--border-color);vertical-align:middle}',
+        '.slac-table tbody tr:last-child td{border-bottom:none}',
+        '.slac-table tbody tr:hover td{background:var(--bg-surface)}',
+        '.slac-stage-name{font-weight:500;color:var(--text-primary);display:block}',
+        '.slac-stage-code{font-size:.7rem;color:var(--text-muted);font-family:monospace}',
+        '.slac-inp{padding:4px 8px;border-radius:6px;border:1px solid var(--border-color);background:var(--bg-card);color:var(--text-primary);font-family:inherit;font-size:.82rem;text-align:center;outline:none;transition:border-color .15s}',
+        '.slac-inp:focus{border-color:var(--btn-primary-bg)}',
+        '.slac-unit{font-size:.72rem;color:var(--text-muted);flex-shrink:0}',
+        '.slac-status-dot{font-size:.72rem;padding:2px 8px;border-radius:8px;font-weight:600}',
+        '.slac-status-dot.on{background:rgba(64,192,87,.12);color:#40c057}',
+        '.slac-status-dot.off{background:rgba(239,68,68,.1);color:#ef4444}',
+        '.slac-sys-badge{font-size:.72rem;padding:2px 8px;border-radius:8px;background:var(--bg-surface);border:1px solid var(--border-color);color:var(--text-muted)}',
+        '.slac-section-title{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);padding:.55rem 1rem;background:var(--bg-surface)}',
+        'code.slac-stage-code{font-family:monospace;font-size:.68rem;color:var(--text-muted);display:inline-block;margin-top:2px}',
+    ].join('');
+    document.head.appendChild(s);
+}

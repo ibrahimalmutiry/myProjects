@@ -9,10 +9,10 @@ if (function_exists('db')) {
     @$_prHealConn->query(
         "ALTER TABLE employees ADD COLUMN IF NOT EXISTS permission_level_code VARCHAR(50) DEFAULT NULL"
     );
-    // توسيع ENUM ليشمل المستويات الخمسة
+    // توسيع ENUM ليشمل كل المستويات
     @$_prHealConn->query(
         "ALTER TABLE employees MODIFY COLUMN permission_level
-         ENUM('system_admin','sector_head','division_manager','employee_l1','employee','manager')
+         ENUM('system_admin','CEO','sector_head','division_manager','employee_l1','employee','manager')
          NOT NULL DEFAULT 'employee'"
     );
     // system_notifications — أعمدة الإشعارات الجديدة
@@ -28,8 +28,22 @@ if (function_exists('db')) {
     @$_prHealConn->query(
         "ALTER TABLE system_notifications ADD COLUMN IF NOT EXISTS priority TINYINT NOT NULL DEFAULT 5"
     );
+    // budget_reservations — items_description قد يكون NOT NULL بدون default
+    @$_prHealConn->query(
+        "ALTER TABLE budget_reservations
+         MODIFY COLUMN items_description TEXT NULL DEFAULT NULL"
+    );
+    // إذا لم يوجد العمود أصلاً — أضفه
+    @$_prHealConn->query(
+        "ALTER TABLE budget_reservations
+         ADD COLUMN IF NOT EXISTS items_description TEXT NULL DEFAULT NULL"
+    );
+
     unset($_prHealConn);
 }
+
+// تهيئة جداول طلبات الشراء تلقائياً عند أول تشغيل
+if (function_exists('prBootstrap')) { prBootstrap(); }
 
 
 /**
@@ -76,6 +90,8 @@ function prEnsureColumns(): void {
         'po_issued_at'          => "ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS po_issued_at DATETIME DEFAULT NULL",
         'po_issued_by'          => "ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS po_issued_by INT DEFAULT NULL",
         'budget_reservation_id' => "ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS budget_reservation_id INT DEFAULT NULL",
+        'reservation_id'        => "ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS reservation_id INT DEFAULT NULL",
+        'reservation_number'    => "ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS reservation_number VARCHAR(50) DEFAULT NULL",
         'payment_status'        => "ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS payment_status VARCHAR(50) DEFAULT 'في الانتظار'",
         'sent_to_payment_at'    => "ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS sent_to_payment_at DATETIME DEFAULT NULL",
         'sla_paused_at'         => "ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS sla_paused_at DATETIME DEFAULT NULL",
@@ -85,6 +101,13 @@ function prEnsureColumns(): void {
         'needed_date'           => "ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS needed_date DATE DEFAULT NULL",
         'priority'              => "ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS priority ENUM('normal','urgent') NOT NULL DEFAULT 'normal'",
         'updated_at'            => "ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS updated_at DATETIME DEFAULT NULL ON UPDATE NOW()",
+        'completed_at'          => "ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS completed_at DATETIME DEFAULT NULL",
+        'payment_ref'           => "ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS payment_ref VARCHAR(200) DEFAULT NULL",
+        'payment_method'        => "ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS payment_method VARCHAR(100) DEFAULT NULL",
+        'payment_notes'         => "ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS payment_notes TEXT DEFAULT NULL",
+        'payment_executed_by'   => "ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS payment_executed_by INT DEFAULT NULL",
+        'payment_executed_at'   => "ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS payment_executed_at DATETIME DEFAULT NULL",
+        'linked_transaction_id' => "ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS linked_transaction_id INT DEFAULT NULL",
     ];
     foreach ($prCols as $sql) { @$conn->query($sql); }
 
@@ -161,11 +184,13 @@ function prBootstrap(): void {
         foreach ($sqlPaths as $p) {
             if (file_exists($p)) { $sqlFile = $p; break; }
         }
-        if (file_exists($sqlFile)) {
+        if ($sqlFile && file_exists($sqlFile)) {
             $sql = file_get_contents($sqlFile);
-            // تنفيذ كل عبارة على حدة
             foreach (array_filter(array_map('trim', explode(';', $sql))) as $stmt) {
-                if ($stmt) $conn->query($stmt);
+                $stmt = trim($stmt);
+                if ($stmt && !preg_match('/^--/', $stmt)) {
+                    $conn->query($stmt);
+                }
             }
         }
     }
@@ -248,8 +273,24 @@ function prCreateRequest(array $data): array {
         }
     }
 
-    // ── التحقق من وجود مورد (إلزامي مبدئي) ──────────────────
-    if (empty($data['supplier_id']) && empty($data['supplier_name_manual'])) {
+    // ── التحقق من وجود مورد — فقط للأنواع التي تستدعي مورداً ──
+    // إذا أُرسِل type_id نتحقق من اسمه في قاعدة البيانات
+    $typeId   = (int)($data['type_id'] ?? 0);
+    $typeName = '';
+    if ($typeId > 0) {
+        $tRow = $conn->query("SELECT name FROM transaction_types WHERE id=$typeId LIMIT 1");
+        if ($tRow && $tRow->num_rows) $typeName = mb_strtolower($tRow->fetch_assoc()['name'] ?? '');
+    }
+    // الأنواع التي تستلزم مورداً: تحتوي على كلمات الشراء/فاتورة/مورد/توريد
+    $requiresSupplier = (
+        str_contains($typeName, 'شراء') ||
+        str_contains($typeName, 'فاتورة') ||
+        str_contains($typeName, 'مورد') ||
+        str_contains($typeName, 'توريد') ||
+        str_contains($typeName, 'supply') ||
+        str_contains($typeName, 'vendor')
+    );
+    if ($requiresSupplier && empty($data['supplier_id']) && empty($data['supplier_name_manual'])) {
         return ['success' => false, 'message' => 'يجب تحديد مورد مبدئي على الأقل'];
     }
 
@@ -277,7 +318,7 @@ function prCreateRequest(array $data): array {
     // ── تحديد المسار بناءً على المبلغ بالريال ─────────────────
     $threshold    = prGetAmountThreshold();
     $workflowPath = $amountSar < $threshold ? 'short' : 'long';
-    $firstStage   = $workflowPath === 'short' ? 'budget_review' : 'treasury_review';
+    $firstStage   = 'reception'; // الاستلام أول مرحلة دائماً
 
     // ── توليد رقم الطلب ───────────────────────────────────────
     $requestNumber = prGenerateRequestNumber();
@@ -350,23 +391,30 @@ function prCreateRequest(array $data): array {
 function prInitWorkflowStages(int $requestId, string $workflowPath): void {
     $conn = db();
 
-    // تعريف المراحل حسب المسار
+    // تعريف المراحل حسب المسار — reception أول مرحلة في كلا المسارين
     $stages = $workflowPath === 'short'
         ? [
-            ['budget_review',           1],
-            ['purchasing',              2],
-            ['waiting_budget_approval', 3],
-            ['payment',                 4],
-            ['completed',               5],
+            ['reception',               1],
+            ['budget_review',           2],  // موظف الموازنة
+            ['treasury_review',         3],  // مدير الخزينة + رئيس القطاع المالي (موافقة مزدوجة)
+            ['finance_review',          4],  // رئيس القطاع المالي (الطرف الثاني)
+            ['purchasing',              5],  // موظف المشتريات — يوافق ثم يُنشئ حجز الموازنة
+            ['waiting_budget_approval', 6],  // موظف الموازنة يعتمد الحجز
+            ['accounts_review',         7],  // الحسابات — يختار مسار PO أو دفع مباشر
+            ['payment',                 8],  // الدفع النهائي
+            ['completed',               9],
         ]
         : [
-            ['treasury_review',         1],
-            ['finance_review',          2],
-            ['ceo_approval',            3],
-            ['purchasing',              4],
-            ['waiting_budget_approval', 5],
-            ['payment',                 6],
-            ['completed',               7],
+            ['reception',               1],
+            ['budget_review',           2],  // موظف الموازنة (مرحلة إضافية في الطويل)
+            ['treasury_review',         3],  // مدير الخزينة + رئيس القطاع المالي (موافقة مزدوجة)
+            ['finance_review',          4],  // رئيس القطاع المالي (الطرف الثاني)
+            ['ceo_approval',            5],  // موافقة الرئيس التنفيذي
+            ['purchasing',              6],  // موظف المشتريات — يوافق ثم يُنشئ حجز الموازنة
+            ['waiting_budget_approval', 7],  // موظف الموازنة يعتمد الحجز
+            ['accounts_review',         8],  // الحسابات — يختار مسار PO أو دفع مباشر
+            ['payment',                 9],  // الدفع النهائي
+            ['completed',              10],
         ];
 
     foreach ($stages as [$stageName, $order]) {
@@ -457,17 +505,18 @@ function prApproveStage(int $requestId, int $employeeId, string $stage, string $
     $nextStage = prGetNextStage($req['workflow_path'], $stage);
     prTransitionToStage($requestId, $nextStage, $employeeId);
 
-    // ── تسجيل الحدث ──────────────────────────────────────────
-    // budget_review في المسار الطويل = موظف الموازنة راجع وأعاد لمدير الخزينة
+    // ── تسجيل حدث واحد يجمع الموافقة + الانتقال ─────────────
+    $fromName = prStageName($stage);
+    $toName   = prStageName($nextStage);
     $desc = ($stage === 'budget_review' && $req['workflow_path'] === 'long')
-        ? "$empName راجع الطلب وأعاده إلى: " . prStageName($nextStage)
-        : "$empName وافق على مرحلة: " . prStageName($stage);
+        ? "$empName راجع الطلب — انتقل إلى: $toName"
+        : "$empName وافق على: $fromName — انتقل إلى: $toName";
 
     prLogEvent($requestId, 'approved', $employeeId, [
-        'stage'         => $stage,
-        'description'   => $desc,
-        'old_value'     => $stage,
-        'new_value'     => $nextStage,
+        'stage'       => $stage,
+        'description' => $desc,
+        'old_value'   => $stage,
+        'new_value'   => $nextStage,
     ]);
 
     return ['success' => true, 'message' => 'تمت الموافقة بنجاح'];
@@ -523,9 +572,11 @@ function prHandleDualApproval(int $requestId, int $employeeId, string $stage, st
 
     $req = prGetRequest($requestId);
 
+    // ── تسجيل موافقة هذا الموظف ──────────────────────────────
     prLogEvent($requestId, 'approved', $employeeId, [
         'stage'       => $stage,
-        'description' => "$empName وافق على: " . prStageName($stage),
+        'description' => "$empName وافق على: " . prStageName($stage) .
+                         ($pendingCount > 0 ? ' — في انتظار موافقة الطرف الآخر' : ''),
     ]);
 
     // ── إذا لا يزال هناك من لم يوافق ──────────────────────────
@@ -545,6 +596,15 @@ function prHandleDualApproval(int $requestId, int $employeeId, string $stage, st
 
     $nextStage = prGetNextStage($req['workflow_path'], $stage);
     prTransitionToStage($requestId, $nextStage, $employeeId);
+
+    // حدث اكتمال الموافقة المزدوجة والانتقال
+    prLogEvent($requestId, 'approved', $employeeId, [
+        'stage'       => $stage,
+        'description' => 'اكتملت الموافقة المزدوجة على: ' . prStageName($stage) .
+                         ' — انتقل إلى: ' . prStageName($nextStage),
+        'old_value'   => $stage,
+        'new_value'   => $nextStage,
+    ]);
 
     return ['success' => true, 'message' => 'وافق الاثنان — تم الانتقال للمرحلة التالية'];
 }
@@ -572,11 +632,14 @@ function prRejectRequest(int $requestId, int $employeeId, string $stage, string 
     $esc     = $conn->real_escape_string($reason);
     $empName = prGetEmployeeName($employeeId);
 
-    // ── تحديد مدير الإدارة الطالبة ───────────────────────────
-    $managerId = prGetDepartmentManager((int)$req['department_id']);
+    // الرفض في مرحلة الاستلام → يرجع للمنشئ مباشرة
+    // الرفض في غيرها → يرجع لمدير الإدارة
+    $isReception  = ($stage === 'reception');
+    $returnTarget = $isReception
+        ? (int)$req['created_by']
+        : (prGetDepartmentManager((int)$req['department_id']) ?? (int)$req['created_by']);
 
-    // ── تحديث الطلب ──────────────────────────────────────────
-    $managerRef = $managerId ? $managerId : 'NULL';
+    $managerRef = $returnTarget ?: 'NULL';
     $conn->query("
         UPDATE purchase_requests
         SET current_stage='returned',
@@ -588,7 +651,7 @@ function prRejectRequest(int $requestId, int $employeeId, string $stage, string 
         WHERE id=$requestId
     ");
 
-    // ── تحديث مرحلة سير العمل ────────────────────────────────
+    // تحديث مرحلة سير العمل
     $conn->query("
         UPDATE pr_workflow_stages
         SET status='rejected', employee_id=$employeeId,
@@ -596,27 +659,37 @@ function prRejectRequest(int $requestId, int $employeeId, string $stage, string 
         WHERE request_id=$requestId AND stage_name='$stage'
     ");
 
-    // ── إيقاف SLA ─────────────────────────────────────────────
     prEndSlaTracking($requestId, $stage);
 
-    // ── تسجيل الحدث ──────────────────────────────────────────
+    $returnMsg = $isReception
+        ? "$empName رفض الطلب في مرحلة الاستلام وأرجعه للمنشئ لتصحيحه"
+        : "$empName رفض الطلب في مرحلة: " . prStageName($stage);
+
     prLogEvent($requestId, 'rejected', $employeeId, [
         'stage'       => $stage,
-        'description' => "$empName رفض الطلب في مرحلة: " . prStageName($stage),
+        'description' => $returnMsg,
         'old_value'   => $stage,
         'new_value'   => 'returned',
     ]);
 
-    // ── إشعار مدير الإدارة الطالبة ───────────────────────────
-    if ($managerId) {
-        prSendNotification($managerId, $requestId, [
+    // إشعار المُعاد إليه الطلب
+    if ($returnTarget) {
+        $notifMsg = $isReception
+            ? "تم رفض طلبك رقم {$req['request_number']} في مرحلة الاستلام. السبب: $reason — يرجى تصحيح البيانات وإعادة التقديم"
+            : "تم رفض الطلب رقم {$req['request_number']} في مرحلة " . prStageName($stage) . ". السبب: $reason";
+
+        prSendNotification($returnTarget, $requestId, [
             'type'    => 'warning',
-            'title'   => 'طلب مرفوض — يتطلب إجراء',
-            'message' => "تم رفض الطلب رقم {$req['request_number']} في مرحلة " . prStageName($stage) . ". السبب: $reason",
+            'title'   => $isReception ? 'طلبك يحتاج تصحيح' : 'طلب مرفوض — يتطلب إجراء',
+            'message' => $notifMsg,
         ]);
     }
 
-    return ['success' => true, 'message' => 'تم رفض الطلب وإرجاعه لمدير الإدارة الطالبة'];
+    $resultMsg = $isReception
+        ? 'تم رفض الطلب وإرجاعه للمنشئ لتصحيح البيانات'
+        : 'تم رفض الطلب وإرجاعه لمدير الإدارة الطالبة';
+
+    return ['success' => true, 'message' => $resultMsg];
 }
 
 
@@ -793,10 +866,12 @@ function prCreateBudgetReservationDraft(
     $priority = $req['priority'] === 'urgent' ? 'عاجل' : 'عادي';
     $deptId   = (int)$req['department_id'];
 
+    $itemsDesc = $conn->real_escape_string($req['description'] ?? $req['title'] ?? '');
+
     $conn->query("
         INSERT INTO budget_reservations
             (reservation_number, fiscal_year, department_id, requested_by,
-             request_date, purpose, priority,
+             request_date, purpose, items_description, priority,
              budget_category, cost_center,
              supplier_id, supplier_name_manual,
              grand_total, currency, exchange_rate, exchange_rate_sar,
@@ -804,7 +879,7 @@ function prCreateBudgetReservationDraft(
              transaction_id, status, workflow_stage, created_at)
         VALUES
             ('$resNum', $year, $deptId, $createdBy,
-             CURDATE(), '$purpose', '$priority',
+             CURDATE(), '$purpose', '$itemsDesc', '$priority',
              '$budgCode', " . ($costCtr !== 'NULL' ? "'$costCtr'" : 'NULL') . ",
              $suppId, '$suppName',
              $amount, '$currency', $exRate, $exRate,
@@ -839,18 +914,46 @@ function prBudgetEmployeeApproveReservation(int $reservationId, int $employeeId,
         WHERE id=$reservationId
     ");
 
-    // ── إيجاد الطلب المرتبط ──────────────────────────────────
-    $r   = $conn->query("SELECT id, request_number, department_id FROM purchase_requests WHERE budget_reservation_id=$reservationId LIMIT 1");
+    // ── إيجاد الطلب المرتبط — يبحث بـ budget_reservation_id أو reservation_id ──
+    $r = $conn->query("
+        SELECT id, request_number, workflow_path, department_id
+        FROM purchase_requests
+        WHERE budget_reservation_id=$reservationId
+           OR reservation_id=$reservationId
+        LIMIT 1
+    ");
     $req = $r ? $r->fetch_assoc() : null;
 
-    if ($req) {
-        prLogEvent((int)$req['id'], 'approved', $employeeId, [
-            'stage'       => 'waiting_budget_approval',
-            'description' => 'موظف الموازنة اعتمد الحجز — في انتظار اعتماد الرئيس التنفيذي',
-        ]);
+    if (!$req) {
+        return ['success' => true, 'message' => 'تم اعتماد الحجز من موظف الموازنة (بدون ربط بطلب)'];
     }
 
-    return ['success' => true, 'message' => 'تم اعتماد الحجز من موظف الموازنة'];
+    $requestId = (int)$req['id'];
+
+    // ── إغلاق مرحلة waiting_budget_approval ──────────────────
+    $conn->query("
+        UPDATE pr_workflow_stages SET
+            status       = 'approved',
+            employee_id  = $employeeId,
+            action       = 'اعتماد حجز الموازنة',
+            notes        = '$esc',
+            completed_at = NOW(),
+            duration_min = TIMESTAMPDIFF(MINUTE, COALESCE(started_at, arrived_at), NOW())
+        WHERE request_id = $requestId AND stage_name = 'waiting_budget_approval'
+    ");
+
+    // ── الانتقال للمرحلة التالية (accounts_review) ───────────
+    prEndSlaTracking($requestId, 'waiting_budget_approval');
+    $nextStage = prGetNextStage($req['workflow_path'], 'waiting_budget_approval');
+    prTransitionToStage($requestId, $nextStage, $employeeId);
+
+    prLogEvent($requestId, 'approved', $employeeId, [
+        'stage'       => 'waiting_budget_approval',
+        'description' => 'موظف الموازنة اعتمد الحجز — تم الانتقال لـ: ' . prStageName($nextStage),
+        'new_value'   => $nextStage,
+    ]);
+
+    return ['success' => true, 'message' => 'تم اعتماد الحجز وانتقل الطلب لـ: ' . prStageName($nextStage)];
 }
 
 /**
@@ -1110,6 +1213,15 @@ function prAssignRequest(int $requestId, int $managerEmployeeId, int $assignedEm
 function prGetRequest(int $requestId): ?array {
     prEnsureColumns();
     $conn = db();
+
+    // تأمين عمود requires_supplier في transaction_types
+    @$conn->query("ALTER TABLE transaction_types ADD COLUMN IF NOT EXISTS requires_supplier TINYINT(1) DEFAULT 0");
+    // تحديث الأنواع التي تحتاج مورداً بشكل افتراضي
+    @$conn->query("
+        UPDATE transaction_types SET requires_supplier = 1
+        WHERE name LIKE '%شراء%' OR name LIKE '%فاتورة%' OR name LIKE '%توريد%' OR name LIKE '%مورد%'
+    ");
+
     $r    = $conn->query("
         SELECT
             pr.*,
@@ -1125,16 +1237,21 @@ function prGetRequest(int $requestId): ?array {
             bc.name             AS budget_category_name,
             bc.code             AS budget_category_code,
             dm.id               AS dept_manager_id,
-            dm.name             AS dept_manager_name
+            dm.name             AS dept_manager_name,
+            tt.name             AS transaction_type_name,
+            tt.requires_supplier AS type_requires_supplier,
+            pt.name             AS parent_type_name
         FROM purchase_requests pr
-        LEFT JOIN departments   d   ON pr.department_id   = d.id
-        LEFT JOIN employees     e   ON pr.created_by      = e.id
-        LEFT JOIN employees     ass ON pr.assigned_to     = ass.id
-        LEFT JOIN suppliers     s   ON pr.supplier_id     = s.id
-        LEFT JOIN suppliers     fs  ON pr.final_supplier_id = fs.id
-        LEFT JOIN cost_centers  cc  ON pr.cost_center_id  = cc.id
+        LEFT JOIN departments      d   ON pr.department_id      = d.id
+        LEFT JOIN employees        e   ON pr.created_by         = e.id
+        LEFT JOIN employees        ass ON pr.assigned_to        = ass.id
+        LEFT JOIN suppliers        s   ON pr.supplier_id        = s.id
+        LEFT JOIN suppliers        fs  ON pr.final_supplier_id  = fs.id
+        LEFT JOIN cost_centers     cc  ON pr.cost_center_id     = cc.id
         LEFT JOIN budget_categories bc ON pr.budget_category_id = bc.id
-        LEFT JOIN employees     dm  ON d.manager_id       = dm.id
+        LEFT JOIN employees        dm  ON d.manager_id          = dm.id
+        LEFT JOIN transaction_types tt ON pr.transaction_type_id = tt.id
+        LEFT JOIN transaction_types pt ON tt.parent_id           = pt.id
         WHERE pr.id = $requestId
         LIMIT 1
     ");
@@ -1171,9 +1288,9 @@ function prGetRequests(
     // لا نعتمد على الجلسة لأن بيانات الإدارة قد تكون قديمة
     $empInfoRow = (($_qr5 = $conn->query("
         SELECT e.role, e.department_id, e.division_id, e.sector_id,
-               d.code  AS dept_code,
-               ds.code AS sector_code,
-               dd.code AS division_code
+               d.code  AS dept_code,  d.name  AS dept_name,
+               ds.code AS sector_code, ds.name AS sector_name,
+               dd.code AS division_code, dd.name AS div_name
         FROM employees e
         LEFT JOIN departments d  ON d.id = e.department_id
         LEFT JOIN departments ds ON ds.id = e.sector_id
@@ -1189,21 +1306,39 @@ function prGetRequests(
     $empDivCode    = $empInfoRow['division_code'] ?? '';
 
     // هل ينتمي لقطاع سلاسل الإمداد؟
-    // يتحقق من كود الإدارة المباشرة + القسم + القطاع (أي منها يبدأ بـ 41 أو = PUR)
     $allCodes      = [$empDeptCode, $empSectorCode, $empDivCode];
     $isSupplyChain = false;
     foreach ($allCodes as $_c) {
-        if ($_c === 'PUR' || (strpos((string)$_c, '41') === 0)) {
+        if ($_c === 'PUR' || $_c === 'SEC-06'
+            || strpos((string)$_c, '41')       === 0
+            || strpos((string)$_c, 'SEC-06')   === 0
+            || strpos((string)$_c, 'DIV-SEC06') === 0
+        ) {
             $isSupplyChain = true;
             break;
         }
     }
+    // أيضاً: sector_id = 6 مباشرة
+    if (!$isSupplyChain) {
+        $secRow = (($_qrSC = $conn->query("
+            SELECT sector_id, parent_id FROM departments WHERE id=$empDeptId LIMIT 1"
+        )) ? $_qrSC->fetch_assoc() : null);
+        if ((int)($secRow['sector_id'] ?? 0) === 6 || (int)($secRow['parent_id'] ?? 0) === 6) {
+            $isSupplyChain = true;
+        }
+    }
 
     // الأدوار التي ترى جميع معاملات طلبات الشراء
-    $rolesViewAll = ['budget', 'payment', 'dispatch', 'treasury_manager', 'CEO', 'admin', 'purchasing'];
+    $rolesViewAll = ['budget', 'payment', 'dispatch', 'treasury_manager', 'CEO', 'admin', 'purchasing', 'receiver'];
 
-    // هل إدارة المستخدم مالية؟
-    $isFinanceDept = ($empDeptCode === 'FIN' || $empSectorCode === 'FIN' || $deptCode === 'FIN');
+    // هل إدارة المستخدم مالية؟ (يشمل كل أقسام القطاع المالي)
+    $isFinanceDept = ($empDeptCode === 'FIN' || $empSectorCode === 'FIN' || $deptCode === 'FIN'
+        || preg_match('/^31/i', $empDeptCode) || preg_match('/^31/i', $empSectorCode)
+        || stripos($empInfoRow['dept_name'] ?? '', 'مال') !== false
+        || stripos($empInfoRow['sector_name'] ?? '', 'مال') !== false
+        || stripos($empInfoRow['dept_name'] ?? '', 'financ') !== false
+        || stripos($empInfoRow['sector_name'] ?? '', 'financ') !== false
+    );
 
     // جلب مستوى الصلاحية الموسَّع من DB
     $permRow = (($_qr6 = $conn->query("
@@ -1213,14 +1348,39 @@ function prGetRequests(
     $permLevelDB   = $permRow['permission_level']      ?? $permissionLevel;
     $permLevelCode = $permRow['permission_level_code'] ?? $permLevelDB;
 
+    // القطاع المالي بمستوى division_manager أو أعلى → يرى كل الطلبات
+    $isFinanceManager = $isFinanceDept && in_array($permLevelDB, ['system_admin','CEO','sector_head','division_manager','employee_l1']);
+
+    // ── دور purchasing/dispatch يدل على سلاسل الإمداد بغض النظر عن الكود
+    if (in_array($userRole, ['purchasing', 'dispatch'])) {
+        $isSupplyChain = true;
+    }
+
     if ($permLevelDB === 'system_admin'
         || in_array($userRole, $rolesViewAll)
         || $isFinanceDept
+        || $isFinanceManager
     ) {
-        // system_admin + أدوار مالية → يرون الكل
+        // system_admin + أدوار مالية + purchasing → يرون الكل أو المرحلة المناسبة
+        // purchasing يرى جميع مراحل المشتريات
+        if (in_array($userRole, ['purchasing', 'dispatch'])) {
+            $where[] = "(pr.current_stage='purchasing'
+                        OR pr.current_stage='waiting_budget_approval'
+                        OR pr.current_stage='ceo_approval'
+                        OR pr.created_by=$userId
+                        OR pr.department_id=$empDeptId)";
+        }
+        // الباقون (budget, payment, CEO, admin) يرون الكل — لا شرط إضافي
+    } elseif ($isSupplyChain) {
+        // سلاسل الإمداد (بالكود 41xxxx/PUR أو الدور purchasing/dispatch) →
+        // يرون الطلبات في مرحلة المشتريات + ما أنشأه قسمهم + ceo_approval
+        $where[] = "(pr.current_stage='purchasing'
+                    OR pr.current_stage='waiting_budget_approval'
+                    OR pr.current_stage='ceo_approval'
+                    OR pr.created_by=$userId
+                    OR pr.department_id=$empDeptId)";
     } elseif ($permLevelCode === 'sector_head' || $permLevelDB === 'sector_head') {
         // رئيس القطاع → يرى جميع معاملات قطاعه
-        // يُحدَّد القطاع من sector_id للموظف
         $sectorDeptIds = [];
         $sr = $conn->query("
             SELECT id FROM departments
@@ -1234,16 +1394,11 @@ function prGetRequests(
         } else {
             $where[] = "pr.department_id=$empDeptId";
         }
-    } elseif ($isSupplyChain || $deptCode === 'PUR') {
-        // سلاسل الإمداد → يرون مرحلة المشتريات فقط
-        $where[] = "(pr.department_id=$empDeptId
-                    OR pr.current_stage='purchasing'
-                    OR pr.current_stage='waiting_budget_approval')";
     } elseif (in_array($permLevelCode, ['division_manager','manager']) || in_array($permLevelDB, ['division_manager','manager'])) {
-        // مدير القسم → يرى قسمه فقط (الحالة الافتراضية)
+        // مدير القسم → يرى قسمه فقط
         $where[] = "pr.department_id=" . ($empDeptId ?: $userDeptId);
     } elseif (in_array($permLevelCode, ['employee_l1','employee']) || in_array($permLevelDB, ['employee_l1','employee'])) {
-        // موظف → يرى ما أنشأه هو فقط
+        // موظف → يرى ما أنشأه هو فقط أو طلبات قسمه
         $where[] = "(pr.created_by=$userId OR pr.department_id=$empDeptId)";
     } else {
         // fallback
@@ -1483,14 +1638,110 @@ function prGetRequestSlaStatus(int $requestId): array {
  *
  * @return array
  */
+/**
+ * إنشاء معاملة مالية مرتبطة بطلب شراء مكتمل
+ * تُستدعى تلقائياً بعد تنفيذ الدفع
+ *
+ * @return int|false  transaction_id أو false عند الفشل
+ */
+function prCreateLinkedTransaction(int $prId, int $employeeId, string $ref, string $method, string $notes) {
+    $conn = db();
+
+    // جلب بيانات الطلب الكاملة
+    $pr = prGetRequest($prId);
+    if (!$pr) return false;
+
+    // ── جلب/إنشاء نوع المعاملة "مدفوعات طلبات الشراء" ────────
+    $typeR = $conn->query("SELECT id FROM transaction_types WHERE name='مدفوعات طلبات الشراء' AND parent_id IS NULL LIMIT 1");
+    if ($typeR && $typeR->num_rows > 0) {
+        $typeId = (int)$typeR->fetch_assoc()['id'];
+    } else {
+        // إنشاء النوع إن لم يكن موجوداً
+        $conn->query("INSERT IGNORE INTO transaction_types (name, is_active) VALUES ('مدفوعات طلبات الشراء', 1)");
+        $typeId = (int)$conn->insert_id;
+        if (!$typeId) {
+            $r2 = $conn->query("SELECT id FROM transaction_types WHERE name='مدفوعات طلبات الشراء' LIMIT 1");
+            $typeId = $r2 ? (int)$r2->fetch_assoc()['id'] : 1;
+        }
+    }
+
+    // ── توليد رقم المعاملة ────────────────────────────────────
+    $prefix  = 'PR-TXN';
+    $conn->begin_transaction();
+    $seqR = $conn->query("
+        SELECT CAST(SUBSTRING_INDEX(transaction_number,'-',-1) AS UNSIGNED) AS seq
+        FROM transactions
+        WHERE transaction_number REGEXP '^PR-TXN-[0-9]+$'
+        ORDER BY seq DESC LIMIT 1 FOR UPDATE
+    ");
+    $seq  = $seqR && ($sr = $seqR->fetch_assoc()) ? (int)$sr['seq'] + 1 : 1;
+    $conn->commit();
+    $txNum = $prefix . '-' . str_pad($seq, 4, '0', STR_PAD_LEFT);
+
+    // ── بيانات المعاملة ───────────────────────────────────────
+    $amount      = (float)($pr['final_amount']     ?? $pr['amount']     ?? 0);
+    $amountSar   = (float)($pr['final_amount_sar'] ?? $pr['amount_sar'] ?? $amount);
+    $currency    = strtoupper($pr['currency'] ?? 'SAR');
+    $exchangeRate = $amountSar > 0 && $amount > 0 ? round($amountSar / $amount, 4) : 1.0;
+
+    $supplier = $conn->real_escape_string($pr['final_supplier_name'] ?? $pr['supplier_name'] ?? '');
+    $reqNum   = $conn->real_escape_string($pr['request_number'] ?? '');
+    $desc     = $conn->real_escape_string("دفع طلب شراء {$reqNum}" . ($supplier ? " — {$supplier}" : ''));
+    $refEsc   = $conn->real_escape_string($ref);
+    $methEsc  = $conn->real_escape_string($method);
+    $notesEsc = $conn->real_escape_string($notes);
+
+    // ── تأمين الأعمدة الإضافية في transactions ───────────────
+    @$conn->query("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS source_type VARCHAR(50) DEFAULT NULL");
+    @$conn->query("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS pr_source_id INT DEFAULT NULL");
+
+    // ── إدراج في transactions ─────────────────────────────────
+    $ok = $conn->query("
+        INSERT INTO transactions
+            (transaction_number, transaction_date, type_id, description,
+             amount, currency, exchange_rate, amount_sar,
+             created_by, created_at, source_type, pr_source_id)
+        VALUES
+            ('$txNum', NOW(), $typeId, '$desc',
+             $amount, '$currency', $exchangeRate, $amountSar,
+             $employeeId, NOW(), 'purchase_request', $prId)
+    ");
+    if (!$ok) return false;
+
+    $txId = (int)$conn->insert_id;
+
+    // ── إنشاء سجلات المراحل الأربع (مكتملة مباشرة) ──────────
+    $conn->query("INSERT INTO receiving_data (transaction_id, employee_id, status, receive_date)
+                  VALUES ($txId, $employeeId, 'تم الاستلام', NOW())
+                  ON DUPLICATE KEY UPDATE status='تم الاستلام'");
+    $conn->query("INSERT INTO budget_data (transaction_id, employee_id, budget_status, review_date)
+                  VALUES ($txId, $employeeId, 'معتمد', NOW())
+                  ON DUPLICATE KEY UPDATE budget_status='معتمد'");
+    $conn->query("INSERT INTO payment_data
+                    (transaction_id, employee_id, payment_date, payment_method, status, reference_number, notes)
+                  VALUES
+                    ($txId, $employeeId, NOW(), '$methEsc', 'تم الدفع', '$refEsc', '$notesEsc')
+                  ON DUPLICATE KEY UPDATE
+                    status='تم الدفع', payment_method='$methEsc',
+                    reference_number='$refEsc', payment_date=NOW()");
+    $conn->query("INSERT INTO invoice_data (transaction_id, employee_id, status)
+                  VALUES ($txId, $employeeId, 'منجز')
+                  ON DUPLICATE KEY UPDATE status='منجز'");
+
+    return $txId;
+}
+
 function prGetPaymentRequests(): array {
     $conn = db();
     $r    = $conn->query("
         SELECT
             pr.id, pr.request_number, pr.title,
             pr.final_amount, pr.currency, pr.final_amount_sar,
+            COALESCE(pr.final_amount, pr.amount)     AS amount,
+            COALESCE(pr.final_amount_sar, pr.amount) AS amount_sar,
             pr.po_number, pr.sent_to_payment_at,
             pr.priority, pr.payment_status,
+            pr.workflow_path,
             d.name          AS department_name,
             COALESCE(fs.name, pr.final_supplier_name) AS supplier_name,
             br.reservation_number, br.status AS reservation_status
@@ -1847,12 +2098,22 @@ function prTransitionToStage(int $requestId, string $newStage, int $byEmployeeId
     // ── إشعار المسؤولين عن المرحلة الجديدة ──────────────────
     if ($req) {
         prNotifyStageRecipients($requestId, $newStage, $req['request_number']);
-        prLogEvent($requestId, 'stage_changed', $byEmployeeId, [
-            'stage'       => $newStage,
-            'description' => 'انتقل الطلب إلى: ' . prStageName($newStage),
-            'old_value'   => $req['current_stage'],
-            'new_value'   => $newStage,
-        ]);
+        // ملاحظة: prLogEvent لا تُستدعى هنا — كل مستدعٍ لـ prTransitionToStage
+        // يسجّل حدثه الخاص لتجنب ازدواجية السجلات في النشاط
+    }
+
+    // ── إذا كانت الوجهة مرحلة الدفع — يُعيَّن payment_status تلقائياً ──
+    // ضروري حتى تظهر في صفحة المدفوعات اليومية (prGetPaymentQueue)
+    if ($newStage === 'payment') {
+        $conn->query("
+            UPDATE purchase_requests
+            SET payment_status     = 'في الانتظار',
+                sent_to_payment_at = COALESCE(sent_to_payment_at, NOW()),
+                updated_at         = NOW()
+            WHERE id = $requestId
+              AND (payment_status IS NULL
+                   OR payment_status NOT IN ('في الانتظار','قيد المعالجة'))
+        ");
     }
 }
 
@@ -2047,13 +2308,30 @@ function prGetStageRecipients(int $deptId, string $stage, string $workflowPath):
     $ids  = [];
 
     switch ($stage) {
+        case 'reception':
+            // موظفو الاستلام في القطاع المالي (role=receiver أو permission_level=employee_l1 في القطاع المالي)
+            $r = $conn->query("
+                SELECT DISTINCT e.id FROM employees e
+                LEFT JOIN departments d  ON d.id = e.department_id
+                LEFT JOIN departments ds ON ds.id = e.sector_id
+                WHERE e.is_active = 1
+                  AND e.role = 'receiver'
+                UNION
+                SELECT DISTINCT e.id FROM employees e
+                LEFT JOIN departments d  ON d.id = e.department_id
+                LEFT JOIN departments ds ON ds.id = e.sector_id
+                WHERE e.is_active = 1
+                  AND (d.code = 'FIN' OR ds.code = 'FIN'
+                    OR d.name LIKE '%مال%' OR ds.name LIKE '%مال%')
+                  AND e.permission_level IN ('employee_l1','employee')
+                LIMIT 5
+            ");
+            break;
         case 'budget_review':
-            // موظفو الموازنة في إدارة التخطيط والميزانية
+            // موظفو الموازنة — في كلا المسارين
             $r = $conn->query("SELECT id FROM employees WHERE role='budget' AND is_active=1");
             break;
         case 'treasury_review':
-            // مدير الخزينة — الدور الصحيح هو treasury_manager
-            // احتياطي: dispatch في قسم الخزينة إذا لم يوجد treasury_manager مسجّل
             $r = $conn->query("
                 SELECT id FROM employees
                 WHERE role='treasury_manager' AND is_active=1
@@ -2068,16 +2346,54 @@ function prGetStageRecipients(int $deptId, string $stage, string $workflowPath):
             ");
             break;
         case 'finance_review':
-            // المدير المالي
-            $r = $conn->query("SELECT id FROM employees WHERE permission_level='manager' AND department_id IN
-                               (SELECT id FROM departments WHERE code='FIN') AND is_active=1 LIMIT 2");
+            // رئيس القطاع المالي — sector_head في القطاع المالي
+            $r = $conn->query("
+                SELECT DISTINCT e.id FROM employees e
+                LEFT JOIN departments d  ON d.id = e.department_id
+                LEFT JOIN departments ds ON ds.id = e.sector_id
+                WHERE e.is_active = 1
+                  AND e.permission_level IN ('sector_head','CEO','system_admin')
+                  AND (d.code = 'FIN' OR ds.code = 'FIN'
+                    OR d.name LIKE '%مال%' OR ds.name LIKE '%مال%'
+                    OR d.code LIKE '31%' OR ds.code LIKE '31%')
+                LIMIT 3
+            ");
             break;
         case 'ceo_approval':
             // الرئيس التنفيذي
-            $r = $conn->query("SELECT id FROM employees WHERE role='admin' AND permission_level='system_admin' AND is_active=1 LIMIT 2");
+            $r = $conn->query("SELECT id FROM employees WHERE role='CEO' AND is_active=1 LIMIT 2");
+            break;
+        case 'waiting_budget_approval':
+            // موظف الموازنة يعتمد الحجز
+            $r = $conn->query("SELECT id FROM employees WHERE role='budget' AND is_active=1");
+            break;
+
+        case 'accounts_review':
+            // أي موظف في قسم الحسابات
+            $r = $conn->query("
+                SELECT DISTINCT e.id FROM employees e
+                LEFT JOIN departments d  ON d.id = e.department_id
+                LEFT JOIN departments ds ON ds.id = e.sector_id
+                WHERE e.is_active = 1
+                  AND (
+                    d.name  LIKE '%حساب%' OR ds.name  LIKE '%حساب%'
+                    OR d.code LIKE 'ACC%'  OR ds.code LIKE 'ACC%'
+                    OR e.role = 'accountant'
+                  )
+                LIMIT 5
+            ");
+            break;
+
+        case 'po_issuance':
+            // إصدار أمر الشراء — موظفو المشتريات
+            $r = $conn->query("
+                SELECT DISTINCT e.id FROM employees e
+                LEFT JOIN departments d ON d.id = e.department_id
+                WHERE e.is_active = 1
+                  AND (e.role IN ('purchasing','dispatch') OR d.code='PUR' OR d.code LIKE '41%')
+            ");
             break;
         case 'purchasing':
-            // موظفو سلاسل الإمداد: دور purchasing/dispatch أو كود 41xxxx أو PUR
             $r = $conn->query("
                 SELECT DISTINCT e.id FROM employees e
                 LEFT JOIN departments d ON d.id = e.department_id
@@ -2090,8 +2406,16 @@ function prGetStageRecipients(int $deptId, string $stage, string $workflowPath):
             ");
             break;
         case 'payment':
-            // موظفو المالية
             $r = $conn->query("SELECT id FROM employees WHERE role='payment' AND is_active=1");
+            break;
+        case 'completed':
+            // إشعار منشئ الطلب بالاكتمال
+            $r = $conn->query("
+                SELECT DISTINCT created_by AS id
+                FROM purchase_requests
+                WHERE department_id = $deptId AND created_by IS NOT NULL
+                LIMIT 5
+            ");
             break;
         default:
             $r = null;
@@ -2116,27 +2440,42 @@ function prGetStageRecipients(int $deptId, string $stage, string $workflowPath):
  * @return string المرحلة التالية
  */
 function prGetNextStage(string $workflowPath, string $currentStage): string {
+    // مرحلة الحسابات تنتهي بقرار يدوي (PO أو دفع مباشر) — لا تنتقل تلقائياً
+    // مرحلة po_issuance مشتركة وتنتهي بالدفع دائماً
     $shortFlow = [
-        'budget_review'           => 'purchasing',
+        'reception'               => 'budget_review',
+        'budget_review'           => 'treasury_review',   // موظف الموازنة → مدير الخزينة
+        'treasury_review'         => 'finance_review',    // موافقة مزدوجة
+        'finance_review'          => 'purchasing',        // → المشتريات
         'purchasing'              => 'waiting_budget_approval',
-        'waiting_budget_approval' => 'payment',
+        'waiting_budget_approval' => 'accounts_review',
+        'accounts_review'         => 'payment',
+        'po_issuance'             => 'payment',
         'payment'                 => 'completed',
     ];
 
     $longFlow = [
-        'treasury_review'         => 'finance_review',
+        'reception'               => 'budget_review',     // مرحلة إضافية في الطويل
+        'budget_review'           => 'treasury_review',
+        'treasury_review'         => 'finance_review',    // موافقة مزدوجة
         'finance_review'          => 'ceo_approval',
         'ceo_approval'            => 'purchasing',
         'purchasing'              => 'waiting_budget_approval',
-        'waiting_budget_approval' => 'payment',
+        'waiting_budget_approval' => 'accounts_review',
+        'accounts_review'         => 'payment',
+        'po_issuance'             => 'payment',
         'payment'                 => 'completed',
-        // budget_review كمرحلة وسيطة (إحالة لموظف الموازنة في المسار الطويل)
-        // بعد موافقة موظف الموازنة → يعود للمرحلة الأصلية treasury_review
-        'budget_review'           => 'treasury_review',
     ];
 
     $flow = $workflowPath === 'short' ? $shortFlow : $longFlow;
-    return $flow[$currentStage] ?? 'completed';
+
+    if (!isset($flow[$currentStage])) {
+        // تسجيل تحذير وإعادة المرحلة الحالية لمنع قفز غير مقصود
+        error_log("prGetNextStage: مرحلة غير معروفة '$currentStage' في المسار '$workflowPath'");
+        return $currentStage; // لا تقفز لـ completed
+    }
+
+    return $flow[$currentStage];
 }
 
 /**
@@ -2148,17 +2487,20 @@ function prGetNextStage(string $workflowPath, string $currentStage): string {
 function prStageName(string $stage): string {
     $names = [
         'draft'                   => 'مسودة',
+        'reception'               => 'الاستلام والتحقق',
         'budget_review'           => 'مراجعة موظف الموازنة',
         'treasury_review'         => 'مراجعة مدير الخزينة',
-        'finance_review'          => 'مراجعة المدير المالي',
+        'finance_review'          => 'مراجعة رئيس القطاع المالي',
         'treasury_finance_review' => 'مراجعة الخزينة والمالية',
-        'ceo_approval'            => 'اعتماد الرئيس التنفيذي',
-        'purchasing'              => 'المشتريات',
-        'waiting_budget_approval' => 'انتظار اعتماد الحجز',
+        'ceo_approval'            => 'موافقة مبدئية — الرئيس التنفيذي',
+        'purchasing'              => 'المشتريات — إنشاء حجز',
+        'waiting_budget_approval' => 'اعتماد حجز الموازنة',
+        'accounts_review'         => 'الحسابات — مراجعة وتوزيع',
+        'po_issuance'             => 'إصدار أمر الشراء (PO)',
         'payment'                 => 'المالية — الدفع',
         'completed'               => 'مكتملة',
         'rejected'                => 'مرفوضة',
-        'returned'                => 'مُرجَعة لمدير الإدارة',
+        'returned'                => 'مُرجَعة للمنشئ',
     ];
     return $names[$stage] ?? $stage;
 }
@@ -2222,7 +2564,7 @@ function prIsSupplyChainDept(mysqli $conn, int $deptId): bool {
  */
 function prIsUserSupplyChain(mysqli $conn, int $employeeId): bool {
     $r = $conn->query("
-        SELECT e.role,
+        SELECT e.role, e.sector_id, e.department_id,
                d.code  AS dept_code,
                ds.code AS sector_code,
                dd.code AS division_code
@@ -2234,19 +2576,29 @@ function prIsUserSupplyChain(mysqli $conn, int $employeeId): bool {
         LIMIT 1
     ");
     if (!$r || $r->num_rows === 0) return false;
-    $row  = $r->fetch_assoc();
+    $row = $r->fetch_assoc();
 
     // الدور نفسه يدل على سلاسل الإمداد
     if (in_array($row['role'] ?? '', ['purchasing', 'dispatch'])) return true;
 
-    // كود القسم أو القطاع أو التقسيم يبدأ بـ 41 أو = PUR
-    $codes = [
-        $row['dept_code']    ?? '',
-        $row['sector_code']  ?? '',
-        $row['division_code']?? '',
-    ];
+    // كود القسم أو القطاع
+    $codes = [$row['dept_code'] ?? '', $row['sector_code'] ?? '', $row['division_code'] ?? ''];
     foreach ($codes as $c) {
-        if ($c === 'PUR' || (strpos((string)$c, '41') === 0)) return true;
+        if ($c === 'PUR' || $c === 'SEC-06'
+            || strpos((string)$c, '41')       === 0
+            || strpos((string)$c, 'SEC-06')   === 0
+            || strpos((string)$c, 'DIV-SEC06') === 0
+        ) return true;
+    }
+
+    // sector_id = 6 (قطاع سلاسل الإمداد) مباشرة أو عبر department
+    if ((int)($row['sector_id'] ?? 0) === 6) return true;
+    $deptId = (int)($row['department_id'] ?? 0);
+    if ($deptId > 0) {
+        $sr = $conn->query("SELECT sector_id, parent_id FROM departments WHERE id=$deptId LIMIT 1");
+        if ($sr && ($d = $sr->fetch_assoc())) {
+            if ((int)($d['sector_id'] ?? 0) === 6 || (int)($d['parent_id'] ?? 0) === 6) return true;
+        }
     }
     return false;
 }
@@ -2422,4 +2774,444 @@ function prEndReferralSlaTracking(int $requestId): void {
         ORDER BY id DESC
         LIMIT 1
     ");
+}
+
+// ════════════════════════════════════════════════════════════
+// ⑫ المدفوعات اليومية — الدوال الجديدة
+// ════════════════════════════════════════════════════════════
+
+/**
+ * prGetPaymentQueue — قائمة طلبات الشراء الجاهزة للدفع (محسّنة)
+ * تُرجع كل الطلبات بمرحلة payment مع بيانات التجميع والإشعار.
+ */
+function prGetPaymentQueue(): array {
+    $conn = db();
+
+    // تأمين الأعمدة
+    @$conn->query("ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS payment_method VARCHAR(100) DEFAULT NULL");
+    @$conn->query("ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS payment_ref    VARCHAR(200) DEFAULT NULL");
+    @$conn->query("ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS payment_notes  TEXT        DEFAULT NULL");
+    @$conn->query("ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS payment_executed_by INT    DEFAULT NULL");
+    @$conn->query("ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS payment_executed_at DATETIME DEFAULT NULL");
+
+    $r = $conn->query("
+        SELECT
+            pr.id,
+            pr.request_number                                           AS transaction_number,
+            pr.title                                                    AS description,
+            COALESCE(pr.final_amount,     pr.amount)                    AS amount,
+            COALESCE(pr.final_amount_sar, pr.amount)                    AS amount_sar,
+            COALESCE(pr.currency, 'SAR')                               AS currency,
+            pr.priority,
+            pr.po_number,
+            pr.sent_to_payment_at,
+            pr.payment_status,
+            pr.created_by,
+            ec.name                                                     AS created_by_name,
+            d.name                                                      AS department_name,
+            COALESCE(fs.name, pr.final_supplier_name, '')              AS supplier_name,
+            COALESCE(fs.name, pr.final_supplier_name, '')              AS beneficiary,
+            br.reservation_number,
+            br.budget_code,
+            -- SLA: وقت الانتظار منذ وصول مرحلة الدفع
+            TIMESTAMPDIFF(MINUTE,
+                COALESCE(pws.started_at, pws.arrived_at, pr.sent_to_payment_at, pr.updated_at),
+                NOW()
+            )                                                           AS sla_elapsed_min,
+            COALESCE(pst.allowed_minutes, 180)                         AS sla_allowed_min,
+            ROUND(
+                TIMESTAMPDIFF(MINUTE,
+                    COALESCE(pws.started_at, pws.arrived_at, pr.sent_to_payment_at, pr.updated_at),
+                    NOW()
+                ) / COALESCE(pst.allowed_minutes, 180) * 100
+            , 1)                                                        AS sla_pct
+        FROM purchase_requests pr
+        LEFT JOIN employees          ec  ON pr.created_by          = ec.id
+        LEFT JOIN departments         d  ON pr.department_id        = d.id
+        LEFT JOIN suppliers          fs  ON pr.final_supplier_id    = fs.id
+        LEFT JOIN budget_reservations br ON pr.budget_reservation_id = br.id
+        LEFT JOIN pr_workflow_stages pws ON pws.request_id = pr.id AND pws.stage_name = 'payment'
+        LEFT JOIN pr_sla_tracking    pst ON pst.request_id = pr.id AND pst.stage_name = 'payment'
+        WHERE pr.current_stage = 'payment'
+          AND pr.payment_status IN ('في الانتظار', 'قيد المعالجة')
+        ORDER BY
+            pr.priority = 'urgent' DESC,
+            sla_pct DESC,
+            pr.sent_to_payment_at ASC
+    ");
+
+    $rows = [];
+    if ($r) {
+        while ($row = $r->fetch_assoc()) {
+            $row['source']  = 'purchase_request';
+            $row['pr_id']   = $row['id'];
+            $rows[] = $row;
+        }
+    }
+    return $rows;
+}
+
+/**
+ * prExecuteBatchPayment — دفع مجموعة من طلبات الشراء في استدعاء واحد
+ *
+ * @param array  $prIds         مصفوفة معرّفات الطلبات
+ * @param int    $executedBy    معرّف الموظف المنفّذ
+ * @param string $method        طريقة الدفع
+ * @param string $ref           رقم المرجع / الحوالة
+ * @param string $notes         ملاحظات
+ * @param int    $bankAccountId معرّف حساب البنك (للخصم)
+ * @return array نتيجة العملية
+ */
+function prExecuteBatchPayment(
+    array $prIds,
+    int   $executedBy,
+    string $method,
+    string $ref,
+    string $notes,
+    int   $bankAccountId = 0
+): array {
+    if (empty($prIds)) {
+        return ['success' => false, 'message' => 'لم يتم تحديد أي طلبات'];
+    }
+
+    $conn      = db();
+    $now       = date('Y-m-d H:i:s');
+    $orderRef  = 'PO-' . date('Ymd') . '-' . strtoupper(substr(uniqid(), -5));
+    $methEsc   = $conn->real_escape_string($method);
+    $refEsc    = $conn->real_escape_string($ref ?: $orderRef);
+    $notesEsc  = $conn->real_escape_string($notes);
+    $empName   = prGetEmployeeName($executedBy);
+
+    // ── ① التحقق من الرصيد البنكي ──────────────────────────────
+    $balanceCheck = null;
+    if ($bankAccountId > 0) {
+        $balR = $conn->query("SELECT current_balance, account_name FROM bank_accounts WHERE id=$bankAccountId AND is_active=1 LIMIT 1");
+        if ($balR && $balR->num_rows) {
+            $balRow  = $balR->fetch_assoc();
+            $balance = (float)$balRow['current_balance'];
+
+            // إجمالي المبالغ المطلوبة
+            $idsStr  = implode(',', array_map('intval', $prIds));
+            $totR    = $conn->query("
+                SELECT SUM(COALESCE(final_amount_sar, final_amount, amount)) AS total
+                FROM purchase_requests WHERE id IN ($idsStr)
+            ");
+            $totalNeeded = $totR ? (float)$totR->fetch_assoc()['total'] : 0;
+
+            if ($totalNeeded > $balance) {
+                return [
+                    'success'       => false,
+                    'balance_error' => true,
+                    'message'       => 'رصيد الحساب غير كافٍ',
+                    'balance'       => $balance,
+                    'needed'        => $totalNeeded,
+                    'deficit'       => round($totalNeeded - $balance, 2),
+                    'account_name'  => $balRow['account_name'],
+                ];
+            }
+
+            $balanceCheck = [
+                'account_id'   => $bankAccountId,
+                'balance_before' => $balance,
+                'total_needed'  => $totalNeeded,
+            ];
+        }
+    }
+
+    // ── ② دفع كل طلب وتسجيل النتيجة ──────────────────────────
+    $updated     = [];
+    $failed      = [];
+    $details     = [];
+    $totalAmount = 0.0;
+
+    // ملاحظة: لا نستخدم begin_transaction هنا لأن prFinalizeRequest وprCreateLinkedTransaction
+    // تستدعيان db() داخلياً وتحصلان على نفس الـ connection (singleton)
+    // كل عملية دفع مستقلة — الفشل في طلب لا يُلغي الباقين
+
+    foreach ($prIds as $prId) {
+        $prId = (int)$prId;
+
+        // نجلب الطلب من جديد في كل دورة للتحقق من الحالة الفعلية في DB
+        $pr = prGetRequest($prId);
+
+        if (!$pr) {
+            $failed[] = ['id' => $prId, 'reason' => 'الطلب غير موجود'];
+            continue;
+        }
+        if ($pr['current_stage'] !== 'payment') {
+            // إذا كان payment_status لا يزال "في الانتظار" رغم أن المرحلة تغيّرت
+            // نُصحح الحالة حتى لا يظهر في القائمة مجدداً
+            if (in_array($pr['payment_status'], ['في الانتظار', 'قيد المعالجة'])) {
+                $conn->query("
+                    UPDATE purchase_requests
+                    SET payment_status = 'ملغي'
+                    WHERE id = $prId AND current_stage != 'payment'
+                ");
+            }
+            $failed[] = ['id' => $prId, 'reason' => 'الطلب ليس في مرحلة الدفع (المرحلة الحالية: ' . ($pr['current_stage'] ?? 'غير معروفة') . ')'];
+            continue;
+        }
+        if ($pr['payment_status'] === 'مدفوع') {
+            $failed[] = ['id' => $prId, 'reason' => 'الطلب مدفوع مسبقاً'];
+            continue;
+        }
+
+        // تسجيل بيانات الدفع
+        $ok = $conn->query("
+            UPDATE purchase_requests SET
+                payment_status       = 'مدفوع',
+                payment_ref          = '$refEsc',
+                payment_method       = '$methEsc',
+                payment_notes        = '$notesEsc',
+                payment_executed_by  = $executedBy,
+                payment_executed_at  = NOW(),
+                updated_at           = NOW()
+            WHERE id = $prId AND current_stage = 'payment'
+        ");
+
+        if (!$ok || $conn->affected_rows === 0) {
+            $failed[] = ['id' => $prId, 'reason' => $conn->error ?: 'فشل التحديث'];
+            continue;
+        }
+
+        // إغلاق كامل للمعاملة
+        prFinalizeRequest($prId, $executedBy, $refEsc ?: $orderRef);
+
+        // إنشاء معاملة مالية مرتبطة
+        $txId = prCreateLinkedTransaction($prId, $executedBy, $refEsc, $methEsc, $notesEsc);
+        if ($txId) {
+            $conn->query("UPDATE purchase_requests SET linked_transaction_id=$txId WHERE id=$prId");
+        }
+
+        // تسجيل الحدث
+        prLogEvent($prId, 'payment_executed', $executedBy, [
+            'stage'       => 'payment',
+            'description' => "تم تنفيذ الدفع بواسطة: {$empName} — أمر: {$orderRef}",
+            'new_value'   => $refEsc ?: $orderRef,
+        ]);
+
+            // ③ إشعار منشئ الطلب
+            $createdBy = (int)($pr['created_by'] ?? 0);
+            if ($createdBy && $createdBy !== $executedBy) {
+                $prNum  = $conn->real_escape_string($pr['request_number'] ?? '#'.$prId);
+                $title  = $conn->real_escape_string("تم دفع طلبك #{$prNum}");
+                $amount = (float)($pr['final_amount_sar'] ?? $pr['final_amount'] ?? $pr['amount'] ?? 0);
+                $amtFmt = number_format($amount, 2) . ' ريال';
+                $msg    = $conn->real_escape_string(
+                    "اكتمل الدفع لطلب الشراء {$prNum}" .
+                    ($amount ? " بمبلغ {$amtFmt}" : '') .
+                    " — رقم الأمر: {$orderRef}"
+                );
+
+                $conn->query("
+                    INSERT INTO system_notifications
+                        (employee_id, type, title, message, related_id, related_type, is_read, created_at)
+                    VALUES
+                        ($createdBy, 'success', '$title', '$msg', $prId, 'purchase_request', 0, NOW())
+                ");
+            }
+
+            $rowAmount = (float)($pr['final_amount_sar'] ?? $pr['final_amount'] ?? $pr['amount'] ?? 0);
+            $totalAmount += $rowAmount;
+
+            $updated[] = $prId;
+            $details[] = [
+                'id'               => $prId,
+                'transaction_number' => $pr['request_number'] ?? '#'.$prId,
+                'description'      => $pr['title'] ?? '',
+                'amount'           => $rowAmount,
+                'amount_sar'       => $rowAmount,
+                'currency'         => $pr['currency'] ?? 'SAR',
+                'beneficiary'      => $pr['final_supplier_name'] ?? $pr['supplier_name'] ?? '',
+                'department_name'  => $pr['department_name'] ?? '',
+                'transaction_id'   => $txId ?: null,
+                'payment_method'   => $method,
+                'order_ref'        => $orderRef,
+                'status'           => 'مدفوع',
+            ];
+    }
+
+    // ── ④ خصم إجمالي المبالغ من رصيد البنك ─────────────────
+    if ($bankAccountId > 0 && !empty($updated) && $totalAmount > 0) {
+        $conn->query("
+            UPDATE bank_accounts
+            SET current_balance = current_balance - $totalAmount,
+                updated_at      = NOW()
+            WHERE id = $bankAccountId AND is_active = 1
+        ");
+    }
+
+    // ── جلب بيانات الموقّعين ─────────────────────────────────
+    if (function_exists('ensureSystemSettingsTable')) ensureSystemSettingsTable();
+    $sigReviewer = function_exists('getSystemSetting') ? getSystemSetting('signer_reviewer') : '';
+    $sigApprover = function_exists('getSystemSetting') ? getSystemSetting('signer_approver') : '';
+
+    return [
+        'success'         => true,
+        'order_ref'       => $orderRef,
+        'updated'         => count($updated),
+        'failed'          => count($failed),
+        'failed_details'  => $failed,
+        'details'         => $details,
+        'total_amount'    => round($totalAmount, 2),
+        'issued_by'       => $empName,
+        'issued_at'       => $now,
+        'method'          => $method,
+        'bank_account_id' => $bankAccountId,
+        'balance_check'   => $balanceCheck,
+        'signer_reviewer' => $sigReviewer,
+        'signer_approver' => $sigApprover,
+    ];
+}
+
+
+// ════════════════════════════════════════════════════════════
+// ⑬ إغلاق المعاملة نهائياً + حفظ أمر الدفع كمرفق
+// ════════════════════════════════════════════════════════════
+
+/**
+ * prFinalizeRequest — يُغلق طلب الشراء بالكامل بعد تنفيذ الدفع
+ *
+ * يفعل أربعة أشياء بشكل صحيح:
+ *  ① يُغلق مرحلة payment  في pr_workflow_stages
+ *  ② يُغلق مرحلة completed في pr_workflow_stages
+ *  ③ يُحدّث purchase_requests: status=مكتمل + payment_ref
+ *  ④ يُوقف SLA لكلا المرحلتين
+ */
+function prFinalizeRequest(int $prId, int $executedBy, string $orderRef = ''): void {
+    $conn   = db();
+    // تأمين الأعمدة أولاً
+    prEnsureColumns();
+    $refEsc = $conn->real_escape_string($orderRef);
+
+    // ① إغلاق مرحلة payment في workflow_stages
+    $conn->query("
+        UPDATE pr_workflow_stages SET
+            status       = 'approved',
+            employee_id  = $executedBy,
+            action       = 'تنفيذ الدفع',
+            completed_at = NOW(),
+            duration_min = TIMESTAMPDIFF(MINUTE, COALESCE(started_at, arrived_at), NOW())
+        WHERE request_id = $prId AND stage_name = 'payment'
+    ");
+
+    // ② إغلاق مرحلة completed — تُفتح وتُغلق في نفس اللحظة
+    $conn->query("
+        UPDATE pr_workflow_stages SET
+            status       = 'approved',
+            employee_id  = $executedBy,
+            arrived_at   = COALESCE(arrived_at, NOW()),
+            started_at   = COALESCE(started_at, NOW()),
+            completed_at = NOW(),
+            duration_min = 0
+        WHERE request_id = $prId AND stage_name = 'completed'
+    ");
+
+    // ③ تحديث purchase_requests — current_stage + payment_ref + completed_at
+    if ($refEsc) {
+        $conn->query("
+            UPDATE purchase_requests SET
+                current_stage = 'completed',
+                payment_ref   = '$refEsc',
+                completed_at  = NOW(),
+                updated_at    = NOW()
+            WHERE id = $prId
+        ");
+    } else {
+        $conn->query("
+            UPDATE purchase_requests SET
+                current_stage = 'completed',
+                completed_at  = NOW(),
+                updated_at    = NOW()
+            WHERE id = $prId
+        ");
+    }
+
+    // ④ إيقاف SLA
+    prEndSlaTracking($prId, 'payment');
+    prEndSlaTracking($prId, 'completed');
+}
+
+/**
+ * prSavePaymentOrderAttachment — يحفظ أمر الدفع HTML كسجل في pr_attachments
+ *
+ * لا يتطلب توليد PDF فعلي في هذه المرحلة — يُخزَّن HTML كـ "مرجع"
+ * ويمكن طباعته/تصديره لاحقاً من صفحة أوامر الشراء.
+ *
+ * إذا كان السيرفر يدعم PDF (pdf_generator.php موجود) يُولَّد PDF
+ * ويُحفظ المسار الفعلي. وإلا يُسجَّل بدون مسار ملف.
+ *
+ * @param int    $prId       معرف طلب الشراء
+ * @param int    $executedBy معرف الموظف المنفّذ
+ * @param string $orderRef   رقم أمر الدفع PO-YYYYMMDD-XXXXX
+ * @param string $htmlContent محتوى أمر الدفع HTML
+ * @param float  $amount     المبلغ المدفوع
+ * @return array ['success'=>bool, 'attachment_id'=>int|null, 'path'=>string|null]
+ */
+function prSavePaymentOrderAttachment(
+    int    $prId,
+    int    $executedBy,
+    string $orderRef,
+    string $htmlContent,
+    float  $amount = 0.0
+): array {
+    $conn = db();
+
+    // تأمين أعمدة pr_attachments
+    @$conn->query("ALTER TABLE pr_attachments ADD COLUMN IF NOT EXISTS file_label VARCHAR(200) DEFAULT NULL");
+    @$conn->query("ALTER TABLE pr_attachments ADD COLUMN IF NOT EXISTS attachment_type VARCHAR(50) DEFAULT 'manual'");
+    @$conn->query("ALTER TABLE pr_attachments ADD COLUMN IF NOT EXISTS order_ref VARCHAR(100) DEFAULT NULL");
+
+    $uploadDir = dirname(__DIR__) . '/uploads/purchase_requests/';
+    if (!is_dir($uploadDir)) @mkdir($uploadDir, 0755, true);
+
+    $safeRef  = preg_replace('/[^a-zA-Z0-9_-]/', '_', $orderRef);
+    $fileName = "payment_order_{$safeRef}_pr{$prId}.html";
+    $filePath = $uploadDir . $fileName;
+    $relPath  = "uploads/purchase_requests/{$fileName}";
+
+    // كتابة HTML على القرص (يمكن فتحه وطباعته لاحقاً)
+    $saved = false;
+    if (!empty(trim($htmlContent))) {
+        // أضف CSS أساسي للطباعة
+        $fullHtml = '<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">
+<style>body{font-family:Arial,sans-serif;direction:rtl;padding:20px}
+table{width:100%;border-collapse:collapse}th,td{border:1px solid #ddd;padding:8px;text-align:right}
+th{background:#1a1a2e;color:#fff}@media print{body{padding:0}}</style></head><body>'
+            . $htmlContent . '</body></html>';
+        $saved = (file_put_contents($filePath, $fullHtml) !== false);
+    }
+
+    $refEsc     = $conn->real_escape_string($orderRef);
+    $origName   = $conn->real_escape_string("أمر دفع — {$orderRef}.html");
+    $labelEsc   = $conn->real_escape_string("أمر الدفع {$orderRef}");
+    $fNameEsc   = $conn->real_escape_string($fileName);
+    $fPathEsc   = $conn->real_escape_string($relPath);
+    $fSize      = $saved ? filesize($filePath) : 0;
+    $amtFmt     = number_format($amount, 2);
+
+    $conn->query("
+        INSERT INTO pr_attachments
+            (request_id, file_name, original_name, file_path, file_type,
+             file_size, uploaded_by, stage, file_label, attachment_type, order_ref, uploaded_at)
+        VALUES
+            ($prId, '$fNameEsc', '$origName', '$fPathEsc', 'text/html',
+             $fSize, $executedBy, 'payment', '$labelEsc', 'payment_order', '$refEsc', NOW())
+    ");
+
+    $attachId = $conn->insert_id ?: null;
+
+    // تسجيل الحدث
+    prLogEvent($prId, 'attachment_added', $executedBy, [
+        'stage'       => 'payment',
+        'description' => "تم حفظ أمر الدفع {$orderRef}" . ($amount > 0 ? " — المبلغ: {$amtFmt} ريال" : ''),
+        'new_value'   => $orderRef,
+    ]);
+
+    return [
+        'success'       => true,
+        'attachment_id' => $attachId,
+        'path'          => $saved ? $relPath : null,
+        'file_name'     => $fileName,
+    ];
 }

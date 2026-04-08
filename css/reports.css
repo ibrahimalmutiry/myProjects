@@ -1,0 +1,1645 @@
+/**
+ * ╔══════════════════════════════════════════════════════════════════════╗
+ * ║          reports.css — تنسيق صفحة التقارير الموحدة v1.0            ║
+ * ║          دعم: RTL • Responsive • Print • Light/Dark                 ║
+ * ╚══════════════════════════════════════════════════════════════════════╝
+ */
+
+/* ═══════════════════════════════════════════════════════════════════
+   1. متغيرات خاصة بوحدة التقارير
+   ═══════════════════════════════════════════════════════════════════ */
+:root {
+    --rpt-radius: 12px;
+    --rpt-radius-sm: 8px;
+    --rpt-radius-lg: 16px;
+    --rpt-shadow: 0 4px 24px rgba(0, 0, 0, .10);
+    --rpt-shadow-hover: 0 8px 32px rgba(0, 0, 0, .16);
+    --rpt-gap: 1.25rem;
+    --rpt-primary: #3F5950;
+    --rpt-primary-lt: #3F595015;
+    --rpt-font: 'IBM Plex Sans Arabic', 'Cairo', Arial, sans-serif;
+    --rpt-transition: .22s cubic-bezier(.4, 0, .2, 1);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   2. الغلاف الرئيسي
+   ═══════════════════════════════════════════════════════════════════ */
+.rpt-wrapper {
+    padding: 1.5rem;
+    min-height: 100%;
+    direction: rtl;
+    font-family: var(--rpt-font);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   3. شريط العنوان العلوي
+   ═══════════════════════════════════════════════════════════════════ */
+.rpt-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.rpt-topbar-right {
+    display: flex;
+    align-items: center;
+    gap: .85rem;
+}
+
+.rpt-topbar-icon {
+    width: 46px;
+    height: 46px;
+    border-radius: var(--rpt-radius-sm);
+    background: var(--rpt-primary-lt);
+    color: var(--rpt-primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.rpt-topbar-title {
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0;
+    line-height: 1.2;
+}
+
+.rpt-topbar-sub {
+    font-size: .78rem;
+    color: var(--text-muted);
+    margin: .15rem 0 0;
+}
+
+.rpt-topbar-left {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+}
+
+.rpt-global-filter {
+    display: flex;
+    align-items: flex-end;
+    gap: .6rem;
+    flex-wrap: wrap;
+}
+
+.rpt-filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: .25rem;
+}
+
+.rpt-filter-group label {
+    font-size: .7rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: .03em;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   4. مدخلات وأزرار
+   ═══════════════════════════════════════════════════════════════════ */
+.rpt-input {
+    background: var(--bg-card);
+    border: 1.5px solid var(--border-color);
+    border-radius: var(--rpt-radius-sm);
+    color: var(--text-primary);
+    font-family: var(--rpt-font);
+    font-size: .83rem;
+    padding: .45rem .8rem;
+    outline: none;
+    transition: border-color var(--rpt-transition), box-shadow var(--rpt-transition);
+    min-width: 130px;
+}
+
+.rpt-input:focus {
+    border-color: var(--rpt-primary);
+    box-shadow: 0 0 0 3px var(--rpt-primary-lt);
+}
+
+.rpt-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: .45rem;
+    padding: .5rem 1rem;
+    border-radius: var(--rpt-radius-sm);
+    font-family: var(--rpt-font);
+    font-size: .82rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    transition: all var(--rpt-transition);
+    white-space: nowrap;
+    text-decoration: none;
+}
+
+.rpt-btn-primary {
+    background: var(--rpt-primary);
+    color: #fff;
+}
+
+.rpt-btn-primary:hover {
+    background: #324840;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(63, 89, 80, .3);
+}
+
+.rpt-btn-secondary {
+    background: var(--bg-card);
+    color: var(--text-primary);
+    border: 1.5px solid var(--border-color);
+}
+
+.rpt-btn-secondary:hover {
+    border-color: var(--rpt-primary);
+    color: var(--rpt-primary);
+}
+
+.rpt-btn-outline {
+    background: transparent;
+    color: var(--rpt-primary);
+    border: 1.5px solid var(--rpt-primary);
+}
+
+.rpt-btn-outline:hover {
+    background: var(--rpt-primary-lt);
+}
+
+.rpt-btn-ghost {
+    background: transparent;
+    color: var(--text-muted);
+    border: 1.5px solid transparent;
+}
+
+.rpt-btn-ghost:hover {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   5. بطاقات الإحصائيات
+   ═══════════════════════════════════════════════════════════════════ */
+.rpt-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--rpt-gap);
+    margin-bottom: 1.5rem;
+}
+
+.rpt-stat-card {
+    background: var(--bg-card);
+    border-radius: var(--rpt-radius);
+    padding: 1.1rem 1.2rem;
+    display: flex;
+    align-items: center;
+    gap: .85rem;
+    border: 1.5px solid var(--border-color);
+    border-right: 3px solid var(--card-accent, #228be6);
+    box-shadow: var(--rpt-shadow);
+    transition: transform var(--rpt-transition), box-shadow var(--rpt-transition);
+}
+
+.rpt-stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--rpt-shadow-hover);
+}
+
+.rpt-stat-card.skeleton {
+    min-height: 72px;
+    animation: rpt-pulse 1.4s ease-in-out infinite;
+    border-right-color: var(--border-color);
+    background: var(--bg-secondary);
+}
+
+.rpt-stat-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.35rem;
+    flex-shrink: 0;
+}
+
+.rpt-stat-body {
+    display: flex;
+    flex-direction: column;
+    gap: .2rem;
+    min-width: 0;
+}
+
+.rpt-stat-value {
+    font-size: 1.45rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1;
+}
+
+.rpt-stat-label {
+    font-size: .73rem;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   6. شريط البحث والفئات
+   ═══════════════════════════════════════════════════════════════════ */
+.rpt-search-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+    flex-wrap: wrap;
+}
+
+.rpt-search-wrap {
+    position: relative;
+    flex: 1;
+    min-width: 220px;
+    max-width: 340px;
+}
+
+.rpt-search-wrap svg {
+    position: absolute;
+    right: .75rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-muted);
+    pointer-events: none;
+}
+
+.rpt-search-input {
+    width: 100%;
+    background: var(--bg-card);
+    border: 1.5px solid var(--border-color);
+    border-radius: var(--rpt-radius-sm);
+    color: var(--text-primary);
+    font-family: var(--rpt-font);
+    font-size: .83rem;
+    padding: .5rem .75rem .5rem 2.2rem;
+    outline: none;
+    transition: border-color var(--rpt-transition), box-shadow var(--rpt-transition);
+}
+
+[dir="rtl"] .rpt-search-input {
+    padding: .5rem 2.2rem .5rem .75rem;
+}
+
+[dir="rtl"] .rpt-search-wrap svg {
+    right: auto;
+    left: .75rem;
+}
+
+.rpt-search-input:focus {
+    border-color: var(--rpt-primary);
+    box-shadow: 0 0 0 3px var(--rpt-primary-lt);
+}
+
+.rpt-category-tabs {
+    display: flex;
+    gap: .4rem;
+    flex-wrap: wrap;
+}
+
+.rpt-cat-tab {
+    padding: .4rem .85rem;
+    border-radius: 50px;
+    border: 1.5px solid var(--border-color);
+    background: transparent;
+    color: var(--text-secondary);
+    font-family: var(--rpt-font);
+    font-size: .78rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all var(--rpt-transition);
+}
+
+.rpt-cat-tab:hover {
+    border-color: var(--rpt-primary);
+    color: var(--rpt-primary);
+}
+
+.rpt-cat-tab.active {
+    background: var(--rpt-primary);
+    color: #fff;
+    border-color: var(--rpt-primary);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   7. شبكة بطاقات التقارير
+   ═══════════════════════════════════════════════════════════════════ */
+.rpt-cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: var(--rpt-gap);
+}
+
+.rpt-card {
+    background: var(--bg-card);
+    border-radius: var(--rpt-radius);
+    border: 1.5px solid var(--border-color);
+    overflow: hidden;
+    cursor: pointer;
+    transition: transform var(--rpt-transition), box-shadow var(--rpt-transition), border-color var(--rpt-transition);
+    display: flex;
+    flex-direction: column;
+    box-shadow: var(--rpt-shadow);
+}
+
+.rpt-card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--rpt-shadow-hover);
+    border-color: var(--rpt-primary);
+}
+
+.rpt-card-header {
+    padding: 1.4rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: relative;
+    overflow: hidden;
+}
+
+.rpt-card-header::after {
+    content: '';
+    position: absolute;
+    bottom: -20px;
+    left: -20px;
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, .12);
+}
+
+.rpt-card-icon {
+    font-size: 2rem;
+    filter: drop-shadow(0 2px 6px rgba(0, 0, 0, .25));
+}
+
+.rpt-card-badge {
+    font-size: .68rem;
+    font-weight: 700;
+    padding: .25rem .7rem;
+    border-radius: 50px;
+    background: rgba(255, 255, 255, .25);
+    color: #fff;
+    backdrop-filter: blur(4px);
+}
+
+.rpt-card-body {
+    padding: 1rem 1.1rem .8rem;
+    flex: 1;
+}
+
+.rpt-card-title {
+    font-size: .97rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0 0 .35rem;
+    line-height: 1.3;
+}
+
+.rpt-card-desc {
+    font-size: .76rem;
+    color: var(--text-muted);
+    line-height: 1.6;
+    margin: 0;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.rpt-card-meta {
+    display: flex;
+    gap: .6rem;
+    margin-top: .6rem;
+    flex-wrap: wrap;
+}
+
+.rpt-col-count,
+.rpt-has-chart {
+    font-size: .68rem;
+    font-weight: 600;
+    padding: .2rem .6rem;
+    border-radius: 4px;
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+}
+
+.rpt-card-footer {
+    padding: .8rem 1.1rem;
+    border-top: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .5rem;
+}
+
+.rpt-quick-export {
+    display: flex;
+    gap: .35rem;
+}
+
+.rpt-qe-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    padding: .3rem .65rem;
+    border-radius: 5px;
+    border: 1.5px solid var(--border-color);
+    background: transparent;
+    color: var(--text-muted);
+    font-family: var(--rpt-font);
+    font-size: .72rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all var(--rpt-transition);
+}
+
+.rpt-qe-btn:hover {
+    border-color: var(--rpt-primary);
+    color: var(--rpt-primary);
+    background: var(--rpt-primary-lt);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   8. مشاهد التقرير
+   ═══════════════════════════════════════════════════════════════════ */
+.rpt-viewer {
+    margin-top: .5rem;
+}
+
+.rpt-viewer-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 1.1rem;
+}
+
+.rpt-viewer-topbar {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+    background: var(--bg-card);
+    border-radius: var(--rpt-radius);
+    border: 1.5px solid var(--border-color);
+    padding: .9rem 1.2rem;
+    box-shadow: var(--rpt-shadow);
+}
+
+.rpt-back-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    padding: .5rem .9rem;
+    border-radius: var(--rpt-radius-sm);
+    border: 1.5px solid var(--border-color);
+    background: transparent;
+    color: var(--text-secondary);
+    font-family: var(--rpt-font);
+    font-size: .8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all var(--rpt-transition);
+    flex-shrink: 0;
+}
+
+.rpt-back-btn:hover {
+    border-color: var(--rpt-primary);
+    color: var(--rpt-primary);
+}
+
+.rpt-viewer-title {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    flex: 1;
+    min-width: 0;
+}
+
+.rpt-viewer-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.3rem;
+    flex-shrink: 0;
+}
+
+.rpt-viewer-title h2 {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.rpt-viewer-title p {
+    font-size: .74rem;
+    color: var(--text-muted);
+    margin: .1rem 0 0;
+}
+
+.rpt-viewer-actions {
+    display: flex;
+    gap: .5rem;
+    flex-wrap: wrap;
+}
+
+/* ── لوحة الفلاتر ── */
+.rpt-filters-panel {
+    background: var(--bg-card);
+    border-radius: var(--rpt-radius);
+    border: 1.5px solid var(--border-color);
+    padding: 1rem 1.2rem;
+    box-shadow: var(--rpt-shadow);
+}
+
+.rpt-filters-row {
+    display: flex;
+    align-items: flex-end;
+    gap: .75rem;
+    flex-wrap: wrap;
+}
+
+.rpt-filter-item {
+    display: flex;
+    flex-direction: column;
+    gap: .25rem;
+}
+
+.rpt-filter-item label {
+    font-size: .7rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    letter-spacing: .02em;
+}
+
+.rpt-filter-search {
+    flex: 1;
+    min-width: 200px;
+}
+
+.rpt-filter-search .rpt-search-wrap {
+    max-width: 100%;
+}
+
+.rpt-filter-actions {
+    display: flex;
+    gap: .5rem;
+    margin-right: auto;
+}
+
+[dir="rtl"] .rpt-filter-actions {
+    margin-right: 0;
+    margin-left: auto;
+}
+
+/* ── محدد الأعمدة ── */
+.rpt-columns-selector {
+    display: flex;
+    align-items: flex-start;
+    gap: .6rem;
+    margin-top: .9rem;
+    padding-top: .9rem;
+    border-top: 1px dashed var(--border-color);
+    flex-wrap: wrap;
+}
+
+.rpt-cs-label {
+    font-size: .73rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: .3rem;
+    white-space: nowrap;
+    padding-top: .25rem;
+    flex-shrink: 0;
+}
+
+.rpt-cs-pills {
+    display: flex;
+    gap: .4rem;
+    flex-wrap: wrap;
+}
+
+.rpt-cs-pill {
+    padding: .25rem .65rem;
+    border-radius: 50px;
+    border: 1.5px solid var(--border-color);
+    background: transparent;
+    color: var(--text-muted);
+    font-family: var(--rpt-font);
+    font-size: .72rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all var(--rpt-transition);
+    user-select: none;
+}
+
+.rpt-cs-pill.active {
+    background: var(--rpt-primary);
+    color: #fff;
+    border-color: var(--rpt-primary);
+}
+
+.rpt-cs-pill:hover:not(.active) {
+    border-color: var(--rpt-primary);
+    color: var(--rpt-primary);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   9. إحصائيات التقرير
+   ═══════════════════════════════════════════════════════════════════ */
+.rpt-report-stats {
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: .85rem;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   زر التمثيل البياني — أسفل الجدول
+   ═══════════════════════════════════════════════════════════════════ */
+.rpt-chart-toggle-bar {
+    display: flex;
+    justify-content: center;
+    padding: .75rem 1rem;
+    border-top: 1px dashed var(--border-color);
+    background: var(--bg-secondary);
+}
+
+.rpt-chart-toggle-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: .5rem;
+    padding: .5rem 1.4rem;
+    border-radius: 50px;
+    border: 1.5px solid var(--border-color);
+    background: var(--bg-card);
+    color: var(--text-secondary);
+    font-family: var(--rpt-font);
+    font-size: .8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all var(--rpt-transition);
+}
+
+.rpt-chart-toggle-btn:hover {
+    border-color: var(--rpt-primary);
+    color: var(--rpt-primary);
+    background: var(--rpt-primary-lt);
+}
+
+.rpt-chart-toggle-btn.active {
+    background: var(--rpt-primary-lt);
+    color: var(--rpt-primary);
+    border-color: var(--rpt-primary);
+}
+
+/* ── قسم الرسم البياني (بعد الجدول) ── */
+.rpt-chart-section {
+    background: var(--bg-card);
+    border-radius: var(--rpt-radius);
+    border: 1.5px solid var(--border-color);
+    padding: 1.1rem 1.2rem;
+    box-shadow: var(--rpt-shadow);
+    animation: rpt-chart-slide .25s ease;
+}
+
+@keyframes rpt-chart-slide {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+
+
+.rpt-chart-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+}
+
+.rpt-chart-header h3 {
+    font-size: .95rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.rpt-chart-types {
+    display: flex;
+    gap: .35rem;
+}
+
+.rpt-ct-btn {
+    padding: .3rem .75rem;
+    border-radius: 5px;
+    border: 1.5px solid var(--border-color);
+    background: transparent;
+    color: var(--text-muted);
+    font-family: var(--rpt-font);
+    font-size: .76rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all var(--rpt-transition);
+}
+
+.rpt-ct-btn.active {
+    background: var(--rpt-primary);
+    color: #fff;
+    border-color: var(--rpt-primary);
+}
+
+.rpt-ct-btn:hover:not(.active) {
+    border-color: var(--rpt-primary);
+    color: var(--rpt-primary);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   11. قسم الجدول
+   ═══════════════════════════════════════════════════════════════════ */
+.rpt-table-section {
+    background: var(--bg-card);
+    border-radius: var(--rpt-radius);
+    border: 1.5px solid var(--border-color);
+    overflow: hidden;
+    box-shadow: var(--rpt-shadow);
+}
+
+.rpt-table-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: .85rem 1.2rem;
+    border-bottom: 1px solid var(--border-color);
+    gap: .75rem;
+    flex-wrap: wrap;
+}
+
+.rpt-row-count {
+    font-size: .8rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.rpt-sort-wrap {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+}
+
+.rpt-sort-wrap label {
+    font-size: .75rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.rpt-sort-wrap .rpt-input {
+    min-width: 150px;
+    padding: .35rem .7rem;
+}
+
+.rpt-table-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.rpt-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: .82rem;
+    font-family: var(--rpt-font);
+    min-width: 600px;
+}
+
+.rpt-table thead th {
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    font-weight: 700;
+    font-size: .76rem;
+    text-transform: uppercase;
+    letter-spacing: .02em;
+    padding: .7rem .9rem;
+    text-align: right;
+    border-bottom: 2px solid var(--border-color);
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+    transition: background var(--rpt-transition);
+}
+
+.rpt-table thead th:hover {
+    background: var(--rpt-primary-lt);
+    color: var(--rpt-primary);
+}
+
+.rpt-sort-icon {
+    font-size: .65rem;
+    opacity: .4;
+    margin-right: .3rem;
+}
+
+.rpt-th-num {
+    width: 40px;
+    text-align: center !important;
+    cursor: default !important;
+}
+
+.rpt-th-num:hover {
+    background: var(--bg-secondary) !important;
+    color: var(--text-secondary) !important;
+}
+
+.rpt-table tbody tr {
+    border-bottom: 1px solid var(--border-color);
+    transition: background var(--rpt-transition);
+}
+
+.rpt-table tbody tr:hover {
+    background: var(--bg-secondary);
+}
+
+.rpt-table tbody tr:last-child {
+    border-bottom: none;
+}
+
+.rpt-table tbody td {
+    padding: .65rem .9rem;
+    color: var(--text-primary);
+    vertical-align: middle;
+    text-align: right;
+}
+
+.rpt-td-num {
+    text-align: center !important;
+    color: var(--text-muted) !important;
+    font-size: .75rem !important;
+    font-weight: 600;
+}
+
+.rpt-table tfoot .rpt-tfoot {
+    background: var(--rpt-primary-lt);
+}
+
+.rpt-table tfoot td {
+    padding: .7rem .9rem;
+    font-size: .78rem;
+    font-weight: 600;
+    color: var(--rpt-primary);
+    border-top: 2px solid var(--border-color);
+}
+
+/* تنسيقات خلايا خاصة */
+.rpt-money {
+    font-weight: 700;
+    color: #2f9e44;
+    font-variant-numeric: tabular-nums;
+}
+
+[data-theme="light"] .rpt-money {
+    color: #2a6b3c;
+}
+
+.rpt-badge {
+    display: inline-block;
+    padding: .22rem .65rem;
+    border-radius: 50px;
+    font-size: .72rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.rpt-badge-success {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.rpt-badge-danger {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.rpt-badge-warning {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.rpt-badge-info {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+.rpt-badge-secondary {
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+}
+
+[data-theme="light"] .rpt-badge-success {
+    background: #f0fdf4;
+}
+
+[data-theme="light"] .rpt-badge-danger {
+    background: #fef2f2;
+}
+
+[data-theme="light"] .rpt-badge-warning {
+    background: #fffbeb;
+}
+
+[data-theme="light"] .rpt-badge-info {
+    background: #eff6ff;
+}
+
+.rpt-null {
+    color: var(--text-muted);
+    opacity: .5;
+}
+
+.rpt-percent {
+    font-weight: 700;
+    color: #7950f2;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   12. حالات الفراغ والتحميل
+   ═══════════════════════════════════════════════════════════════════ */
+.rpt-loading-state,
+.rpt-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: .75rem;
+    padding: 3rem;
+    text-align: center;
+    color: var(--text-muted);
+}
+
+.rpt-empty-icon {
+    font-size: 2.5rem;
+    opacity: .5;
+}
+
+.rpt-empty-state h4 {
+    font-size: .95rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+    margin: 0;
+}
+
+.rpt-empty-state p {
+    font-size: .8rem;
+    margin: 0;
+    max-width: 280px;
+    line-height: 1.6;
+}
+
+.rpt-spinner {
+    width: 36px;
+    height: 36px;
+    border: 3px solid var(--border-color);
+    border-top-color: var(--rpt-primary);
+    border-radius: 50%;
+    animation: rpt-spin 0.7s linear infinite;
+}
+
+@keyframes rpt-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes rpt-pulse {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: .4;
+    }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   13. Pagination
+   ═══════════════════════════════════════════════════════════════════ */
+.rpt-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: .35rem;
+    padding: .85rem;
+    border-top: 1px solid var(--border-color);
+}
+
+.rpt-pag-btn {
+    min-width: 34px;
+    height: 34px;
+    border-radius: var(--rpt-radius-sm);
+    border: 1.5px solid var(--border-color);
+    background: transparent;
+    color: var(--text-secondary);
+    font-family: var(--rpt-font);
+    font-size: .8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all var(--rpt-transition);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.rpt-pag-btn:hover:not(:disabled) {
+    border-color: var(--rpt-primary);
+    color: var(--rpt-primary);
+}
+
+.rpt-pag-btn.active {
+    background: var(--rpt-primary);
+    color: #fff;
+    border-color: var(--rpt-primary);
+}
+
+.rpt-pag-btn:disabled {
+    opacity: .35;
+    cursor: not-allowed;
+}
+
+.rpt-pag-info {
+    font-size: .75rem;
+    color: var(--text-muted);
+    margin-right: .5rem;
+    white-space: nowrap;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   14. Modal التصدير
+   ═══════════════════════════════════════════════════════════════════ */
+.rpt-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, .55);
+    backdrop-filter: blur(4px);
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+}
+
+.rpt-modal {
+    background: var(--bg-card);
+    border-radius: var(--rpt-radius-lg);
+    border: 1.5px solid var(--border-color);
+    width: 100%;
+    max-width: 520px;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, .35);
+    overflow: hidden;
+    animation: rpt-modal-in .22s cubic-bezier(.34, 1.56, .64, 1);
+}
+
+@keyframes rpt-modal-in {
+    from {
+        opacity: 0;
+        transform: scale(.92) translateY(12px);
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+.rpt-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1.1rem 1.4rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.rpt-modal-header h3 {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.rpt-modal-close {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    border: none;
+    background: var(--bg-secondary);
+    color: var(--text-muted);
+    font-size: 1rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all var(--rpt-transition);
+}
+
+.rpt-modal-close:hover {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+.rpt-modal-body {
+    padding: 1.2rem 1.4rem;
+}
+
+.rpt-export-options h4 {
+    font-size: .88rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+    margin: 0 0 .85rem;
+}
+
+.rpt-export-types {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: .75rem;
+    margin-bottom: 1rem;
+}
+
+.rpt-export-type {
+    border: 2px solid var(--border-color);
+    border-radius: var(--rpt-radius);
+    padding: 1rem;
+    cursor: pointer;
+    transition: all var(--rpt-transition);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: .5rem;
+    text-align: center;
+}
+
+.rpt-export-type:hover {
+    border-color: var(--rpt-primary);
+}
+
+.rpt-export-type.active {
+    border-color: var(--rpt-primary);
+    background: var(--rpt-primary-lt);
+}
+
+.rpt-et-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.rpt-et-label {
+    font-size: .85rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.rpt-et-desc {
+    font-size: .71rem;
+    color: var(--text-muted);
+}
+
+.rpt-export-opts {
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+    margin-bottom: 1.1rem;
+}
+
+.rpt-opt-check {
+    display: flex;
+    align-items: center;
+    gap: .55rem;
+    font-size: .82rem;
+    color: var(--text-primary);
+    cursor: pointer;
+}
+
+.rpt-opt-check input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--rpt-primary);
+    cursor: pointer;
+}
+
+.rpt-export-footer {
+    display: flex;
+    gap: .6rem;
+    justify-content: flex-start;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   15. معاينة الطباعة
+   ═══════════════════════════════════════════════════════════════════ */
+.rpt-preview-overlay {
+    position: fixed;
+    inset: 0;
+    background: #1a1a2e;
+    z-index: 10001;
+    display: flex;
+    flex-direction: column;
+}
+
+.rpt-preview-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: .8rem 1.5rem;
+    background: #0f3460;
+    color: #fff;
+    font-family: var(--rpt-font);
+    font-size: .9rem;
+    font-weight: 600;
+}
+
+.rpt-preview-toolbar div {
+    display: flex;
+    gap: .5rem;
+}
+
+.rpt-preview-frame {
+    flex: 1;
+    overflow: auto;
+    padding: 2rem;
+    display: flex;
+    justify-content: center;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   16. Responsive — Tablet
+   ═══════════════════════════════════════════════════════════════════ */
+@media (max-width: 1024px) {
+    .rpt-stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .rpt-cards-grid {
+        grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    }
+}
+
+@media (max-width: 768px) {
+    .rpt-wrapper {
+        padding: 1rem .85rem;
+    }
+
+    .rpt-topbar {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .rpt-topbar-left {
+        width: 100%;
+    }
+
+    .rpt-global-filter {
+        width: 100%;
+    }
+
+    .rpt-filter-group {
+        flex: 1;
+    }
+
+    .rpt-filter-group .rpt-input {
+        width: 100%;
+        min-width: unset;
+    }
+
+    .rpt-stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: .75rem;
+    }
+
+    .rpt-stat-value {
+        font-size: 1.2rem;
+    }
+
+    .rpt-search-bar {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .rpt-search-wrap {
+        max-width: 100%;
+    }
+
+    .rpt-cards-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .rpt-viewer-topbar {
+        flex-wrap: wrap;
+        gap: .75rem;
+    }
+
+    .rpt-viewer-actions {
+        width: 100%;
+        justify-content: flex-end;
+    }
+
+    .rpt-filters-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .rpt-filter-actions {
+        width: 100%;
+        flex-direction: row;
+    }
+
+    .rpt-filter-actions .rpt-btn {
+        flex: 1;
+        justify-content: center;
+    }
+
+    .rpt-export-types {
+        grid-template-columns: 1fr;
+    }
+
+    .rpt-table {
+        font-size: .76rem;
+    }
+
+    .rpt-table thead th,
+    .rpt-table tbody td {
+        padding: .5rem .65rem;
+    }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   17. Responsive — Mobile
+   ═══════════════════════════════════════════════════════════════════ */
+@media (max-width: 480px) {
+    .rpt-stats-grid {
+        grid-template-columns: 1fr 1fr;
+        gap: .6rem;
+    }
+
+    .rpt-stat-icon {
+        width: 36px;
+        height: 36px;
+        font-size: 1.1rem;
+    }
+
+    .rpt-stat-value {
+        font-size: 1.05rem;
+    }
+
+    .rpt-category-tabs {
+        gap: .3rem;
+    }
+
+    .rpt-cat-tab {
+        padding: .35rem .65rem;
+        font-size: .72rem;
+    }
+
+    .rpt-card-header {
+        padding: 1.1rem;
+    }
+
+    .rpt-card-icon {
+        font-size: 1.6rem;
+    }
+
+    .rpt-card-body {
+        padding: .8rem .9rem .6rem;
+    }
+
+    .rpt-card-footer {
+        padding: .65rem .9rem;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: .5rem;
+    }
+
+    .rpt-quick-export {
+        width: 100%;
+        justify-content: flex-start;
+    }
+
+    .rpt-qe-btn {
+        flex: 1;
+        justify-content: center;
+    }
+
+    .rpt-modal {
+        max-width: 100%;
+        margin: .5rem;
+        border-radius: var(--rpt-radius);
+    }
+
+    .rpt-viewer-topbar {
+        padding: .75rem .9rem;
+    }
+
+    .rpt-back-btn {
+        padding: .4rem .75rem;
+        font-size: .76rem;
+    }
+
+    .rpt-viewer-icon {
+        width: 34px;
+        height: 34px;
+        font-size: 1.1rem;
+    }
+
+    .rpt-viewer-title h2 {
+        font-size: .9rem;
+    }
+
+    .rpt-columns-selector {
+        flex-direction: column;
+    }
+
+    .rpt-cs-pills {
+        gap: .3rem;
+    }
+
+    .rpt-cs-pill {
+        font-size: .68rem;
+        padding: .2rem .55rem;
+    }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   18. أنماط الطباعة
+   ═══════════════════════════════════════════════════════════════════ */
+@media print {
+
+    /* إخفاء عناصر لا تُطبع */
+    .sidebar,
+    .sidebar-toggle,
+    .mobile-menu-btn,
+    .rpt-topbar,
+    .rpt-search-bar,
+    .rpt-cards-grid,
+    .rpt-filters-panel,
+    .rpt-viewer-topbar .rpt-back-btn,
+    .rpt-viewer-actions,
+    .rpt-chart-section,
+    .rpt-pagination,
+    .rpt-sort-wrap,
+    .rpt-table-header .rpt-sort-wrap,
+    .rpt-qe-btn,
+    .rpt-global-filter,
+    .no-print,
+    .toast,
+    .modal-overlay {
+        display: none !important;
+    }
+
+    /* ضبط الصفحة */
+    @page {
+        size: A4 portrait;
+        margin: 15mm 12mm;
+    }
+
+    body,
+    .rpt-wrapper {
+        padding: 0 !important;
+        background: #fff !important;
+        color: #000 !important;
+        direction: rtl;
+    }
+
+    /* هيدر الطباعة */
+    .rpt-viewer-topbar {
+        display: block !important;
+        border: none !important;
+        box-shadow: none !important;
+        padding: 0 !important;
+        margin-bottom: 12px;
+        background: transparent !important;
+    }
+
+    .rpt-viewer-title h2 {
+        font-size: 14pt !important;
+    }
+
+    .rpt-viewer-title p {
+        font-size: 10pt !important;
+    }
+
+    /* بطاقات الإحصائيات */
+    .rpt-report-stats {
+        display: grid !important;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 8px;
+        margin-bottom: 10px;
+    }
+
+    .rpt-stat-card {
+        border: 1px solid #ddd !important;
+        box-shadow: none !important;
+        break-inside: avoid;
+    }
+
+    /* الجدول */
+    .rpt-table-section {
+        border: 1px solid #ddd !important;
+        box-shadow: none !important;
+    }
+
+    .rpt-table {
+        font-size: 9pt;
+        width: 100%;
+    }
+
+    .rpt-table thead th {
+        background: #3F5950 !important;
+        color: #fff !important;
+        font-size: 8.5pt;
+    }
+
+    .rpt-table tbody td {
+        padding: 5px 7px;
+        font-size: 9pt;
+    }
+
+    .rpt-table tbody tr:nth-child(even) {
+        background: #f9f9f9 !important;
+    }
+
+    /* منع كسر الصفوف */
+    .rpt-table tbody tr {
+        break-inside: avoid;
+    }
+
+    .rpt-table thead {
+        display: table-header-group;
+    }
+
+    .rpt-table tfoot {
+        display: table-footer-group;
+    }
+
+    /* فوتر الطباعة */
+    .rpt-table-section::after {
+        content: 'نظام إدارة معاملات القطاع المالي © ' attr(data-year);
+        display: block;
+        font-size: 8pt;
+        color: #888;
+        text-align: center;
+        padding: 6px;
+        border-top: 1px solid #ddd;
+    }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   19. تعديلات الوضع الليلي
+   ═══════════════════════════════════════════════════════════════════ */
+[data-theme="dark"] .rpt-badge-success {
+    background: #15532e;
+    color: #86efac;
+}
+
+[data-theme="dark"] .rpt-badge-danger {
+    background: #7f1d1d;
+    color: #fca5a5;
+}
+
+[data-theme="dark"] .rpt-badge-warning {
+    background: #78350f;
+    color: #fcd34d;
+}
+
+[data-theme="dark"] .rpt-badge-info {
+    background: #1e3a5f;
+    color: #93c5fd;
+}
+
+[data-theme="dark"] .rpt-badge-secondary {
+    background: #374151;
+    color: #d1d5db;
+}
+
+[data-theme="dark"] .rpt-money {
+    color: #86efac;
+}

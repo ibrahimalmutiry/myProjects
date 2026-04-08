@@ -1,0 +1,1078 @@
+/**
+ * rtl-ltr.css — الحل الشامل لدعم RTL/LTR
+ * ============================================================
+ * المبدأ: [dir="rtl"] للعربية | [dir="ltr"] للإنجليزية
+ * يُحمَّل بعد sidebar.css في index.php
+ * ============================================================
+ */
+
+/* ============================================================
+   RESET: تجاوز أي text-align ثابت في الملفات الأخرى
+   ============================================================ */
+
+[dir="rtl"] *:not(input[type="number"]):not(input[type="date"]):not(input[type="time"]):not(input[type="email"]):not(.amount):not(.currency):not([class*="amount"]):not(code):not(pre) {
+    text-align: inherit;
+}
+
+/* ============================================================
+   1. SIDEBAR — الأكثر تأثيراً
+   ============================================================ */
+
+/* RTL (العربية) — السايدبار يمين */
+[dir="rtl"] .sidebar {
+    right: 0 !important;
+    left: auto !important;
+    border-left: 1px solid var(--sidebar-border) !important;
+    border-right: none !important;
+    box-shadow: -4px 0 24px rgba(64, 43, 41, 0.1) !important;
+}
+
+[dir="rtl"] .main-content {
+    margin-right: var(--sidebar-width) !important;
+    margin-left: 0 !important;
+}
+
+[dir="rtl"] .sidebar.collapsed~.main-content,
+[dir="rtl"] body.sidebar-collapsed .main-content {
+    margin-right: var(--sidebar-collapsed) !important;
+    margin-left: 0 !important;
+}
+
+[dir="rtl"] .sidebar-toggle {
+    right: calc(var(--sidebar-width) - 14px) !important;
+    left: auto !important;
+}
+
+[dir="rtl"] .sidebar.collapsed~.sidebar-toggle {
+    right: calc(var(--sidebar-collapsed) - 14px) !important;
+}
+
+/* LTR (الإنجليزية) — السايدبار يسار */
+[dir="ltr"] .sidebar {
+    left: 0 !important;
+    right: auto !important;
+    border-right: 1px solid var(--sidebar-border) !important;
+    border-left: none !important;
+    box-shadow: 4px 0 24px rgba(64, 43, 41, 0.1) !important;
+}
+
+[dir="ltr"] .main-content {
+    margin-left: var(--sidebar-width) !important;
+    margin-right: 0 !important;
+}
+
+[dir="ltr"] .sidebar.collapsed~.main-content,
+[dir="ltr"] body.sidebar-collapsed .main-content {
+    margin-left: var(--sidebar-collapsed) !important;
+    margin-right: 0 !important;
+}
+
+[dir="ltr"] .sidebar-toggle {
+    left: calc(var(--sidebar-width) - 14px) !important;
+    right: auto !important;
+}
+
+[dir="ltr"] .sidebar.collapsed~.sidebar-toggle {
+    left: calc(var(--sidebar-collapsed) - 14px) !important;
+}
+
+/* Nav items */
+[dir="rtl"] .nav-tab {
+    text-align: right;
+}
+
+[dir="ltr"] .nav-tab {
+    text-align: left;
+}
+
+[dir="rtl"] .nav-chevron {
+    margin-right: auto;
+    margin-left: 0;
+}
+
+[dir="ltr"] .nav-chevron {
+    margin-left: auto;
+    margin-right: 0;
+}
+
+[dir="rtl"] .nav-label {
+    text-align: right;
+}
+
+[dir="ltr"] .nav-label {
+    text-align: left;
+}
+
+/* Sidebar tooltips */
+[dir="rtl"] .sidebar.collapsed .nav-tab[data-tooltip]::after {
+    right: calc(100% + 12px);
+    left: auto;
+}
+
+[dir="ltr"] .sidebar.collapsed .nav-tab[data-tooltip]::after {
+    left: calc(100% + 12px);
+    right: auto;
+}
+
+[dir="rtl"] .sidebar.collapsed .nav-badge {
+    left: 6px;
+    right: auto;
+}
+
+[dir="ltr"] .sidebar.collapsed .nav-badge {
+    right: 6px;
+    left: auto;
+}
+
+/* Mobile button */
+[dir="rtl"] .mobile-menu-btn {
+    right: 1rem;
+    left: auto;
+}
+
+[dir="ltr"] .mobile-menu-btn {
+    left: 1rem;
+    right: auto;
+}
+
+@media (max-width: 480px) {
+    [dir="rtl"] .sidebar {
+        transform: translateX(100%);
+        right: 0;
+        left: auto;
+    }
+
+    [dir="ltr"] .sidebar {
+        transform: translateX(-100%);
+        left: 0;
+        right: auto;
+    }
+
+    [dir="rtl"] .sidebar.mobile-open {
+        transform: translateX(0);
+    }
+
+    [dir="ltr"] .sidebar.mobile-open {
+        transform: translateX(0);
+    }
+
+    [dir="rtl"] .main-content {
+        margin-right: 0 !important;
+    }
+
+    [dir="ltr"] .main-content {
+        margin-left: 0 !important;
+    }
+}
+
+/* ============================================================
+   2. GLOBAL TEXT DIRECTION
+   ============================================================ */
+
+[dir="rtl"] body {
+    text-align: right;
+}
+
+[dir="ltr"] body {
+    text-align: left;
+}
+
+/* Headings */
+[dir="rtl"] h1,
+[dir="rtl"] h2,
+[dir="rtl"] h3,
+[dir="rtl"] h4,
+[dir="rtl"] h5,
+[dir="rtl"] h6 {
+    text-align: right;
+}
+
+[dir="ltr"] h1,
+[dir="ltr"] h2,
+[dir="ltr"] h3,
+[dir="ltr"] h4,
+[dir="ltr"] h5,
+[dir="ltr"] h6 {
+    text-align: left;
+}
+
+/* Paragraphs */
+[dir="rtl"] p {
+    text-align: right;
+}
+
+[dir="ltr"] p {
+    text-align: left;
+}
+
+/* ============================================================
+   3. TYPOGRAPHY — الخطوط
+   ============================================================ */
+
+[dir="rtl"] body,
+[dir="rtl"] * {
+    font-family: 'IBM Plex Sans Arabic', 'Cairo', 'Tajawal', 'Segoe UI', sans-serif !important;
+}
+
+[dir="ltr"] body,
+[dir="ltr"] * {
+    font-family: 'Inter', 'Segoe UI', system-ui, sans-serif !important;
+}
+
+/* استثناءات */
+.sar-symbol {
+    font-family: 'saudi_riyal' !important;
+}
+
+code,
+pre,
+.monospace {
+    font-family: 'Courier New', monospace !important;
+}
+
+input[type="number"],
+input[type="date"],
+input[type="time"],
+input[type="datetime-local"],
+input[type="email"],
+input[type="tel"] {
+    font-family: 'Inter', 'Segoe UI', sans-serif !important;
+}
+
+/* ============================================================
+   4. TABLES — الجداول
+   ============================================================ */
+
+[dir="rtl"] table {
+    direction: rtl;
+}
+
+[dir="ltr"] table {
+    direction: ltr;
+}
+
+[dir="rtl"] th {
+    text-align: right;
+}
+
+[dir="ltr"] th {
+    text-align: left;
+}
+
+[dir="rtl"] td {
+    text-align: right;
+}
+
+[dir="ltr"] td {
+    text-align: left;
+}
+
+/* آخر عمود (إجراءات) — دائماً center */
+[dir="rtl"] td:last-child:has(button),
+[dir="ltr"] td:last-child:has(button) {
+    text-align: center;
+}
+
+/* Responsive scroll */
+[dir="rtl"] .table-responsive {
+    overflow-x: auto;
+    direction: rtl;
+}
+
+[dir="ltr"] .table-responsive {
+    overflow-x: auto;
+    direction: ltr;
+}
+
+/* Sticky column */
+[dir="rtl"] .col-sticky {
+    right: 0;
+    left: auto;
+}
+
+[dir="ltr"] .col-sticky {
+    left: 0;
+    right: auto;
+}
+
+/* ============================================================
+   5. FORMS — النماذج
+   ============================================================ */
+
+[dir="rtl"] label,
+[dir="rtl"] .form-label {
+    text-align: right;
+    /* display: block; */
+}
+
+[dir="ltr"] label,
+[dir="ltr"] .form-label {
+    text-align: left;
+    display: block;
+}
+
+/* Text inputs */
+[dir="rtl"] input[type="text"],
+[dir="rtl"] input[type="password"],
+[dir="rtl"] input[type="search"],
+[dir="rtl"] textarea,
+[dir="rtl"] select {
+    direction: rtl;
+    text-align: right;
+}
+
+[dir="ltr"] input[type="text"],
+[dir="ltr"] input[type="password"],
+[dir="ltr"] input[type="search"],
+[dir="ltr"] textarea,
+[dir="ltr"] select {
+    direction: ltr;
+    text-align: left;
+}
+
+/* Numeric inputs — always LTR */
+input[type="number"],
+input[type="date"],
+input[type="time"],
+input[type="datetime-local"],
+input[type="email"],
+input[type="tel"] {
+    direction: ltr !important;
+}
+
+[dir="rtl"] input[type="number"],
+[dir="rtl"] input[type="date"],
+[dir="rtl"] input[type="time"],
+[dir="rtl"] input[type="email"],
+[dir="rtl"] input[type="tel"] {
+    text-align: right;
+}
+
+/* Select arrow */
+[dir="rtl"] select {
+    background-position: left 0.75rem center !important;
+    padding-left: 2rem !important;
+    padding-right: 0.75rem !important;
+}
+
+[dir="ltr"] select {
+    background-position: right 0.75rem center !important;
+    padding-right: 2rem !important;
+    padding-left: 0.75rem !important;
+}
+
+/* Search icon */
+[dir="rtl"] .search-icon,
+[dir="rtl"] .input-icon-start {
+    right: 0.75rem;
+    left: auto;
+}
+
+[dir="ltr"] .search-icon,
+[dir="ltr"] .input-icon-start {
+    left: 0.75rem;
+    right: auto;
+}
+
+/* ============================================================
+   6. MODALS
+   ============================================================ */
+
+[dir="rtl"] .modal,
+[dir="rtl"] .modal-body {
+    text-align: right;
+    direction: rtl;
+}
+
+[dir="ltr"] .modal,
+[dir="ltr"] .modal-body {
+    text-align: left;
+    direction: ltr;
+}
+
+[dir="rtl"] .modal-header {
+    flex-direction: row;
+}
+
+[dir="ltr"] .modal-header {
+    flex-direction: row;
+}
+
+[dir="rtl"] .modal-close {
+    margin-right: auto;
+    margin-left: 0;
+    order: -1;
+}
+
+[dir="ltr"] .modal-close {
+    margin-left: auto;
+    margin-right: 0;
+}
+
+[dir="rtl"] .modal-footer,
+[dir="rtl"] .form-actions {
+    justify-content: flex-start;
+}
+
+[dir="ltr"] .modal-footer,
+[dir="ltr"] .form-actions {
+    justify-content: flex-end;
+}
+
+/* ============================================================
+   7. DROPDOWNS
+   ============================================================ */
+
+[dir="rtl"] .dropdown-menu,
+[dir="rtl"] .ss-dropdown,
+[dir="rtl"] .searchable-select .options-list {
+    right: 0;
+    left: auto;
+    text-align: right;
+    direction: rtl;
+}
+
+[dir="ltr"] .dropdown-menu,
+[dir="ltr"] .ss-dropdown,
+[dir="ltr"] .searchable-select .options-list {
+    left: 0;
+    right: auto;
+    text-align: left;
+    direction: ltr;
+}
+
+[dir="rtl"] .ss-option,
+[dir="rtl"] .dropdown-item {
+    text-align: right;
+}
+
+[dir="ltr"] .ss-option,
+[dir="ltr"] .dropdown-item {
+    text-align: left;
+}
+
+/* ============================================================
+   8. CARDS & PANELS
+   ============================================================ */
+
+[dir="rtl"] .card,
+[dir="rtl"] .panel,
+[dir="rtl"] .dash-panel,
+[dir="rtl"] .kpi-card {
+    text-align: right;
+}
+
+[dir="ltr"] .card,
+[dir="ltr"] .panel,
+[dir="ltr"] .dash-panel,
+[dir="ltr"] .kpi-card {
+    text-align: left;
+}
+
+/* Panel header — "عرض الكل" arrow */
+[dir="rtl"] .dash-panel-link svg,
+[dir="rtl"] .view-all-btn svg,
+[dir="rtl"] .dash-row-arrow {
+    transform: scaleX(1);
+}
+
+[dir="ltr"] .dash-panel-link svg,
+[dir="ltr"] .view-all-btn svg,
+[dir="ltr"] .dash-row-arrow {
+    transform: scaleX(-1);
+}
+
+/* Row indicator bar */
+[dir="rtl"] .dash-row-indicator {
+    border-radius: 0 4px 4px 0;
+    margin-left: 0.5rem;
+    margin-right: 0;
+}
+
+[dir="ltr"] .dash-row-indicator {
+    border-radius: 4px 0 0 4px;
+    margin-right: 0.5rem;
+    margin-left: 0;
+}
+
+/* Status indicators (border) */
+[dir="rtl"] .status-indicator,
+[dir="rtl"] [class*="stat-"]:not(.stat-label):not(.stat-number) {
+    border-right: 3px solid currentColor;
+    border-left: none;
+    padding-right: 0.75rem;
+    padding-left: 0;
+}
+
+[dir="ltr"] .status-indicator,
+[dir="ltr"] [class*="stat-"]:not(.stat-label):not(.stat-number) {
+    border-left: 3px solid currentColor;
+    border-right: none;
+    padding-left: 0.75rem;
+    padding-right: 0;
+}
+
+/* ============================================================
+   9. WORKFLOW / TIMELINE — المشكلة الأكثر تعقيداً
+   ============================================================ */
+
+/* Horizontal steps bar */
+[dir="rtl"] .wf-steps,
+[dir="rtl"] .pr-timeline,
+[dir="rtl"] .stage-bar,
+[dir="rtl"] .timeline-steps,
+[dir="rtl"] .workflow-bar {
+    direction: rtl;
+    flex-direction: row;
+}
+
+[dir="ltr"] .wf-steps,
+[dir="ltr"] .pr-timeline,
+[dir="ltr"] .stage-bar,
+[dir="ltr"] .timeline-steps,
+[dir="ltr"] .workflow-bar {
+    direction: ltr;
+    flex-direction: row;
+}
+
+/* Step connector lines */
+[dir="rtl"] .wf-connector {
+    flex-direction: row-reverse;
+}
+
+[dir="ltr"] .wf-connector {
+    flex-direction: row;
+}
+
+/* Vertical event timeline */
+[dir="rtl"] .events-timeline-container,
+[dir="rtl"] .event-timeline,
+[dir="rtl"] .activity-log,
+[dir="rtl"] .events-log {
+    border-right: 2px solid var(--border-color);
+    border-left: none;
+    padding-right: 1.5rem;
+    padding-left: 0;
+}
+
+[dir="ltr"] .events-timeline-container,
+[dir="ltr"] .event-timeline,
+[dir="ltr"] .activity-log,
+[dir="ltr"] .events-log {
+    border-left: 2px solid var(--border-color);
+    border-right: none;
+    padding-left: 1.5rem;
+    padding-right: 0;
+}
+
+/* Timeline dots */
+[dir="rtl"] .event-dot,
+[dir="rtl"] .timeline-dot {
+    right: -0.65rem;
+    left: auto;
+}
+
+[dir="ltr"] .event-dot,
+[dir="ltr"] .timeline-dot {
+    left: -0.65rem;
+    right: auto;
+}
+
+/* ============================================================
+   10. PURCHASE REQUESTS — border-right indicators
+   ============================================================ */
+
+[dir="rtl"] [class*="pr-stage"],
+[dir="rtl"] .stage-status-bar,
+[dir="rtl"] .sla-bar {
+    border-right: 3px solid;
+    border-left: none;
+}
+
+[dir="ltr"] [class*="pr-stage"],
+[dir="ltr"] .stage-status-bar,
+[dir="ltr"] .sla-bar {
+    border-left: 3px solid;
+    border-right: none;
+}
+
+/* SLA indicators */
+[dir="rtl"] .sla-ok {
+    border-right-color: var(--sla-ok, #22c55e) !important;
+}
+
+[dir="rtl"] .sla-err {
+    border-right-color: var(--sla-err, #ef4444) !important;
+}
+
+[dir="ltr"] .sla-ok {
+    border-left-color: var(--sla-ok, #22c55e) !important;
+}
+
+[dir="ltr"] .sla-err {
+    border-left-color: var(--sla-err, #ef4444) !important;
+}
+
+/* ============================================================
+   11. INVESTMENT / BANK borders
+   ============================================================ */
+
+[dir="rtl"] [class*="inv-stat-"],
+[dir="rtl"] .bank-stat-card {
+    border-right: 3px solid;
+    border-left: none;
+}
+
+[dir="ltr"] [class*="inv-stat-"],
+[dir="ltr"] .bank-stat-card {
+    border-left: 3px solid;
+    border-right: none;
+}
+
+[dir="rtl"] .inv-stat-blue {
+    border-right-color: var(--accent-blue) !important;
+}
+
+[dir="rtl"] .inv-stat-green {
+    border-right-color: var(--accent-green) !important;
+}
+
+[dir="rtl"] .inv-stat-orange {
+    border-right-color: var(--accent-orange) !important;
+}
+
+[dir="rtl"] .inv-stat-red {
+    border-right-color: var(--accent-red) !important;
+}
+
+[dir="ltr"] .inv-stat-blue {
+    border-left-color: var(--accent-blue) !important;
+}
+
+[dir="ltr"] .inv-stat-green {
+    border-left-color: var(--accent-green) !important;
+}
+
+[dir="ltr"] .inv-stat-orange {
+    border-left-color: var(--accent-orange) !important;
+}
+
+[dir="ltr"] .inv-stat-red {
+    border-left-color: var(--accent-red) !important;
+}
+
+/* ============================================================
+   12. NOTIFICATIONS & TOAST
+   ============================================================ */
+
+[dir="rtl"] .toast {
+    text-align: right;
+}
+
+[dir="ltr"] .toast {
+    text-align: left;
+}
+
+[dir="rtl"] .notif-item {
+    text-align: right;
+    direction: rtl;
+}
+
+[dir="ltr"] .notif-item {
+    text-align: left;
+    direction: ltr;
+}
+
+[dir="rtl"] .notif-dot {
+    right: -0.4rem;
+    left: auto;
+}
+
+[dir="ltr"] .notif-dot {
+    left: -0.4rem;
+    right: auto;
+}
+
+/* ============================================================
+   13. PAGINATION
+   ============================================================ */
+
+[dir="rtl"] .pagination,
+[dir="rtl"] .pager {
+    direction: rtl;
+    flex-direction: row;
+}
+
+[dir="ltr"] .pagination,
+[dir="ltr"] .pager {
+    direction: ltr;
+    flex-direction: row;
+}
+
+[dir="rtl"] .pager-prev svg {
+    transform: scaleX(-1);
+}
+
+[dir="ltr"] .pager-next svg {
+    transform: scaleX(-1);
+}
+
+/* ============================================================
+   14. PAGE HEADERS & ACTION BARS
+   ============================================================ */
+
+[dir="rtl"] .page-title,
+[dir="rtl"] .section-title {
+    text-align: right;
+}
+
+[dir="ltr"] .page-title,
+[dir="ltr"] .section-title {
+    text-align: left;
+}
+
+[dir="rtl"] .page-header-row {
+    flex-direction: row-reverse;
+}
+
+[dir="ltr"] .page-header-row {
+    flex-direction: row;
+}
+
+/* Action buttons bar */
+[dir="rtl"] .action-bar,
+[dir="rtl"] .page-actions,
+[dir="rtl"] .header-actions,
+[dir="rtl"] .filter-bar {
+    flex-direction: row-reverse;
+}
+
+[dir="ltr"] .action-bar,
+[dir="ltr"] .page-actions,
+[dir="ltr"] .header-actions,
+[dir="ltr"] .filter-bar {
+    flex-direction: row;
+}
+
+/* ============================================================
+   15. NUMBERS — دائماً LTR بغض النظر عن الاتجاه
+   ============================================================ */
+
+.amount,
+[class*="amount"],
+.stat-number,
+.stat-value,
+.kpi-value,
+.dash-kpi-value,
+.balance-val,
+.tx-amount,
+.currency-val,
+.price,
+.count-val {
+    direction: ltr !important;
+    unicode-bidi: isolate !important;
+
+}
+
+/* SAR symbol */
+.sar-symbol {
+    direction: ltr;
+    unicode-bidi: isolate;
+    display: inline-block;
+}
+
+/* ============================================================
+   16. SETTINGS PAGE
+   ============================================================ */
+
+[dir="rtl"] .settings-tabs {
+    direction: rtl;
+}
+
+[dir="ltr"] .settings-tabs {
+    direction: ltr;
+}
+
+[dir="rtl"] .settings-card,
+[dir="rtl"] .settings-section {
+    text-align: right;
+}
+
+[dir="ltr"] .settings-card,
+[dir="ltr"] .settings-section {
+    text-align: left;
+}
+
+[dir="rtl"] .perm-row {
+    flex-direction: row;
+}
+
+[dir="ltr"] .perm-row {
+    flex-direction: row-reverse;
+}
+
+/* ============================================================
+   17. PERFORMANCE / EVENTS
+   ============================================================ */
+
+[dir="rtl"] .perf-filters,
+[dir="rtl"] .perf-section,
+[dir="rtl"] .filter-group {
+    direction: rtl;
+    text-align: right;
+}
+
+[dir="ltr"] .perf-filters,
+[dir="ltr"] .perf-section,
+[dir="ltr"] .filter-group {
+    direction: ltr;
+    text-align: left;
+}
+
+/* Performance bars */
+[dir="rtl"] .perf-bar-wrap {
+    direction: rtl;
+}
+
+[dir="ltr"] .perf-bar-wrap {
+    direction: ltr;
+}
+
+/* ============================================================
+   18. BACK BUTTON & DIRECTIONAL ICONS
+   ============================================================ */
+
+[dir="rtl"] .btn-back svg {
+    transform: scaleX(1);
+}
+
+[dir="ltr"] .btn-back svg {
+    transform: scaleX(-1);
+}
+
+[dir="rtl"] .icon-arrow {
+    transform: scaleX(1);
+}
+
+[dir="ltr"] .icon-arrow {
+    transform: scaleX(-1);
+}
+
+/* ============================================================
+   19. LANGUAGE TOGGLE BUTTON
+   ============================================================ */
+
+[dir="rtl"] .lang-flag-en {
+    display: inline;
+}
+
+[dir="rtl"] .lang-flag-ar {
+    display: none;
+}
+
+[dir="ltr"] .lang-flag-ar {
+    display: inline;
+}
+
+[dir="ltr"] .lang-flag-en {
+    display: none;
+}
+
+#langCode {
+    font-size: 0;
+}
+
+[dir="rtl"] #langCode::after {
+    content: "EN";
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: var(--primary, #3F5950);
+    font-family: 'Inter', sans-serif !important;
+}
+
+[dir="ltr"] #langCode::after {
+    content: "AR";
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: var(--primary, #3F5950);
+    font-family: 'Inter', sans-serif !important;
+}
+
+/* ============================================================
+   20. UTILITY CLASSES
+   ============================================================ */
+
+[dir="rtl"] .text-start {
+    text-align: right !important;
+}
+
+[dir="rtl"] .text-end {
+    text-align: left !important;
+}
+
+[dir="ltr"] .text-start {
+    text-align: left !important;
+}
+
+[dir="ltr"] .text-end {
+    text-align: right !important;
+}
+
+[dir="rtl"] .ms-auto {
+    margin-right: auto !important;
+    margin-left: 0 !important;
+}
+
+[dir="ltr"] .ms-auto {
+    margin-left: auto !important;
+    margin-right: 0 !important;
+}
+
+[dir="rtl"] .only-en {
+    display: none !important;
+}
+
+[dir="ltr"] .only-ar {
+    display: none !important;
+}
+
+/* Flex direction utilities */
+[dir="rtl"] .flex-row-auto {
+    flex-direction: row-reverse;
+}
+
+[dir="ltr"] .flex-row-auto {
+    flex-direction: row;
+}
+
+/* ============================================================
+   21. CORRESPONDENCE
+   ============================================================ */
+
+[dir="rtl"] .letter-card,
+[dir="rtl"] .corr-row {
+    text-align: right;
+    direction: rtl;
+}
+
+[dir="ltr"] .letter-card,
+[dir="ltr"] .corr-row {
+    text-align: left;
+    direction: ltr;
+}
+
+[dir="rtl"] .corr-type-badge {
+    border-right: 3px solid;
+    border-left: none;
+}
+
+[dir="ltr"] .corr-type-badge {
+    border-left: 3px solid;
+    border-right: none;
+}
+
+/* ============================================================
+   22. ARCHIVE
+   ============================================================ */
+
+[dir="rtl"] .archive-grid,
+[dir="rtl"] .doc-card {
+    text-align: right;
+    direction: rtl;
+}
+
+[dir="ltr"] .archive-grid,
+[dir="ltr"] .doc-card {
+    text-align: left;
+    direction: ltr;
+}
+
+[dir="rtl"] .doc-expiry-badge {
+    right: 0.5rem;
+    left: auto;
+}
+
+[dir="ltr"] .doc-expiry-badge {
+    left: 0.5rem;
+    right: auto;
+}
+
+/* ============================================================
+   23. CEO APPROVALS
+   ============================================================ */
+
+[dir="rtl"] .approval-card {
+    direction: rtl;
+    text-align: right;
+}
+
+[dir="ltr"] .approval-card {
+    direction: ltr;
+    text-align: left;
+}
+
+[dir="rtl"] .act-indicator {
+    border-right: 4px solid var(--act-color, #94a3b8);
+    border-left: none;
+}
+
+[dir="ltr"] .act-indicator {
+    border-left: 4px solid var(--act-color, #94a3b8);
+    border-right: none;
+}
+
+/* ============================================================
+   24. DAILY PAYMENTS
+   ============================================================ */
+
+[dir="rtl"] .dp-row,
+[dir="rtl"] .payment-row {
+    text-align: right;
+    direction: rtl;
+}
+
+[dir="ltr"] .dp-row,
+[dir="ltr"] .payment-row {
+    text-align: left;
+    direction: ltr;
+}
+
+[dir="rtl"] .dp-status {
+    border-right: 3px solid;
+    border-left: none;
+}
+
+[dir="ltr"] .dp-status {
+    border-left: 3px solid;
+    border-right: none;
+}
+
+/* ============================================================
+   25. PRINT
+   ============================================================ */
+
+@media print {
+    [dir="rtl"] * {
+        direction: rtl !important;
+    }
+
+    [dir="ltr"] * {
+        direction: ltr !important;
+    }
+
+    .sidebar,
+    .sidebar-toggle,
+    .mobile-menu-btn,
+    .lang-toggle-btn,
+    .theme-toggle {
+        display: none !important;
+    }
+
+    [dir="rtl"] .main-content {
+        margin-right: 0 !important;
+    }
+
+    [dir="ltr"] .main-content {
+        margin-left: 0 !important;
+    }
+}

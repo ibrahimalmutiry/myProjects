@@ -1,92 +1,82 @@
 /* =============================================
-   الشارات والتنبيهات
-   Badges & Alerts
+   الشارات والتنبيهات — مسار MASAR
+   Badges & Alerts — MASAR Brand
    ============================================= */
 
-/* الشارات */
+/* ── الشارة الأساسية ── */
 .badge {
     display: inline-flex;
     align-items: center;
     gap: 0.375rem;
-    padding: 0.375rem 0.75rem;
+    padding: 0.3rem 0.7rem;
     border-radius: 9999px;
-    font-size: 0.75rem;
-    font-weight: 500;
+    font-size: 0.72rem;
+    font-weight: 600;
+    font-family: var(--font-primary);
+    white-space: nowrap;
 }
 
 .badge-dot {
-    width: 14px;
+    width: 6px;
     height: 6px;
     border-radius: 50%;
+    flex-shrink: 0;
 }
 
+/* ── ألوان الشارات (تستخدم CSS Variables من colors.css) ── */
 .badge-green {
     background: var(--badge-green-bg);
     color: var(--badge-green-text);
 }
-
-.badge-green .badge-dot {
-    background: var(--badge-green-text);
-}
+.badge-green .badge-dot { background: var(--badge-green-text); }
 
 .badge-amber {
     background: var(--badge-amber-bg);
     color: var(--badge-amber-text);
 }
-
-.badge-amber .badge-dot {
-    background: var(--badge-amber-text);
-}
+.badge-amber .badge-dot { background: var(--badge-amber-text); }
 
 .badge-red {
     background: var(--badge-red-bg);
     color: var(--badge-red-text);
 }
-
-.badge-red .badge-dot {
-    background: var(--badge-red-text);
-}
+.badge-red .badge-dot { background: var(--badge-red-text); }
 
 .badge-blue {
     background: var(--badge-blue-bg);
     color: var(--badge-blue-text);
 }
-
-.badge-blue .badge-dot {
-    background: var(--badge-blue-text);
-}
+.badge-blue .badge-dot { background: var(--badge-blue-text); }
 
 .badge-slate {
     background: var(--badge-slate-bg);
     color: var(--badge-slate-text);
 }
+.badge-slate .badge-dot { background: var(--badge-slate-text); }
 
-.badge-slate .badge-dot {
-    background: var(--badge-slate-text);
-}
-
+/* ── شارات النظام العامة ── */
 .badge-primary {
-    background: rgba(var(--primary-rgb), 0.1);
-    color: var(--primary-color);
-    border: 1px solid rgba(var(--primary-rgb), 0.2);
+    background: var(--primary-subtle, rgba(63,89,80,0.12));
+    color: var(--primary, #3F5950);
+    border: 1px solid rgba(63,89,80,0.2);
 }
 
 .badge-success {
-    background: rgba(76, 175, 80, 0.1);
-    color: #4caf50;
-    border: 1px solid rgba(76, 175, 80, 0.2);
+    background: var(--badge-green-bg);
+    color: var(--badge-green-text);
+    border: 1px solid rgba(63,89,80,0.15);
 }
 
 .badge-warning {
-    background: rgba(255, 152, 0, 0.1);
-    color: #ff9800;
-    border: 1px solid rgba(255, 152, 0, 0.2);
+    background: var(--badge-amber-bg);
+    color: var(--badge-amber-text);
+    border: 1px solid rgba(230,119,0,0.2);
 }
 
 .badge-danger {
-    background: rgba(244, 67, 54, 0.1);
-    color: #f44336;
-    border: 1px solid rgba(244, 67, 54, 0.2);
+    background: var(--badge-red-bg);
+    color: var(--badge-red-text);
+    border: 1px solid rgba(242,111,99,0.25);
 }
 
 .badge-secondary {
@@ -95,7 +85,7 @@
     border: 1px solid var(--border-color);
 }
 
-/* شارات التنبيه */
+/* ── التنبيهات (Alerts) ── */
 .alert-badge {
     display: inline-flex;
     align-items: center;
@@ -103,7 +93,8 @@
     padding: 0.4rem 0.8rem;
     border-radius: 8px;
     font-size: 0.8rem;
-    font-weight: 500;
+    font-weight: 600;
+    font-family: var(--font-primary);
     white-space: nowrap;
 }
 
@@ -125,15 +116,22 @@
     border: 1px solid var(--alert-info-border);
 }
 
-/* Status Badges */
+.alert-success {
+    background: var(--badge-green-bg);
+    color: var(--badge-green-text);
+    border: 1px solid rgba(63,89,80,0.2);
+}
+
+/* ── شارات الحالة (Status) ── */
 .status-badge {
     display: inline-flex;
     align-items: center;
     gap: 5px;
     padding: 3px 9px;
     border-radius: 20px;
-    font-size: .7rem;
-    font-weight: 500;
+    font-size: 0.7rem;
+    font-weight: 600;
+    font-family: var(--font-primary);
     white-space: nowrap;
     line-height: 1.5;
 }
@@ -148,52 +146,133 @@
 }
 
 .status-completed {
-    background: rgba(105, 219, 124, .12);
-    color: var(--accent-green);
+    background: var(--badge-green-bg);
+    color: var(--badge-green-text);
 }
-
-.status-completed::before {
-    background: var(--accent-green);
-}
+.status-completed::before { background: var(--badge-green-text); }
 
 .status-review {
-    background: rgba(255, 169, 77, .12);
-    color: var(--accent-orange);
+    background: var(--badge-amber-bg);
+    color: var(--badge-amber-text);
 }
-
-.status-review::before {
-    background: var(--accent-orange);
-}
+.status-review::before { background: var(--badge-amber-text); }
 
 .status-processing {
-    background: rgba(74, 171, 247, .12);
-    color: var(--accent-blue);
+    background: var(--badge-blue-bg);
+    color: var(--badge-blue-text);
 }
-
-.status-processing::before {
-    background: var(--accent-blue);
-}
+.status-processing::before { background: var(--badge-blue-text); }
 
 .status-pending {
-    background: rgba(148, 163, 184, .1);
-    color: var(--text-muted);
+    background: var(--badge-slate-bg);
+    color: var(--badge-slate-text);
 }
-
-.status-pending::before {
-    background: var(--text-muted);
-    opacity: .5;
-}
+.status-pending::before { background: var(--badge-slate-text); opacity: 0.5; }
 
 .status-cancelled {
-    background: rgba(255, 107, 107, .12);
-    color: #ff6b6b;
+    background: var(--badge-red-bg);
+    color: var(--badge-red-text);
+}
+.status-cancelled::before { background: var(--badge-red-text); }
+
+.status-rejected {
+    background: var(--badge-red-bg);
+    color: var(--badge-red-text);
+}
+.status-rejected::before { background: var(--badge-red-text); }
+
+/* شارة فارغة (—) بدون نقطة */
+.status-badge.status-empty::before { display: none; }
+
+/* ── شارات الأولوية ── */
+.priority-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    font-family: var(--font-primary);
 }
 
-.status-cancelled::before {
-    background: #ff6b6b;
+.priority-high {
+    background: rgba(242,111,99,0.12);
+    color: var(--accent-dark, #d4574b);
+    border: 1px solid rgba(242,111,99,0.25);
 }
 
-/* badge فارغ (—) بدون نقطة */
-.status-badge.status-empty::before {
-    display: none;
+.priority-medium {
+    background: var(--badge-amber-bg);
+    color: var(--badge-amber-text);
+    border: 1px solid rgba(230,119,0,0.2);
+}
+
+.priority-low {
+    background: var(--badge-slate-bg);
+    color: var(--badge-slate-text);
+    border: 1px solid var(--border-color);
+}
+
+.priority-urgent {
+    background: var(--accent, #F26F63);
+    color: #fff;
+    border: none;
+    animation: pulse-badge 2s infinite;
+}
+
+@keyframes pulse-badge {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(242,111,99,0.4); }
+    50%       { box-shadow: 0 0 0 4px rgba(242,111,99,0); }
+}
+
+/* ── شارات المراحل (Stage) ── */
+.stage-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 9px;
+    border-radius: 8px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    font-family: var(--font-primary);
+}
+
+.stage-receiving { background: rgba(63,89,80,0.12);  color: var(--stage-receiving); }
+.stage-budget    { background: rgba(21,170,191,0.12); color: var(--stage-budget); }
+.stage-payment   { background: rgba(232,89,12,0.12);  color: var(--stage-payment); }
+.stage-invoice   { background: rgba(121,80,242,0.12); color: var(--stage-invoice); }
+.stage-dispatch  { background: rgba(66,99,235,0.12);  color: var(--stage-dispatch); }
+
+/* ── Badge صغيرة في الـ Sidebar ── */
+.nav-badge {
+    background: var(--accent, #F26F63);
+    color: #fff;
+    font-size: 0.62rem;
+    font-weight: 700;
+    padding: 0.1rem 0.4rem;
+    border-radius: 50px;
+    min-width: 18px;
+    text-align: center;
+}
+
+/* ── Light Mode overrides ── */
+[data-theme="light"] .badge-primary {
+    background: rgba(63,89,80,0.1);
+    color: var(--primary, #3F5950);
+}
+
+[data-theme="light"] .badge-success {
+    background: rgba(63,89,80,0.1);
+    color: #2e5046;
+}
+
+[data-theme="light"] .badge-danger {
+    background: rgba(242,111,99,0.1);
+    color: #c9423a;
+}
+
+[data-theme="light"] .badge-warning {
+    background: rgba(230,119,0,0.1);
+    color: #c05c00;
 }

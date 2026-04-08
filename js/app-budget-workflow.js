@@ -25,21 +25,21 @@ const BudgetWorkflow = (() => {
   const STAGES = [
     {
       key: 'budget_review',
-      label: 'مراجعة الموازنة',
+      label: tr('مراجعة موظف الموازنة'),
       icon: '📋',
       color: '#f59e0b',
       description: 'يراجع موظف الموازنة الحجز ويتحقق من اكتمال البيانات واستيفاء الشروط',
     },
     {
       key: 'ceo_review',
-      label: 'اعتماد الرئيس التنفيذي',
+      label: tr('اعتماد الرئيس التنفيذي'),
       icon: '👔',
       color: '#3b82f6',
       description: 'يعتمد الرئيس التنفيذي الحجز المعتمد مبدئياً من موظف الموازنة',
     },
     {
       key: 'completed',
-      label: 'مكتمل',
+      label: tr('مكتمل'),
       icon: '✅',
       color: '#10b981',
       description: 'تم الاعتماد النهائي وتفعيل المعاملة المالية المرتبطة',

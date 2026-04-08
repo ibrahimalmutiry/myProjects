@@ -16,18 +16,18 @@ function loadCorrespondencePage() {
                         <circle cx="11" cy="11" r="8"></circle>
                         <path d="m21 21-4.35-4.35"></path>
                     </svg>
-                    <input type="text" id="corrSearchInput" placeholder="بحث في الخطابات..." oninput="searchCorrespondence()">
+                    <input type="text" id="corrSearchInput" placeholder="${tr('بحث في الخطابات...')}" oninput="searchCorrespondence()">
                 </div>
                 <select id="corrTypeFilter" class="filter-select" onchange="filterCorrespondence()">
-                    <option value="">جميع الأنواع</option>
-                    <option value="internal_finance">داخلي - مالي</option>
-                    <option value="internal_general">داخلي - عام</option>
-                    <option value="incoming">وارد</option>
-                    <option value="outgoing">صادر</option>
+                    <option value="">${tr("جميع الأنواع")}</option>
+                    <option value="internal_finance">${tr("داخلي")} - ${tr("مالي")}</option>
+                    <option value="internal_general">${tr("داخلي")} - عام</option>
+                    <option value="incoming">${tr("وارد")}</option>
+                    <option value="outgoing">${tr("صادر")}</option>
                 </select>
                 <select id="corrPriorityFilter" class="filter-select" onchange="filterCorrespondence()">
-                    <option value="">جميع الأولويات</option>
-                    <option value="normal">عادي</option>
+                    <option value="">${tr("جميع الأولويات")}</option>
+                    <option value="normal">${tr("عادي")}</option>
                     <option value="high">مهم</option>
                     <option value="urgent">عاجل جداً</option>
                 </select>
@@ -469,16 +469,16 @@ function displayAddCorrespondenceForm(departments) {
                     <select name="type" required onchange="toggleExternalFields(this.value)">
                         <option value="">اختر النوع</option>
                         <option value="internal_finance">داخلي - قطاع مالي</option>
-                        <option value="internal_general">داخلي - عام</option>
-                        <option value="incoming">وارد</option>
-                        <option value="outgoing">صادر</option>
+                        <option value="internal_general">${tr("داخلي")} - عام</option>
+                        <option value="incoming">${tr("وارد")}</option>
+                        <option value="outgoing">${tr("صادر")}</option>
                     </select>
                 </div>
 
                 <div class="form-group">
                     <label>الأولوية *</label>
                     <select name="priority" required>
-                        <option value="normal">عادي</option>
+                        <option value="normal">${tr("عادي")}</option>
                         <option value="high">مهم</option>
                         <option value="urgent">عاجل جداً</option>
                     </select>

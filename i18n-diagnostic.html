@@ -1,0 +1,1061 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🔍 أداة تشخيص الترجمة — Workflow System</title>
+<style>
+  :root {
+    --bg:       #0f1117;
+    --bg2:      #1a1d27;
+    --bg3:      #22263a;
+    --border:   #2e3450;
+    --text:     #e8eaf6;
+    --muted:    #6b7280;
+    --green:    #22c55e;
+    --red:      #ef4444;
+    --yellow:   #f59e0b;
+    --blue:     #3b82f6;
+    --purple:   #8b5cf6;
+    --cyan:     #06b6d4;
+    --green-bg: rgba(34,197,94,.08);
+    --red-bg:   rgba(239,68,68,.08);
+    --yellow-bg:rgba(245,158,11,.08);
+    --blue-bg:  rgba(59,130,246,.08);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'IBM Plex Sans Arabic', 'Segoe UI', sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+
+  /* ── HEADER ── */
+  .header {
+    background: linear-gradient(135deg, #1e2a4a 0%, #0f1117 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 2rem 2.5rem;
+    position: sticky; top: 0; z-index: 100;
+  }
+  .header-row {
+    display: flex; align-items: center;
+    justify-content: space-between; gap: 1rem;
+    flex-wrap: wrap;
+  }
+  .logo { display: flex; align-items: center; gap: .75rem; }
+  .logo-icon {
+    width: 44px; height: 44px; border-radius: 12px;
+    background: linear-gradient(135deg, var(--blue), var(--purple));
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.4rem;
+  }
+  .logo-text h1 { font-size: 1.1rem; font-weight: 700; }
+  .logo-text p  { font-size: .75rem; color: var(--muted); }
+
+  .scan-btn {
+    background: linear-gradient(135deg, var(--blue), var(--purple));
+    color: #fff; border: none; border-radius: 10px;
+    padding: .65rem 1.5rem; font-size: .875rem; font-weight: 600;
+    cursor: pointer; display: flex; align-items: center; gap: .5rem;
+    transition: opacity .2s, transform .15s;
+  }
+  .scan-btn:hover { opacity: .9; transform: scale(1.02); }
+  .scan-btn:active { transform: scale(.97); }
+  .scan-btn svg { animation: none; }
+  .scan-btn.scanning svg { animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── SCORE BAR ── */
+  .score-section {
+    padding: 2rem 2.5rem 1rem;
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    gap: 2rem;
+    align-items: center;
+  }
+  .score-circle {
+    position: relative; width: 160px; height: 160px; margin: 0 auto;
+  }
+  .score-circle svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+  .score-track { fill: none; stroke: var(--border); stroke-width: 12; }
+  .score-fill  {
+    fill: none; stroke-width: 12;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 1s cubic-bezier(.4,0,.2,1), stroke .5s;
+  }
+  .score-label {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+  }
+  .score-num  { font-size: 2.5rem; font-weight: 800; line-height: 1; }
+  .score-text { font-size: .7rem; color: var(--muted); margin-top: .2rem; }
+
+  .score-stats {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+  }
+  .stat-card {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 12px; padding: 1rem 1.25rem;
+  }
+  .stat-card .sc-num {
+    font-size: 1.8rem; font-weight: 800; line-height: 1;
+  }
+  .stat-card .sc-lbl { font-size: .72rem; color: var(--muted); margin-top: .25rem; }
+  .stat-card.green .sc-num { color: var(--green); }
+  .stat-card.red   .sc-num { color: var(--red);   }
+  .stat-card.yellow.sc-num { color: var(--yellow);}
+  .stat-card.blue  .sc-num { color: var(--blue);  }
+
+  /* ── FILTERS ── */
+  .filters {
+    padding: .75rem 2.5rem;
+    display: flex; gap: .5rem; flex-wrap: wrap;
+    border-bottom: 1px solid var(--border);
+  }
+  .filter-btn {
+    padding: .35rem 1rem; border-radius: 20px; font-size: .78rem;
+    border: 1px solid var(--border); background: transparent;
+    color: var(--muted); cursor: pointer; transition: all .2s;
+  }
+  .filter-btn:hover  { border-color: var(--blue); color: var(--blue); }
+  .filter-btn.active {
+    background: var(--blue); border-color: var(--blue);
+    color: #fff; font-weight: 600;
+  }
+  .filter-btn .dot {
+    display: inline-block; width: 7px; height: 7px;
+    border-radius: 50%; margin-left: .35rem; vertical-align: middle;
+  }
+
+  /* ── MAIN GRID ── */
+  .main { padding: 1.5rem 2.5rem 3rem; }
+
+  .section-title {
+    font-size: .7rem; font-weight: 700; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--muted);
+    margin-bottom: .75rem; display: flex; align-items: center; gap: .5rem;
+  }
+  .section-title::after {
+    content: ''; flex: 1; height: 1px; background: var(--border);
+  }
+
+  /* ── ISSUE CARDS ── */
+  .issues-grid {
+    display: flex; flex-direction: column; gap: .5rem;
+    margin-bottom: 2rem;
+  }
+
+  .issue-card {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 12px; padding: .875rem 1.25rem;
+    display: flex; align-items: flex-start; gap: 1rem;
+    transition: border-color .2s, transform .15s;
+    cursor: pointer;
+  }
+  .issue-card:hover { border-color: var(--blue); transform: translateX(-2px); }
+  .issue-card.severity-critical { border-right: 3px solid var(--red);   }
+  .issue-card.severity-warning  { border-right: 3px solid var(--yellow); }
+  .issue-card.severity-info     { border-right: 3px solid var(--blue);   }
+  .issue-card.severity-ok       { border-right: 3px solid var(--green);  }
+  .issue-card.hidden            { display: none; }
+
+  .issue-icon {
+    width: 36px; height: 36px; border-radius: 9px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1rem; flex-shrink: 0;
+  }
+  .severity-critical .issue-icon { background: var(--red-bg);    }
+  .severity-warning  .issue-icon { background: var(--yellow-bg); }
+  .severity-info     .issue-icon { background: var(--blue-bg);   }
+  .severity-ok       .issue-icon { background: var(--green-bg);  }
+
+  .issue-body { flex: 1; min-width: 0; }
+  .issue-title {
+    font-size: .875rem; font-weight: 600; margin-bottom: .2rem;
+    display: flex; align-items: center; gap: .5rem;
+  }
+  .issue-desc { font-size: .78rem; color: var(--muted); }
+  .issue-meta {
+    display: flex; align-items: center; gap: .75rem;
+    margin-top: .5rem; flex-wrap: wrap;
+  }
+  .tag {
+    padding: .2rem .6rem; border-radius: 6px; font-size: .7rem;
+    font-weight: 600; background: var(--bg3); border: 1px solid var(--border);
+  }
+  .tag.file   { color: var(--cyan);   border-color: rgba(6,182,212,.3); }
+  .tag.count  { color: var(--yellow); border-color: rgba(245,158,11,.3); }
+  .tag.fix    { color: var(--green);  border-color: rgba(34,197,94,.3); }
+  .tag.lines  { color: var(--purple); border-color: rgba(139,92,246,.3); }
+
+  .issue-right {
+    display: flex; flex-direction: column;
+    align-items: flex-end; gap: .4rem; flex-shrink: 0;
+  }
+  .severity-pill {
+    padding: .2rem .7rem; border-radius: 20px;
+    font-size: .68rem; font-weight: 700; letter-spacing: .03em;
+  }
+  .severity-critical .severity-pill { background: var(--red-bg);    color: var(--red);    }
+  .severity-warning  .severity-pill { background: var(--yellow-bg); color: var(--yellow); }
+  .severity-info     .severity-pill { background: var(--blue-bg);   color: var(--blue);   }
+  .severity-ok       .severity-pill { background: var(--green-bg);  color: var(--green);  }
+
+  .progress-mini {
+    width: 80px; height: 5px; background: var(--border);
+    border-radius: 3px; overflow: hidden;
+  }
+  .progress-mini-fill { height: 100%; border-radius: 3px; transition: width 1s; }
+
+  /* ── DETAIL PANEL ── */
+  .detail-panel {
+    position: fixed; top: 0; left: 0; width: 420px; height: 100vh;
+    background: var(--bg2); border-left: 1px solid var(--border);
+    z-index: 200; transform: translateX(-100%);
+    transition: transform .3s cubic-bezier(.4,0,.2,1);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .detail-panel.open { transform: translateX(0); }
+  .detail-header {
+    padding: 1.5rem; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 1rem;
+  }
+  .detail-close {
+    width: 32px; height: 32px; border-radius: 8px;
+    background: var(--bg3); border: 1px solid var(--border);
+    color: var(--text); cursor: pointer; font-size: 1rem;
+    display: flex; align-items: center; justify-content: center;
+    margin-right: auto;
+  }
+  .detail-body { flex: 1; overflow-y: auto; padding: 1.5rem; }
+
+  .fix-step {
+    display: flex; gap: .75rem; margin-bottom: 1.25rem;
+  }
+  .step-num {
+    width: 24px; height: 24px; border-radius: 6px;
+    background: var(--blue); color: #fff;
+    font-size: .72rem; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .step-body { flex: 1; }
+  .step-title { font-weight: 600; font-size: .82rem; margin-bottom: .3rem; }
+  .step-desc  { font-size: .75rem; color: var(--muted); line-height: 1.5; }
+
+  code {
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: 6px; padding: .15rem .4rem;
+    font-size: .72rem; font-family: 'Courier New', monospace;
+    color: var(--cyan);
+  }
+
+  pre {
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: 8px; padding: 1rem;
+    font-size: .72rem; font-family: 'Courier New', monospace;
+    color: var(--cyan); overflow-x: auto;
+    margin: .5rem 0; line-height: 1.6;
+    direction: ltr; text-align: left;
+  }
+
+  /* ── LIVE SCAN OVERLAY ── */
+  .scan-overlay {
+    position: fixed; inset: 0; background: rgba(15,17,23,.85);
+    display: none; align-items: center; justify-content: center;
+    z-index: 300; backdrop-filter: blur(4px);
+  }
+  .scan-overlay.active { display: flex; }
+  .scan-box {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 16px; padding: 2.5rem; text-align: center;
+    min-width: 340px;
+  }
+  .scan-spinner {
+    width: 56px; height: 56px; border-radius: 50%;
+    border: 3px solid var(--border);
+    border-top-color: var(--blue);
+    animation: spin .8s linear infinite;
+    margin: 0 auto 1.5rem;
+  }
+  .scan-status { font-size: .875rem; color: var(--muted); margin-top: .5rem; }
+  .scan-bar {
+    width: 100%; height: 4px; background: var(--border);
+    border-radius: 2px; margin-top: 1.5rem; overflow: hidden;
+  }
+  .scan-bar-fill {
+    height: 100%; background: linear-gradient(90deg, var(--blue), var(--purple));
+    border-radius: 2px; width: 0%;
+    transition: width .4s ease;
+  }
+
+  /* ── EMPTY STATE ── */
+  .empty {
+    text-align: center; padding: 4rem 2rem; color: var(--muted);
+  }
+  .empty-icon { font-size: 3rem; margin-bottom: 1rem; }
+
+  /* ── SUMMARY CHART ── */
+  .summary-bars {
+    display: flex; flex-direction: column; gap: .5rem; margin-bottom: 2rem;
+  }
+  .bar-row {
+    display: flex; align-items: center; gap: .75rem;
+  }
+  .bar-label { width: 160px; font-size: .75rem; color: var(--muted); text-align: right; flex-shrink: 0; }
+  .bar-track { flex: 1; height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; }
+  .bar-fill  { height: 100%; border-radius: 4px; transition: width 1s ease; }
+  .bar-count { width: 36px; font-size: .72rem; color: var(--muted); text-align: left; flex-shrink: 0; }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="header-row">
+    <div class="logo">
+      <div class="logo-icon">🔍</div>
+      <div class="logo-text">
+        <h1>أداة تشخيص الترجمة</h1>
+        <p>i18n Diagnostic Tool — Workflow Management System</p>
+      </div>
+    </div>
+    <button class="scan-btn" id="scanBtn" onclick="runScan()">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M23 4v6h-6"/><path d="M1 20v-6h6"/>
+        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+      </svg>
+      فحص الصفحة الآن
+    </button>
+  </div>
+</div>
+
+<!-- SCORE -->
+<div class="score-section" id="scoreSection" style="display:none">
+  <div>
+    <div class="score-circle">
+      <svg viewBox="0 0 100 100">
+        <circle class="score-track" cx="50" cy="50" r="44"/>
+        <circle class="score-fill" id="scoreFill" cx="50" cy="50" r="44"
+          stroke-dasharray="276.46" stroke-dashoffset="276.46"/>
+      </svg>
+      <div class="score-label">
+        <span class="score-num" id="scoreNum">0</span>
+        <span class="score-text">/ 100</span>
+      </div>
+    </div>
+  </div>
+  <div class="score-stats">
+    <div class="stat-card red">
+      <div class="sc-num" id="sc-critical">0</div>
+      <div class="sc-lbl">🔴 مشاكل حرجة</div>
+    </div>
+    <div class="stat-card yellow">
+      <div class="sc-num" id="sc-warning">0</div>
+      <div class="sc-lbl">🟡 تحذيرات</div>
+    </div>
+    <div class="stat-card blue">
+      <div class="sc-num" id="sc-info">0</div>
+      <div class="sc-lbl">🔵 معلومات</div>
+    </div>
+    <div class="stat-card green">
+      <div class="sc-num" id="sc-ok">0</div>
+      <div class="sc-lbl">✅ ممتاز</div>
+    </div>
+  </div>
+</div>
+
+<!-- FILTERS -->
+<div class="filters" id="filters" style="display:none">
+  <button class="filter-btn active" onclick="filterIssues('all', this)">
+    الكل <span id="f-all-count" class="dot" style="background:var(--blue)"></span>
+  </button>
+  <button class="filter-btn" onclick="filterIssues('critical', this)">
+    <span class="dot" style="background:var(--red)"></span> حرجة
+  </button>
+  <button class="filter-btn" onclick="filterIssues('warning', this)">
+    <span class="dot" style="background:var(--yellow)"></span> تحذيرات
+  </button>
+  <button class="filter-btn" onclick="filterIssues('info', this)">
+    <span class="dot" style="background:var(--blue)"></span> معلومات
+  </button>
+  <button class="filter-btn" onclick="filterIssues('ok', this)">
+    <span class="dot" style="background:var(--green)"></span> ممتاز
+  </button>
+  <button class="filter-btn" onclick="filterIssues('rtl', this)">اتجاه RTL/LTR</button>
+  <button class="filter-btn" onclick="filterIssues('translation', this)">نصوص غير مترجمة</button>
+  <button class="filter-btn" onclick="filterIssues('css', this)">CSS</button>
+  <button class="filter-btn" onclick="filterIssues('js', this)">JavaScript</button>
+</div>
+
+<!-- MAIN -->
+<div class="main" id="mainContent">
+  <div class="empty" id="emptyState">
+    <div class="empty-icon">🔍</div>
+    <p style="font-size:1rem;font-weight:600;color:var(--text);margin-bottom:.5rem">اضغط "فحص الصفحة الآن" للبدء</p>
+    <p style="font-size:.82rem">تقوم الأداة بفحص: النصوص غير المترجمة، اتجاه RTL/LTR،<br>CSS الثابتة، عناصر data-i18n، وقيم قاعدة البيانات</p>
+  </div>
+  <div id="issuesList" style="display:none">
+    <div class="section-title">الملخص البياني — Files Summary</div>
+    <div class="summary-bars" id="summaryBars"></div>
+    <div class="section-title">المشاكل المكتشفة — Detected Issues</div>
+    <div class="issues-grid" id="issuesGrid"></div>
+  </div>
+</div>
+
+<!-- DETAIL PANEL -->
+<div class="detail-panel" id="detailPanel">
+  <div class="detail-header">
+    <button class="detail-close" onclick="closeDetail()">✕</button>
+    <div>
+      <div id="detail-title" style="font-weight:700;font-size:.95rem"></div>
+      <div id="detail-subtitle" style="font-size:.75rem;color:var(--muted);margin-top:.2rem"></div>
+    </div>
+  </div>
+  <div class="detail-body" id="detail-body"></div>
+</div>
+
+<!-- SCAN OVERLAY -->
+<div class="scan-overlay" id="scanOverlay">
+  <div class="scan-box">
+    <div class="scan-spinner"></div>
+    <div style="font-weight:700;font-size:1rem">جاري الفحص...</div>
+    <div class="scan-status" id="scanStatus">فحص اتجاه الصفحة...</div>
+    <div class="scan-bar"><div class="scan-bar-fill" id="scanBarFill"></div></div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════════
+//  DATA: Known issues from static analysis
+// ══════════════════════════════════════════════════════════════
+
+const STATIC_ISSUES = [
+  // ── JS FILES ──────────────────────────────────────────────
+  {
+    id: 'js-transactions', severity: 'critical', category: 'translation', type: 'js',
+    icon: '📝', title: 'app-transactions.js — نصوص عربية مُضمَّنة',
+    desc: '102 سطر يحتوي على نصوص عربية مكتوبة مباشرة في template strings بدون استخدام t()',
+    file: 'app-transactions.js', count: 102,
+    fix: 'استبدال النصوص بـ t("key") واضافة المفاتيح للقاموس',
+    steps: [
+      { title: 'استبدال النصوص الثابتة', desc: 'بدلاً من: <code>\'بحث في المعاملات...\'</code><br>استخدم: <code>t("search_transactions")</code>' },
+      { title: 'إضافة للقاموس', desc: 'في app-common.js أضف:<br><pre>ar: { search_transactions: "بحث في المعاملات..." }\nen: { search_transactions: "Search transactions..." }</pre>' },
+      { title: 'استخدام data-tr للعناصر الثابتة', desc: 'للعناصر في HTML المُولَّد:<br><pre>&lt;span data-tr="status_all"&gt;جميع الحالات&lt;/span&gt;</pre>' },
+    ]
+  },
+  {
+    id: 'js-purchase', severity: 'critical', category: 'translation', type: 'js',
+    icon: '🛒', title: 'app-purchase-requests.js — stage names مضمّنة',
+    desc: '130 سطر — أسماء مراحل سير العمل مكتوبة بالعربية في object ثابت',
+    file: 'app-purchase-requests.js', count: 130,
+    fix: 'استخدام tr() لترجمة stage names عند العرض',
+    steps: [
+      { title: 'Stage names object', desc: 'بدلاً من:<br><pre>draft: "مسودة",\nreception: "الاستلام والتحقق"</pre>استخدم:<br><pre>draft: tr("مسودة"),\nreception: tr("الاستلام والتحقق")</pre>' },
+      { title: 'أو استخدم i18n.en مباشرة', desc: 'دالة <code>tr(text)</code> موجودة في app-i18n.js<br>تترجم تلقائياً حسب currentLang' },
+    ]
+  },
+  {
+    id: 'js-bank', severity: 'critical', category: 'translation', type: 'js',
+    icon: '🏦', title: 'app-bank.js — عناوين صفحة مضمّنة',
+    desc: '415 سطر — عنوان الصفحة وأسماء التبويبات والرسائل بالعربية مباشرة',
+    file: 'app-bank.js', count: 415,
+    fix: 'استخدام t() أو tr() لكل النصوص',
+    steps: [
+      { title: 'عناوين التبويبات', desc: '<pre>overview: tr("نظرة عامة"),\ndeposits: tr("الحسابات البنكية")</pre>' },
+      { title: 'رسائل الخطأ', desc: '<pre>showToast(tr("خطأ في الاتصال"), "error");</pre>' },
+    ]
+  },
+  {
+    id: 'js-budget', severity: 'critical', category: 'translation', type: 'js',
+    icon: '📊', title: 'app-budget.js — حالات الحجوزات مضمّنة',
+    desc: '347 سطر — حالات مثل مسودة، قيد المراجعة، معتمد مكتوبة كـ object keys',
+    file: 'app-budget.js', count: 347,
+    fix: 'استخدام tr() عند عرض الحالات',
+    steps: [
+      { title: 'Status display', desc: '<pre>// بدلاً من:\n"مسودة": { color: ... }\n// عند العرض:\nconst label = tr(status);</pre>' },
+    ]
+  },
+  {
+    id: 'js-archive', severity: 'critical', category: 'translation', type: 'js',
+    icon: '📁', title: 'app-archive.js — تسميات الأقسام مضمّنة',
+    desc: '347 سطر — أسماء أقسام الأرشيف وعناوينها مكتوبة بالعربية',
+    file: 'app-archive.js', count: 347,
+    fix: 'تحويل labels لمفاتيح i18n',
+    steps: [
+      { title: 'Section labels', desc: '<pre>all: { label: tr("جميع المستندات"), ... }\nfinancial: { label: tr("مستندات مالية"), ... }</pre>' },
+    ]
+  },
+  {
+    id: 'js-settings-employees', severity: 'warning', category: 'translation', type: 'js',
+    icon: '👥', title: 'app-settings-employees.js — نموذج الموظف',
+    desc: '87 نص — تسميات النموذج (labels, placeholders, headings) بالعربية',
+    file: 'app-settings-employees.js', count: 87,
+    fix: 'استخدام data-tr للـ labels وt() للـ placeholders',
+    steps: [
+      { title: 'Labels', desc: '<pre>&lt;label data-tr="employee_number"&gt;رقم الموظف&lt;/label&gt;</pre>' },
+      { title: 'Placeholders', desc: '<pre>placeholder="${t("employee_number")}"</pre>' },
+    ]
+  },
+  {
+    id: 'js-settings-system', severity: 'warning', category: 'translation', type: 'js',
+    icon: '⚙️', title: 'app-settings-system.js — عناوين الإعدادات',
+    desc: '96 نص — عناوين الأقسام والأوصاف في صفحة الإعدادات',
+    file: 'app-settings-system.js', count: 96,
+    fix: 'استخدام t() لكل عناوين الإعدادات',
+    steps: [
+      { title: 'Section headers', desc: '<pre>&lt;h3&gt;${t("system_settings")}&lt;/h3&gt;</pre>' },
+    ]
+  },
+  {
+    id: 'js-sla', severity: 'warning', category: 'translation', type: 'js',
+    icon: '⏱️', title: 'app-sla.js — مراحل ونصوص SLA',
+    desc: '68 نص — أسماء المراحل ورسائل التحذير في نظام SLA',
+    file: 'app-sla.js', count: 68,
+    fix: 'تحويل المراحل لمفاتيح i18n',
+    steps: [
+      { title: 'Stage names', desc: '<pre>creation: tr("الإنشاء"),\nreceiving: tr("الاستلام")</pre>' },
+    ]
+  },
+
+  // ── HTML / PHP ─────────────────────────────────────────────
+  {
+    id: 'html-nav-labels', severity: 'critical', category: 'translation', type: 'html',
+    icon: '🧭', title: 'index.php — nav-labels بدون data-i18n',
+    desc: '22 من أصل 24 nav-label في السايدبار لا تحتوي data-i18n — لن تُترجم عند تغيير اللغة',
+    file: 'index.php', count: 22,
+    fix: 'إضافة data-i18n لكل nav-label',
+    steps: [
+      { title: 'أضف data-i18n للعناصر', desc: '<pre>&lt;span class="nav-label" data-i18n="bank_deposits"&gt;\n  الإيداعات البنكية\n&lt;/span&gt;</pre>' },
+      { title: 'أضف المفتاح للقاموس', desc: '<pre>ar: { bank_deposits: "الإيداعات البنكية" }\nen: { bank_deposits: "Bank Deposits" }</pre>' },
+    ]
+  },
+  {
+    id: 'php-login', severity: 'warning', category: 'translation', type: 'php',
+    icon: '🔐', title: 'login.php — صفحة تسجيل الدخول',
+    desc: '51 نص عربي بدون ترجمة — العنوان والحقول والأزرار وRsseائل الخطأ',
+    file: 'login.php', count: 51,
+    fix: 'إضافة PHP i18n أو JavaScript language switcher',
+    steps: [
+      { title: 'نظام PHP بسيط', desc: '<pre>$lang = $_COOKIE["app_language"] ?? "ar";\n$t = require "lang/{$lang}.php";\necho $t["login_title"];</pre>' },
+      { title: 'أو JavaScript', desc: 'إضافة data-i18n لكل عنصر وتحميل app-i18n.js في صفحة login' },
+    ]
+  },
+  {
+    id: 'php-register', severity: 'warning', category: 'translation', type: 'php',
+    icon: '📋', title: 'register.php — صفحة إنشاء كلمة المرور',
+    desc: '49 نص عربي بدون ترجمة',
+    file: 'register.php', count: 49,
+    fix: 'نفس حل login.php',
+    steps: [
+      { title: 'استخدام PHP translations', desc: '<pre>$t["password_setup"] = "إنشاء كلمة المرور";</pre>' },
+    ]
+  },
+
+  // ── CSS ────────────────────────────────────────────────────
+  {
+    id: 'css-purchase', severity: 'critical', category: 'css', type: 'css',
+    icon: '🎨', title: 'purchase-requests.css — 40 خاصية فيزيائية',
+    desc: 'margin-right/left، border-right/left، text-align ثابتة تتعارض مع RTL/LTR',
+    file: 'purchase-requests.css', count: 40,
+    fix: 'استبدال بـ CSS Logical Properties أو [dir] selectors',
+    steps: [
+      { title: 'text-align', desc: '<pre>/* بدلاً من: */\n.pr-row { text-align: right; }\n/* استخدم: */\n[dir="rtl"] .pr-row { text-align: right; }\n[dir="ltr"] .pr-row { text-align: left; }</pre>' },
+      { title: 'border-right indicators', desc: '<pre>[dir="rtl"] .pr-stage {\n  border-right: 3px solid;\n  border-left: none;\n}\n[dir="ltr"] .pr-stage {\n  border-left: 3px solid;\n  border-right: none;\n}</pre>' },
+    ]
+  },
+  {
+    id: 'css-transactions', severity: 'warning', category: 'css', type: 'css',
+    icon: '🎨', title: 'transactions.css — 15 خاصية فيزيائية',
+    desc: 'border-left/right، margin-left/right، text-align ثابتة',
+    file: 'transactions.css', count: 15,
+    fix: 'إضافة [dir] selectors في rtl-ltr.css',
+    steps: [
+      { title: 'أضف في rtl-ltr.css', desc: '<pre>[dir="rtl"] .tx-status-bar {\n  border-right: 4px solid;\n}\n[dir="ltr"] .tx-status-bar {\n  border-left: 4px solid;\n}</pre>' },
+    ]
+  },
+  {
+    id: 'css-settings', severity: 'warning', category: 'css', type: 'css',
+    icon: '🎨', title: 'settings-page.css — 19 خاصية فيزيائية',
+    desc: 'text-align:right/left، border-left ثابتة',
+    file: 'settings-page.css', count: 19,
+    fix: 'إضافة selectors [dir] في rtl-ltr.css',
+    steps: [
+      { title: 'Settings borders', desc: '<pre>[dir="rtl"] .settings-section {\n  border-right: 3px solid var(--primary);\n  border-left: none;\n}</pre>' },
+    ]
+  },
+  {
+    id: 'css-sidebar', severity: 'warning', category: 'css', type: 'css',
+    icon: '🎨', title: 'sidebar.css — 14 خاصية فيزيائية',
+    desc: 'margin-right/left مكشوفة بدون [dir] — تتعارض مع rtl-ltr.css',
+    file: 'sidebar.css', count: 14,
+    fix: 'التأكد من أن rtl-ltr.css يُحمَّل بعد sidebar.css لتجاوز القيم',
+    steps: [
+      { title: 'ترتيب التحميل مهم', desc: '<pre>&lt;link href="sidebar.css"&gt;\n&lt;link href="rtl-ltr.css"&gt; ← يجب أن يكون بعده</pre>' },
+      { title: 'أضف !important للقيم الحرجة', desc: '<pre>[dir="rtl"] .main-content {\n  margin-right: var(--sidebar-width) !important;\n}</pre>' },
+    ]
+  },
+
+  // ── RTL/LTR ───────────────────────────────────────────────
+  {
+    id: 'rtl-dir-attr', severity: 'info', category: 'rtl', type: 'rtl',
+    icon: '↔️', title: 'تطبيق dir attribute — يعتمد على Cookie',
+    desc: 'PHP يقرأ اللغة من Cookie ويضبط dir — يعمل فقط إذا كان Cookie محفوظاً قبل التحديث',
+    file: 'index.php', count: 1,
+    fix: 'التأكد من حفظ Cookie صحيحاً في toggleLanguage()',
+    steps: [
+      { title: 'في toggleLanguage()', desc: '<pre>document.cookie = \n  `app_language=${lang};path=/;max-age=31536000`;</pre>' },
+      { title: 'في PHP', desc: '<pre>$appLang = "ar";\nif (!empty($_COOKIE["app_language"])) {\n  $appLang = $_COOKIE["app_language"];\n}\n$htmlDir = $appLang === "en" ? "ltr" : "rtl";</pre>' },
+    ]
+  },
+  {
+    id: 'rtl-dynamic', severity: 'critical', category: 'rtl', type: 'rtl',
+    icon: '🔄', title: 'المحتوى الديناميكي لا ينعكس فور البناء',
+    desc: 'عند switchTab() يُبنى HTML جديد بعد تطبيق اللغة — العناصر الجديدة تحتاج MutationObserver',
+    file: 'app-i18n.js', count: 1,
+    fix: 'MutationObserver موجود في app-i18n.js — تأكد من تحميله',
+    steps: [
+      { title: 'تأكد من وجود app-i18n.js', desc: '<pre>&lt;script src="app-common.js"&gt;&lt;/script&gt;\n&lt;script src="app-i18n.js"&gt;&lt;/script&gt; ← بعده مباشرة</pre>' },
+      { title: 'MutationObserver يراقب main-content', desc: 'يُطبق الترجمة على كل HTML جديد خلال 60ms من إضافته' },
+    ]
+  },
+  {
+    id: 'rtl-numbers', severity: 'ok', category: 'rtl', type: 'rtl',
+    icon: '🔢', title: 'الأرقام دائماً LTR ✅',
+    desc: 'rtl-ltr.css يُطبق direction:ltr على عناصر .amount و.currency وغيرها',
+    file: 'rtl-ltr.css', count: 0,
+    fix: 'لا يحتاج إصلاح',
+    steps: []
+  },
+  {
+    id: 'rtl-db-values', severity: 'warning', category: 'rtl', type: 'rtl',
+    icon: '🗄️', title: 'قيم DB لا تُترجم في الجداول',
+    desc: 'الحالات (جديد، مستلم، معتمد...) مخزّنة بالعربية في DB — تحتاج tr() عند العرض',
+    file: 'app-i18n.js', count: 1,
+    fix: 'استخدام دالة tr() أو data-ar-text attribute',
+    steps: [
+      { title: 'طريقة 1: tr() مباشرة', desc: '<pre>td.innerHTML = `&lt;span class="badge"&gt;${tr(status)}&lt;/span&gt;`;</pre>' },
+      { title: 'طريقة 2: data-ar-text', desc: '<pre>&lt;span class="status-badge" data-ar-text="${status}"&gt;\n  ${status}\n&lt;/span&gt;\n// MutationObserver يترجمه تلقائياً</pre>' },
+    ]
+  },
+
+  // ── POSITIVES ─────────────────────────────────────────────
+  {
+    id: 'ok-rtl-css', severity: 'ok', category: 'css', type: 'css',
+    icon: '✅', title: 'rtl-ltr.css مُحمَّل ومُفعَّل',
+    desc: '550 سطر يغطي: sidebar، tables، forms، modals، dropdowns، timeline، pagination',
+    file: 'rtl-ltr.css', count: 0, fix: '',
+    steps: []
+  },
+  {
+    id: 'ok-cookie', severity: 'ok', category: 'rtl', type: 'rtl',
+    icon: '✅', title: 'Cookie + localStorage للحفظ',
+    desc: 'اللغة تُحفظ في Cookie يقرأه PHP + localStorage يقرأه JS — يمنع رجوع اللغة عند التحديث',
+    file: 'app-common.js', count: 0, fix: '',
+    steps: []
+  },
+  {
+    id: 'ok-dashboard', severity: 'ok', category: 'translation', type: 'js',
+    icon: '✅', title: 'app-dashboard.js — مترجم بالكامل',
+    desc: 'يستخدم t() لكل النصوص: عناوين البانلات، رسائل الخطأ، التحيات، وحدات الوقت',
+    file: 'app-dashboard.js', count: 0, fix: '',
+    steps: []
+  },
+];
+
+// ══════════════════════════════════════════════════════════════
+//  LIVE SCAN — يفحص الصفحة الفعلية runtime
+// ══════════════════════════════════════════════════════════════
+
+function detectLiveIssues() {
+  const live = [];
+  const html = document.documentElement;
+  const dir  = html.getAttribute('dir') || 'rtl';
+  const lang = html.getAttribute('data-lang') || html.getAttribute('lang') || 'ar';
+
+  // 1. Check dir attribute
+  if (!html.hasAttribute('dir')) {
+    live.push({
+      id: 'live-no-dir', severity: 'critical', category: 'rtl', type: 'rtl',
+      icon: '🚨', title: 'لا يوجد dir attribute على <html>',
+      desc: 'العنصر الجذري يفتقر لـ dir="rtl" — سيتسبب في انهيار التخطيط',
+      file: 'index.php', count: 1,
+      fix: 'أضف dir="rtl" على <html lang="ar" dir="rtl">',
+      steps: [{ title: 'إصلاح', desc: '<pre>&lt;html lang="ar" dir="rtl" data-lang="ar"&gt;</pre>' }]
+    });
+  }
+
+  // 2. Check sidebar position
+  const sidebar = document.getElementById('sidebar');
+  if (sidebar) {
+    const rect = sidebar.getBoundingClientRect();
+    const isRTL = dir === 'rtl';
+    const expectedRight = isRTL ? (window.innerWidth - rect.right < 10) : (rect.left > 10);
+    if (!expectedRight) {
+      live.push({
+        id: 'live-sidebar-pos', severity: 'critical', category: 'rtl', type: 'rtl',
+        icon: '🚨', title: `السايدبار في الموضع الخاطئ`,
+        desc: `اللغة ${lang} تتطلب السايدبار ${isRTL ? 'يميناً' : 'يساراً'} — الموضع الحالي مختلف`,
+        file: 'sidebar.css / rtl-ltr.css', count: 1,
+        fix: 'تأكد من تحميل rtl-ltr.css بعد sidebar.css وأن dir attribute محدد على <html>',
+        steps: [
+          { title: 'ترتيب CSS', desc: '<pre>&lt;link href="sidebar.css"&gt;\n&lt;link href="rtl-ltr.css"&gt;</pre>' }
+        ]
+      });
+    }
+  }
+
+  // 3. Check for untranslated elements in DOM
+  const arabic = /[\u0600-\u06FF]{3,}/;
+  if (lang === 'en') {
+    let untranslated = 0;
+    document.querySelectorAll('.nav-label, .section-title, h1, h2, h3').forEach(el => {
+      if (arabic.test(el.textContent.trim())) untranslated++;
+    });
+    if (untranslated > 0) {
+      live.push({
+        id: 'live-untranslated', severity: 'critical', category: 'translation', type: 'html',
+        icon: '🔤', title: `${untranslated} عنصر لم يُترجم للإنجليزية`,
+        desc: 'الصفحة مضبوطة على EN لكن توجد عناصر لا تزال بالعربية',
+        file: 'DOM', count: untranslated,
+        fix: 'أضف data-i18n للعناصر أو استخدم MutationObserver في app-i18n.js',
+        steps: [
+          { title: 'للعناصر الثابتة', desc: '<pre>data-i18n="key"</pre>' },
+          { title: 'للمحتوى الديناميكي', desc: 'تأكد من تحميل app-i18n.js' }
+        ]
+      });
+    }
+  }
+
+  // 4. Check text-align consistency
+  const tables = document.querySelectorAll('table');
+  let wrongTables = 0;
+  tables.forEach(t => {
+    const style = getComputedStyle(t);
+    if (dir === 'rtl' && style.textAlign === 'left') wrongTables++;
+    if (dir === 'ltr' && style.textAlign === 'right') wrongTables++;
+  });
+  if (wrongTables > 0) {
+    live.push({
+      id: 'live-tables', severity: 'warning', category: 'css', type: 'css',
+      icon: '📊', title: `${wrongTables} جدول باتجاه خاطئ`,
+      desc: `الجداول تستخدم text-align معاكس لاتجاه الصفحة (${dir})`,
+      file: 'CSS', count: wrongTables,
+      fix: 'rtl-ltr.css يُصلح هذا — تأكد من تحميله',
+      steps: [{ title: 'إصلاح', desc: '<pre>[dir="rtl"] table { text-align: right; }\n[dir="ltr"] table { text-align: left; }</pre>' }]
+    });
+  }
+
+  // 5. Check main-content margin
+  const main = document.getElementById('main-content');
+  if (main && sidebar) {
+    const mainStyle = getComputedStyle(main);
+    const marginRight = parseFloat(mainStyle.marginRight);
+    const marginLeft  = parseFloat(mainStyle.marginLeft);
+    if (dir === 'rtl' && marginRight < 100) {
+      live.push({
+        id: 'live-margin', severity: 'critical', category: 'rtl', type: 'rtl',
+        icon: '📐', title: 'main-content margin خاطئ',
+        desc: `margin-right = ${marginRight}px (يجب أن يساوي عرض السايدبار ~240px)`,
+        file: 'sidebar.css', count: 1,
+        fix: 'تأكد من [dir="rtl"] .main-content { margin-right: var(--sidebar-width) !important; }',
+        steps: [
+          { title: 'في rtl-ltr.css', desc: '<pre>[dir="rtl"] .main-content {\n  margin-right: var(--sidebar-width) !important;\n  margin-left: 0 !important;\n}</pre>' }
+        ]
+      });
+    }
+    if (dir === 'ltr' && marginLeft < 100) {
+      live.push({
+        id: 'live-margin-ltr', severity: 'critical', category: 'rtl', type: 'rtl',
+        icon: '📐', title: 'main-content margin خاطئ (LTR)',
+        desc: `margin-left = ${marginLeft}px (يجب أن يساوي عرض السايدبار ~240px)`,
+        file: 'sidebar.css', count: 1,
+        fix: 'تأكد من [dir="ltr"] .main-content { margin-left: var(--sidebar-width) !important; }',
+        steps: []
+      });
+    }
+  }
+
+  // 6. Check lang toggle button
+  const langBtn = document.getElementById('langToggleBtn');
+  if (!langBtn) {
+    live.push({
+      id: 'live-no-langbtn', severity: 'warning', category: 'translation', type: 'html',
+      icon: '🔘', title: 'زر تغيير اللغة غير موجود',
+      desc: 'العنصر #langToggleBtn غير موجود في DOM',
+      file: 'index.php', count: 1,
+      fix: 'أضف زر اللغة في sidebar-actions',
+      steps: [
+        { title: 'HTML', desc: '<pre>&lt;button id="langToggleBtn" onclick="toggleLanguage()"&gt;\n  &lt;span class="lang-flag-ar"&gt;🇸🇦&lt;/span&gt;\n  &lt;span class="lang-flag-en"&gt;🇬🇧&lt;/span&gt;\n&lt;/button&gt;</pre>' }
+      ]
+    });
+  }
+
+  // 7. Check if i18n functions exist
+  if (typeof window.tr !== 'function') {
+    live.push({
+      id: 'live-no-tr', severity: 'critical', category: 'translation', type: 'js',
+      icon: '❌', title: 'دالة tr() غير موجودة',
+      desc: 'app-i18n.js لم يُحمَّل أو يحتوي خطأ',
+      file: 'app-i18n.js', count: 1,
+      fix: 'أضف <script src="app-i18n.js"> بعد app-common.js في index.php',
+      steps: [
+        { title: 'في index.php', desc: '<pre>&lt;script src="app-common.js"&gt;&lt;/script&gt;\n&lt;script src="app-i18n.js"&gt;&lt;/script&gt;</pre>' }
+      ]
+    });
+  }
+
+  if (typeof window.toggleLanguage !== 'function') {
+    live.push({
+      id: 'live-no-toggle', severity: 'critical', category: 'translation', type: 'js',
+      icon: '❌', title: 'دالة toggleLanguage() غير موجودة',
+      desc: 'app-common.js لم يُحمَّل',
+      file: 'app-common.js', count: 1,
+      fix: 'تأكد من تحميل app-common.js',
+      steps: []
+    });
+  }
+
+  return live;
+}
+
+// ══════════════════════════════════════════════════════════════
+//  RENDER
+// ══════════════════════════════════════════════════════════════
+
+let allIssues = [];
+
+function renderIssue(issue) {
+  const severityLabel = { critical:'حرجة', warning:'تحذير', info:'معلومة', ok:'ممتاز' };
+  const progressPct = issue.count > 0
+    ? Math.min(100, Math.round((issue.count / 500) * 100))
+    : 100;
+  const fillColor = {
+    critical: 'var(--red)', warning: 'var(--yellow)',
+    info: 'var(--blue)', ok: 'var(--green)'
+  }[issue.severity];
+
+  return `
+  <div class="issue-card severity-${issue.severity}"
+       data-severity="${issue.severity}"
+       data-category="${issue.category}"
+       data-type="${issue.type}"
+       onclick="openDetail('${issue.id}')">
+    <div class="issue-icon">${issue.icon}</div>
+    <div class="issue-body">
+      <div class="issue-title">
+        ${issue.title}
+      </div>
+      <div class="issue-desc">${issue.desc}</div>
+      <div class="issue-meta">
+        <span class="tag file">📁 ${issue.file}</span>
+        ${issue.count > 0 ? `<span class="tag count">⚠️ ${issue.count} مشكلة</span>` : ''}
+        ${issue.fix ? `<span class="tag fix">💡 ${issue.fix.substring(0,35)}...</span>` : ''}
+      </div>
+    </div>
+    <div class="issue-right">
+      <span class="severity-pill">${severityLabel[issue.severity]}</span>
+      ${issue.count > 0 ? `
+      <div class="progress-mini">
+        <div class="progress-mini-fill" style="width:${progressPct}%;background:${fillColor}"></div>
+      </div>` : ''}
+    </div>
+  </div>`;
+}
+
+function renderSummaryBars(issues) {
+  const byFile = {};
+  issues.forEach(i => {
+    if (i.count > 0) {
+      byFile[i.file] = (byFile[i.file] || 0) + i.count;
+    }
+  });
+
+  const max = Math.max(...Object.values(byFile), 1);
+  const colors = {
+    critical: 'var(--red)', warning: 'var(--yellow)',
+    info: 'var(--blue)', ok: 'var(--green)'
+  };
+
+  return Object.entries(byFile)
+    .sort((a,b) => b[1] - a[1])
+    .slice(0, 12)
+    .map(([file, count]) => {
+      const issue = issues.find(i => i.file === file);
+      const color = colors[issue?.severity] || 'var(--blue)';
+      const pct = Math.round((count / max) * 100);
+      return `<div class="bar-row">
+        <div class="bar-label">${file}</div>
+        <div class="bar-track"><div class="bar-fill" style="width:0%;background:${color}" data-pct="${pct}"></div></div>
+        <div class="bar-count">${count}</div>
+      </div>`;
+    }).join('');
+}
+
+function openDetail(id) {
+  const issue = allIssues.find(i => i.id === id);
+  if (!issue) return;
+
+  document.getElementById('detail-title').textContent = issue.title;
+  document.getElementById('detail-subtitle').textContent = issue.file;
+
+  const stepsHtml = issue.steps.map((s, idx) => `
+    <div class="fix-step">
+      <div class="step-num">${idx + 1}</div>
+      <div class="step-body">
+        <div class="step-title">${s.title}</div>
+        <div class="step-desc">${s.desc}</div>
+      </div>
+    </div>`).join('');
+
+  document.getElementById('detail-body').innerHTML = `
+    <div style="margin-bottom:1.5rem">
+      <div style="font-size:.75rem;color:var(--muted);margin-bottom:.5rem">وصف المشكلة</div>
+      <div style="font-size:.85rem;line-height:1.6">${issue.desc}</div>
+    </div>
+    ${issue.fix ? `
+    <div style="margin-bottom:1.5rem">
+      <div style="font-size:.75rem;color:var(--muted);margin-bottom:.5rem">الحل المقترح</div>
+      <div style="font-size:.85rem;line-height:1.6;color:var(--green)">${issue.fix}</div>
+    </div>` : ''}
+    ${stepsHtml ? `
+    <div>
+      <div style="font-size:.75rem;color:var(--muted);margin-bottom:.75rem">خطوات التنفيذ</div>
+      ${stepsHtml}
+    </div>` : '<div style="color:var(--green);font-size:.85rem">✅ لا يحتاج إصلاح</div>'}
+  `;
+
+  document.getElementById('detailPanel').classList.add('open');
+}
+
+function closeDetail() {
+  document.getElementById('detailPanel').classList.remove('open');
+}
+
+function filterIssues(type, btn) {
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+
+  document.querySelectorAll('.issue-card').forEach(card => {
+    const show = type === 'all'
+      || card.dataset.severity === type
+      || card.dataset.category === type
+      || card.dataset.type === type;
+    card.classList.toggle('hidden', !show);
+  });
+}
+
+function updateScore(issues) {
+  const critical = issues.filter(i => i.severity === 'critical').length;
+  const warning  = issues.filter(i => i.severity === 'warning').length;
+  const ok       = issues.filter(i => i.severity === 'ok').length;
+  const info     = issues.filter(i => i.severity === 'info').length;
+  const total    = issues.length;
+
+  const score = Math.max(0, Math.round(100 - (critical * 12) - (warning * 5) - (info * 1) + (ok * 3)));
+
+  document.getElementById('scoreNum').textContent = score;
+  document.getElementById('sc-critical').textContent = critical;
+  document.getElementById('sc-warning').textContent  = warning;
+  document.getElementById('sc-info').textContent     = info;
+  document.getElementById('sc-ok').textContent       = ok;
+
+  const scoreColor = score >= 80 ? '#22c55e' : score >= 50 ? '#f59e0b' : '#ef4444';
+  const fill = document.getElementById('scoreFill');
+  const circumference = 276.46;
+  fill.style.stroke = scoreColor;
+  setTimeout(() => {
+    fill.style.strokeDashoffset = circumference - (circumference * score / 100);
+  }, 300);
+  document.getElementById('scoreNum').style.color = scoreColor;
+}
+
+// ══════════════════════════════════════════════════════════════
+//  MAIN SCAN
+// ══════════════════════════════════════════════════════════════
+
+async function runScan() {
+  const btn = document.getElementById('scanBtn');
+  btn.classList.add('scanning');
+  document.getElementById('scanOverlay').classList.add('active');
+
+  const steps = [
+    [20, 'فحص اتجاه الصفحة (dir attribute)...'],
+    [35, 'فحص موضع السايدبار...'],
+    [50, 'فحص النصوص غير المترجمة في DOM...'],
+    [65, 'فحص الجداول والمحاذاة...'],
+    [80, 'تحليل ملفات CSS...'],
+    [90, 'فحص دوال JavaScript...'],
+    [100, 'إعداد التقرير...'],
+  ];
+
+  const barFill  = document.getElementById('scanBarFill');
+  const scanStat = document.getElementById('scanStatus');
+
+  for (const [pct, msg] of steps) {
+    barFill.style.width  = pct + '%';
+    scanStat.textContent = msg;
+    await new Promise(r => setTimeout(r, 350));
+  }
+
+  // Collect all issues
+  const liveIssues = detectLiveIssues();
+  allIssues = [...liveIssues, ...STATIC_ISSUES];
+
+  // Remove duplicates by id
+  const seen = new Set();
+  allIssues = allIssues.filter(i => {
+    if (seen.has(i.id)) return false;
+    seen.add(i.id); return true;
+  });
+
+  // Render
+  document.getElementById('issuesGrid').innerHTML = allIssues.map(renderIssue).join('');
+  document.getElementById('summaryBars').innerHTML = renderSummaryBars(allIssues);
+  updateScore(allIssues);
+
+  // Animate bars
+  setTimeout(() => {
+    document.querySelectorAll('.bar-fill[data-pct]').forEach(el => {
+      el.style.width = el.dataset.pct + '%';
+    });
+  }, 100);
+
+  // Show UI
+  document.getElementById('emptyState').style.display  = 'none';
+  document.getElementById('issuesList').style.display  = 'block';
+  document.getElementById('scoreSection').style.display = 'grid';
+  document.getElementById('filters').style.display      = 'flex';
+
+  // Hide overlay
+  document.getElementById('scanOverlay').classList.remove('active');
+  btn.classList.remove('scanning');
+
+  // Update filter counts
+  const total = allIssues.length;
+  document.getElementById('f-all-count').style.background =
+    allIssues.some(i => i.severity === 'critical') ? 'var(--red)' : 'var(--green)';
+}
+
+// Close panel on outside click
+document.addEventListener('click', e => {
+  if (!e.target.closest('.detail-panel') && !e.target.closest('.issue-card')) {
+    closeDetail();
+  }
+});
+
+// Auto-run if on workflow system
+window.addEventListener('load', () => {
+  if (window.location.href.includes('localhost') ||
+      window.location.href.includes('workflow')) {
+    setTimeout(runScan, 500);
+  }
+});
+</script>
+</body>
+</html>

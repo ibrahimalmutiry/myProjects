@@ -26,6 +26,53 @@ try {
         //  الموظفون
         // ══════════════════════════════════════════════════════
 
+        case 'get_employees':
+            $conn = db();
+            @$conn->query("ALTER TABLE employees ADD COLUMN IF NOT EXISTS permission_level_code VARCHAR(50) DEFAULT NULL");
+            @$conn->query("ALTER TABLE employees ADD COLUMN IF NOT EXISTS sector_id INT DEFAULT NULL");
+            @$conn->query("ALTER TABLE employees ADD COLUMN IF NOT EXISTS division_id INT DEFAULT NULL");
+            @$conn->query("ALTER TABLE employees ADD COLUMN IF NOT EXISTS job_title VARCHAR(150) DEFAULT NULL");
+
+            // ── مزامنة تلقائية: permission_level يتبع permission_level_code دائماً ──
+            $conn->query("
+                UPDATE employees
+                SET permission_level = CASE
+                    WHEN permission_level_code = 'system_admin'     THEN 'system_admin'
+                    WHEN permission_level_code = 'CEO'              THEN 'CEO'
+                    WHEN permission_level_code = 'sector_head'      THEN 'sector_head'
+                    WHEN permission_level_code = 'division_manager' THEN 'division_manager'
+                    WHEN permission_level_code = 'employee_l1'      THEN 'employee_l1'
+                    WHEN permission_level_code = 'employee'         THEN 'employee'
+                    ELSE permission_level
+                END
+                WHERE permission_level_code IS NOT NULL
+                  AND permission_level_code != ''
+                  AND permission_level != permission_level_code
+                  AND permission_level_code IN ('system_admin','CEO','sector_head','division_manager','employee_l1','employee')
+            ");
+            // ── مزامنة من الدور: إذا لم يكن permission_level_code محدداً استخدم الدور ──
+            $conn->query("UPDATE employees SET permission_level='system_admin', permission_level_code='system_admin' WHERE role='admin' AND (permission_level NOT IN ('system_admin') OR permission_level_code IS NULL)");
+            $conn->query("UPDATE employees SET permission_level='CEO', permission_level_code='CEO' WHERE role='CEO' AND (permission_level NOT IN ('system_admin','CEO') OR permission_level_code IS NULL OR permission_level_code='')");
+            $conn->query("UPDATE employees SET permission_level='sector_head', permission_level_code='sector_head' WHERE role='sector_head' AND (permission_level NOT IN ('system_admin','sector_head') OR permission_level_code IS NULL OR permission_level_code='')");
+            $conn->query("UPDATE employees SET permission_level='division_manager', permission_level_code='division_manager' WHERE role='division_manager' AND (permission_level NOT IN ('system_admin','CEO','division_manager') OR permission_level_code IS NULL OR permission_level_code='')");
+            // الأدوار الوظيفية → employee_l1 افتراضياً إن لم تكن لها صلاحية محددة
+            $conn->query("UPDATE employees SET permission_level='employee_l1', permission_level_code='employee_l1' WHERE role IN ('budget','treasury_manager','dispatch','payment','invoice','purchasing','receiver') AND (permission_level_code IS NULL OR permission_level_code='' OR permission_level='employee')");
+            $r = $conn->query("
+                SELECT e.id, e.name, e.email, e.phone, e.role, e.job_title,
+                       e.employee_number, e.permission_level, e.permission_level_code,
+                       e.can_delete, e.supervisor_id, e.department_id,
+                       e.sector_id, e.division_id, e.is_active,
+                       sup.name AS supervisor_name
+                FROM employees e
+                LEFT JOIN employees sup ON sup.id = e.supervisor_id
+                WHERE e.is_active = 1
+                ORDER BY e.name
+            ");
+            $rows = [];
+            if ($r) while ($row = $r->fetch_assoc()) $rows[] = $row;
+            jsonResponse(['success'=>true,'data'=>$rows]);
+            break;
+
         case 'add_employee':
             if ($method !== 'POST') jsonResponse(['success'=>false,'message'=>'POST فقط'],405);
             $input          = json_decode(file_get_contents('php://input'), true) ?? [];
@@ -49,12 +96,17 @@ try {
             $conn->query("ALTER TABLE employees ADD COLUMN IF NOT EXISTS permission_level_code VARCHAR(50) DEFAULT NULL AFTER permission_level");
             $conn->query("ALTER TABLE employees ADD COLUMN IF NOT EXISTS job_title VARCHAR(150) DEFAULT NULL AFTER name");
 
+            // مزامنة permission_level مع permission_level_code
+            $validLevels = ['system_admin','CEO','sector_head','division_manager','employee_l1','employee'];
+            $rawCode = $input['permission_level_code'] ?? '';
+            $syncedLevel = in_array($rawCode, $validLevels) ? $rawCode : 'employee';
+
             $conn->query("INSERT INTO employees
                 (name, job_title, email, phone, role, employee_number, supervisor_id,
-                 department_id, sector_id, division_id, permission_level_code)
+                 department_id, sector_id, division_id, permission_level, permission_level_code)
                 VALUES
                 ('$name','$jobTitle','$email','$phone','$role','$employeeNumber',$supervisorId,
-                 $departmentId,$sectorId,$divisionId,$permCode)");
+                 $departmentId,$sectorId,$divisionId,'$syncedLevel',$permCode)");
 
             if ($conn->affected_rows > 0)
                 jsonResponse(['success'=>true,'message'=>'تم إضافة الموظف','id'=>$conn->insert_id]);
@@ -71,6 +123,7 @@ try {
             $email          = $conn->real_escape_string($input['email'] ?? '');
             $phone          = $conn->real_escape_string($input['phone'] ?? '');
             $role           = $conn->real_escape_string($input['role'] ?? 'receiver');
+            $jobTitle       = $conn->real_escape_string($input['job_title'] ?? '');
             $employeeNumber = $conn->real_escape_string($input['employee_number'] ?? '');
             $supervisorId   = !empty($input['supervisor_id'])  ? (int)$input['supervisor_id']  : 'NULL';
             $departmentId   = !empty($input['department_id'])  ? (int)$input['department_id']  : 'NULL';
@@ -83,13 +136,20 @@ try {
             $conn->query("ALTER TABLE employees ADD COLUMN IF NOT EXISTS sector_id INT DEFAULT NULL AFTER department_id");
             $conn->query("ALTER TABLE employees ADD COLUMN IF NOT EXISTS division_id INT DEFAULT NULL AFTER sector_id");
             $conn->query("ALTER TABLE employees ADD COLUMN IF NOT EXISTS permission_level_code VARCHAR(50) DEFAULT NULL AFTER permission_level");
-
             $conn->query("ALTER TABLE employees ADD COLUMN IF NOT EXISTS job_title VARCHAR(150) DEFAULT NULL AFTER name");
+
+            // مزامنة permission_level مع permission_level_code — الأدوار الخمسة فقط
+            $validLevels = ['system_admin','CEO','sector_head','division_manager','employee_l1','employee'];
+            $rawCode = $input['permission_level_code'] ?? '';
+            $syncedLevel = in_array($rawCode, $validLevels) ? $rawCode : 'employee';
+            $syncedLevelSql = "'" . $conn->real_escape_string($syncedLevel) . "'";
+
             $conn->query("UPDATE employees SET
                 name='$name', job_title='$jobTitle', email='$email', phone='$phone',
                 role='$role', employee_number='$employeeNumber',
                 supervisor_id=$supervisorId, department_id=$departmentId,
                 sector_id=$sectorId, division_id=$divisionId,
+                permission_level=$syncedLevelSql,
                 permission_level_code=$permCode
                 WHERE id=$id");
 
@@ -234,16 +294,20 @@ try {
 
             // إدراج القيم الافتراضية
             $defaults = [
-                ['system_admin',     'مدير النظام',      'صلاحية كاملة على كل شيء', 1, '#ef4444', 1],
-                ['sector_head',      'رئيس القطاع',       'يرى كل معاملات قطاعه',   2, '#8b5cf6', 0],
-                ['division_manager', 'مدير القسم',         'يرى معاملات قسمه',        3, '#3b82f6', 0],
-                ['employee_l1',      'موظف مستوى أول',    'وصول موسع للتقارير',      4, '#f59e0b', 0],
-                ['employee',         'موظف',              'وصول محدود',              5, '#22c55e', 0],
+                ['system_admin',     'مدير النظام',        'صلاحية كاملة على كل شيء',              1, '#ef4444', 1],
+                ['CEO',              'الرئيس التنفيذي',    'يعتمد جميع المعاملات النهائية',         2, '#8b5cf6', 0],
+                ['sector_head',      'رئيس القطاع',        'يرى كل معاملات قطاعه',                 3, '#8b5cf6', 0],
+                ['division_manager', 'مدير القسم',         'يرى معاملات قسمه',                     4, '#3b82f6', 0],
+                ['employee_l1',      'موظف مستوى أول',     'وصول موسع للتقارير',                   5, '#f59e0b', 0],
+                ['employee',         'موظف',               'وصول محدود',                           6, '#22c55e', 0],
             ];
             foreach ($defaults as [$code, $label, $desc, $order, $color, $sys]) {
-                $conn->query("INSERT IGNORE INTO permission_level_definitions
+                $conn->query("INSERT INTO permission_level_definitions
                     (code,label,description,sort_order,color,is_system)
-                    VALUES ('$code','$label','$desc',$order,'$color',$sys)");
+                    VALUES ('$code','$label','$desc',$order,'$color',$sys)
+                    ON DUPLICATE KEY UPDATE
+                        label=VALUES(label), description=VALUES(description),
+                        sort_order=VALUES(sort_order), color=VALUES(color)");
             }
 
             $rows = [];
@@ -525,7 +589,7 @@ try {
             $chkCol = $conn->query("SHOW COLUMNS FROM employees LIKE 'permission_level'");
             if (!$chkCol || $chkCol->num_rows === 0) {
                 $conn->query("ALTER TABLE employees
-                    ADD COLUMN permission_level ENUM('system_admin','manager','employee')
+                    ADD COLUMN permission_level ENUM('system_admin','CEO','sector_head','division_manager','employee_l1','employee')
                         NOT NULL DEFAULT 'employee' AFTER role,
                     ADD COLUMN can_delete TINYINT(1) NOT NULL DEFAULT 0 AFTER permission_level");
                 $conn->query("UPDATE employees SET permission_level='system_admin', can_delete=1 WHERE role='admin'");
@@ -561,7 +625,7 @@ try {
                 $allPages = ['dashboard','transactions','correspondence','bank-overview','bank-accounts',
                              'bank-investments','daily-payments','sla','performance','settings',
                              'notifications','reservations','budget-plans','archive','ceo-approvals',
-                             'purchase-requests'];
+                             'purchase-requests','reports'];
                 $pages    = [];
 
                 if ($emp['permission_level'] === 'system_admin') {
@@ -572,14 +636,36 @@ try {
                     if ($r2) while ($row = $r2->fetch_assoc()) $stored[$row['page']] = (bool)$row['can_access'];
 
                     $defaults = [
-                        'manager'  => ['dashboard'=>1,'transactions'=>1,'correspondence'=>1,'bank-overview'=>1,
-                                       'bank-accounts'=>1,'bank-investments'=>1,'daily-payments'=>1,'sla'=>1,
-                                       'performance'=>1,'settings'=>0,'notifications'=>1,'reservations'=>1,
-                                       'budget-plans'=>1,'archive'=>1,'ceo-approvals'=>1,'purchase-requests'=>1],
-                        'employee' => ['dashboard'=>0,'transactions'=>1,'correspondence'=>1,'bank-overview'=>0,
-                                       'bank-accounts'=>0,'bank-investments'=>0,'daily-payments'=>0,'sla'=>0,
-                                       'performance'=>0,'settings'=>0,'notifications'=>1,'reservations'=>1,
-                                       'budget-plans'=>0,'archive'=>0,'ceo-approvals'=>0,'purchase-requests'=>1],
+                        'CEO'              => ['dashboard'=>1,'transactions'=>1,'correspondence'=>1,'bank-overview'=>1,
+                                              'bank-accounts'=>1,'bank-investments'=>1,'daily-payments'=>1,'sla'=>1,
+                                              'performance'=>1,'settings'=>0,'notifications'=>1,'reservations'=>1,
+                                              'budget-plans'=>1,'archive'=>1,'ceo-approvals'=>1,'purchase-requests'=>1,
+                                              'reports'=>1],
+                        'sector_head'      => ['dashboard'=>1,'transactions'=>1,'correspondence'=>1,'bank-overview'=>1,
+                                              'bank-accounts'=>1,'bank-investments'=>1,'daily-payments'=>1,'sla'=>1,
+                                              'performance'=>1,'settings'=>0,'notifications'=>1,'reservations'=>1,
+                                              'budget-plans'=>1,'archive'=>1,'ceo-approvals'=>1,'purchase-requests'=>1,
+                                              'reports'=>1],
+                        'division_manager' => ['dashboard'=>1,'transactions'=>1,'correspondence'=>1,'bank-overview'=>1,
+                                              'bank-accounts'=>0,'bank-investments'=>0,'daily-payments'=>1,'sla'=>1,
+                                              'performance'=>1,'settings'=>0,'notifications'=>1,'reservations'=>1,
+                                              'budget-plans'=>1,'archive'=>1,'ceo-approvals'=>0,'purchase-requests'=>1,
+                                              'reports'=>1],
+                        'employee_l1'      => ['dashboard'=>0,'transactions'=>1,'correspondence'=>1,'bank-overview'=>0,
+                                              'bank-accounts'=>0,'bank-investments'=>0,'daily-payments'=>1,'sla'=>0,
+                                              'performance'=>1,'settings'=>0,'notifications'=>1,'reservations'=>1,
+                                              'budget-plans'=>0,'archive'=>0,'ceo-approvals'=>0,'purchase-requests'=>1,
+                                              'reports'=>1],
+                        'manager'          => ['dashboard'=>1,'transactions'=>1,'correspondence'=>1,'bank-overview'=>1,
+                                              'bank-accounts'=>1,'bank-investments'=>1,'daily-payments'=>1,'sla'=>1,
+                                              'performance'=>1,'settings'=>0,'notifications'=>1,'reservations'=>1,
+                                              'budget-plans'=>1,'archive'=>1,'ceo-approvals'=>1,'purchase-requests'=>1,
+                                              'reports'=>1],
+                        'employee'         => ['dashboard'=>0,'transactions'=>1,'correspondence'=>1,'bank-overview'=>0,
+                                              'bank-accounts'=>0,'bank-investments'=>0,'daily-payments'=>0,'sla'=>0,
+                                              'performance'=>0,'settings'=>0,'notifications'=>1,'reservations'=>1,
+                                              'budget-plans'=>0,'archive'=>0,'ceo-approvals'=>0,'purchase-requests'=>1,
+                                              'reports'=>0],
                     ];
                     $def = $defaults[$emp['permission_level']] ?? [];
                     foreach ($allPages as $p) {
@@ -615,9 +701,10 @@ try {
                 $conn->query("ALTER TABLE employees ADD COLUMN IF NOT EXISTS permission_level_code VARCHAR(50) DEFAULT NULL");
 
                 // ضمان توسيع ENUM قبل الحفظ
-                @$conn->query("ALTER TABLE employees MODIFY COLUMN permission_level ENUM('system_admin','sector_head','division_manager','employee_l1','employee','manager') NOT NULL DEFAULT 'employee'");
-                $validLevels = ['system_admin','sector_head','division_manager','employee_l1','employee'];
-                $enumLevel   = in_array($levelCode, $validLevels) ? $levelCode : 'employee';
+                @$conn->query("ALTER TABLE employees MODIFY COLUMN permission_level ENUM('system_admin','CEO','sector_head','division_manager','employee_l1','employee') NOT NULL DEFAULT 'employee'");
+                $validLevels = ['system_admin','CEO','sector_head','division_manager','employee_l1','employee','manager'];
+                // CEO يُحفظ مباشرة كـ 'CEO' في الـ ENUM
+                $enumLevel = in_array($levelCode, $validLevels) ? $levelCode : 'employee';
 
                 $conn->query("UPDATE employees
                     SET permission_level='$enumLevel',
@@ -659,6 +746,154 @@ try {
                 break;
             }
             break;
+
+        // ── جلب قيمة إعداد واحد ────────────────────────────────
+        case 'get_setting': {
+            $conn = db();
+            $key  = $conn->real_escape_string($_GET['key'] ?? '');
+            if (!$key) { jsonResponse(['success'=>false,'message'=>'المفتاح مطلوب'], 400); }
+            // قيمة افتراضية لـ pr_amount_threshold إذا لم تكن موجودة
+            $r = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key='$key' LIMIT 1");
+            $val = ($r && $row = $r->fetch_assoc()) ? $row['setting_value'] : '';
+            // إذا فارغة استخدم الافتراضي من pr_functions
+            if ($val === '' && $key === 'pr_amount_threshold') $val = '5000';
+            jsonResponse(['success'=>true,'value'=>$val]);
+            break;
+        }
+
+        // ── حفظ قيمة إعداد واحد ────────────────────────────────
+        case 'save_setting': {
+            $conn  = db();
+            $input = json_decode(file_get_contents('php://input'), true) ?? [];
+            $key   = $conn->real_escape_string($input['key']   ?? '');
+            $val   = $conn->real_escape_string($input['value'] ?? '');
+            if (!$key) { jsonResponse(['success'=>false,'message'=>'المفتاح مطلوب'], 400); }
+            $conn->query("INSERT INTO system_settings (setting_key,setting_value) VALUES ('$key','$val')
+                          ON DUPLICATE KEY UPDATE setting_value='$val'");
+            jsonResponse(['success'=>true,'message'=>'تم الحفظ']);
+            break;
+        }
+
+        // ── جلب سياسات SLA لطلبات الشراء ───────────────────────
+        case 'get_pr_sla_policies': {
+            $conn = db();
+            // إنشاء الجدول تلقائياً إن لم يكن موجوداً
+            $conn->query("CREATE TABLE IF NOT EXISTS pr_sla_policies (
+                id            INT AUTO_INCREMENT PRIMARY KEY,
+                stage_name    VARCHAR(60)  NOT NULL,
+                name          VARCHAR(100) NOT NULL DEFAULT '',
+                allowed_hours DECIMAL(6,2) NOT NULL DEFAULT 24,
+                warning_pct   TINYINT      NOT NULL DEFAULT 70,
+                escalate_pct  TINYINT      NOT NULL DEFAULT 100,
+                is_active     TINYINT(1)   NOT NULL DEFAULT 1,
+                UNIQUE KEY uq_stage (stage_name)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+            // إدراج الافتراضيات إن كان الجدول فارغاً
+            $cnt = $conn->query("SELECT COUNT(*) AS c FROM pr_sla_policies")->fetch_assoc()['c'];
+            if (!$cnt) {
+                $defaults = [
+                    ['reception',               'الاستلام والتحقق',           24],
+                    ['budget_review',           'مراجعة الموازنة',            24],
+                    ['treasury_review',         'مراجعة مدير الخزينة',        48],
+                    ['finance_review',          'مراجعة رئيس القطاع المالي',  48],
+                    ['ceo_approval',            'موافقة CEO المبدئية',         72],
+                    ['purchasing',              'المشتريات — إنشاء حجز',      48],
+                    ['waiting_budget_approval', 'اعتماد حجز الموازنة',        24],
+                    ['accounts_review',         'الحسابات — مراجعة وتوزيع',  24],
+                    ['po_issuance',             'إصدار أمر الشراء (PO)',       72],
+                    ['payment',                 'المالية — الدفع',             48],
+                    ['referral',                'الإحالة',                     24],
+                ];
+                foreach ($defaults as [$stage, $name, $hours]) {
+                    $s = $conn->real_escape_string($stage);
+                    $n = $conn->real_escape_string($name);
+                    $conn->query("INSERT IGNORE INTO pr_sla_policies (stage_name,name,allowed_hours) VALUES ('$s','$n',$hours)");
+                }
+            }
+
+            $r = $conn->query("SELECT * FROM pr_sla_policies ORDER BY id");
+            $rows = [];
+            if ($r) while ($row = $r->fetch_assoc()) $rows[] = $row;
+            jsonResponse(['success'=>true,'data'=>$rows]);
+            break;
+        }
+
+        // ── حفظ سياسات SLA لطلبات الشراء ───────────────────────
+        case 'save_pr_sla_policies': {
+            $conn     = db();
+            $input    = json_decode(file_get_contents('php://input'), true) ?? [];
+            $policies = $input['policies'] ?? [];
+            if (empty($policies)) { jsonResponse(['success'=>false,'message'=>'لا توجد سياسات'], 400); }
+            foreach ($policies as $p) {
+                $stage = $conn->real_escape_string($p['stage'] ?? '');
+                $hours = (float)($p['hours'] ?? 24);
+                $warn  = (int)($p['warn']  ?? 70);
+                $esc   = (int)($p['esc']   ?? 100);
+                $id    = (int)($p['id']    ?? 0);
+                if (!$stage) continue;
+                if ($id > 0) {
+                    $conn->query("UPDATE pr_sla_policies SET allowed_hours=$hours, warning_pct=$warn, escalate_pct=$esc WHERE id=$id");
+                } else {
+                    $name = $conn->real_escape_string($p['stage'] ?? $stage);
+                    $conn->query("INSERT INTO pr_sla_policies (stage_name,name,allowed_hours,warning_pct,escalate_pct)
+                                  VALUES ('$stage','$name',$hours,$warn,$esc)
+                                  ON DUPLICATE KEY UPDATE allowed_hours=$hours, warning_pct=$warn, escalate_pct=$esc");
+                }
+            }
+            jsonResponse(['success'=>true,'message'=>'تم حفظ سياسات SLA']);
+            break;
+        }
+
+        // ══════════════════════════════════════════════════════
+        //  محرر الهوية البصرية — Theme Editor
+        // ══════════════════════════════════════════════════════
+
+        // جلب جميع إعدادات النظام (يستخدمها ThemeEditor لتحميل الثيم)
+        case 'get_system_settings': {
+            $conn = db();
+            // إنشاء جدول system_settings إن لم يكن موجوداً
+            $conn->query("CREATE TABLE IF NOT EXISTS system_settings (
+                id            INT AUTO_INCREMENT PRIMARY KEY,
+                setting_key   VARCHAR(100) NOT NULL,
+                setting_value TEXT         NOT NULL DEFAULT '',
+                UNIQUE KEY uq_key (setting_key)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+            $r    = $conn->query("SELECT setting_key, setting_value FROM system_settings");
+            $rows = [];
+            if ($r) while ($row = $r->fetch_assoc()) $rows[] = $row;
+            jsonResponse(['success' => true, 'data' => $rows]);
+            break;
+        }
+
+        // حفظ إعداد واحد بالـ key/value (يستخدمها ThemeEditor عند الحفظ)
+        case 'save_system_setting': {
+            if ($method !== 'POST') jsonResponse(['success'=>false,'message'=>'POST فقط'], 405);
+            $input = json_decode(file_get_contents('php://input'), true) ?? [];
+            $key   = trim($input['key']   ?? '');
+            $val   = trim($input['value'] ?? '');
+            if (!$key) jsonResponse(['success'=>false,'message'=>'المفتاح مطلوب'], 400);
+
+            $conn = db();
+            // إنشاء الجدول تلقائياً إن لم يكن موجوداً
+            $conn->query("CREATE TABLE IF NOT EXISTS system_settings (
+                id            INT AUTO_INCREMENT PRIMARY KEY,
+                setting_key   VARCHAR(100) NOT NULL,
+                setting_value TEXT         NOT NULL DEFAULT '',
+                UNIQUE KEY uq_key (setting_key)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+            $k = $conn->real_escape_string($key);
+            $v = $conn->real_escape_string($val);
+            $conn->query("INSERT INTO system_settings (setting_key, setting_value)
+                          VALUES ('$k', '$v')
+                          ON DUPLICATE KEY UPDATE setting_value = '$v'");
+
+            if ($conn->errno) jsonResponse(['success'=>false,'message'=>$conn->error], 500);
+            jsonResponse(['success' => true, 'message' => 'تم الحفظ']);
+            break;
+        }
 
         default:
             jsonResponse(['success'=>false,'message'=>'إجراء غير معروف: '.$action], 400);

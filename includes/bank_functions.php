@@ -1,14 +1,11 @@
 <?php
 /**
  * bank_functions.php
- * دوال الحسابات البنكية والأرصدة والحسابات
+ * دوال الحسابات البنكية
  *
  * الأقسام:
  * ① الحسابات البنكية (قراءة / إضافة / تعديل / تحديث الرصيد)
- * ② الحسابات البنكية (قراءة / إضافة / تأكيد / توليد رقم)
- * ③ الأرصدة اليومية (قراءة / تسجيل)
- * ④ دوال مساعدة للودائع والسحوبات اليومية
- * ⑤ الإحصائيات
+ * ② الإحصائيات
  */
 
 
@@ -16,41 +13,27 @@
 // ① الحسابات البنكية
 // ═══════════════════════════════════════════════════════════════
 
-/**
- * الحصول على جميع الحسابات البنكية
- */
 function getAllBankAccounts($activeOnly = false) {
     $conn = db();
-
-    $sql = "SELECT * FROM bank_accounts";
+    $sql  = "SELECT * FROM bank_accounts";
     if ($activeOnly) $sql .= " WHERE is_active = 1";
     $sql .= " ORDER BY id DESC";
-
     $result   = $conn->query($sql);
     $accounts = [];
-    if ($result && $result->num_rows > 0) {
+    if ($result && $result->num_rows > 0)
         while ($row = $result->fetch_assoc()) $accounts[] = $row;
-    }
     return $accounts;
 }
 
-/**
- * الحصول على حساب بنكي واحد
- */
 function getBankAccount($id) {
-    $conn = db();
-    $id   = (int)$id;
-
+    $conn   = db();
+    $id     = (int)$id;
     $result = $conn->query("SELECT * FROM bank_accounts WHERE id = $id");
     return ($result && $result->num_rows > 0) ? $result->fetch_assoc() : null;
 }
 
-/**
- * إضافة حساب بنكي جديد
- */
 function addBankAccount($data) {
-    $conn = db();
-
+    $conn           = db();
     $accountNumber  = $conn->real_escape_string($data['account_number']);
     $accountName    = $conn->real_escape_string($data['account_name']);
     $bankName       = $conn->real_escape_string($data['bank_name']);
@@ -72,18 +55,14 @@ function addBankAccount($data) {
                 '$iban', '$swiftCode', '$notes'
             )";
 
-    if ($conn->query($sql)) {
-        return ['success' => true, 'id' => $conn->insert_id];
-    }
-    return ['success' => false, 'message' => $conn->error];
+    return $conn->query($sql)
+        ? ['success' => true, 'id' => $conn->insert_id]
+        : ['success' => false, 'message' => $conn->error];
 }
 
-/**
- * تحديث بيانات حساب بنكي
- */
 function updateBankAccount($id, $data) {
-    $conn = db();
-    $id   = (int)$id;
+    $conn        = db();
+    $id          = (int)$id;
     if ($id <= 0) return ['success' => false, 'message' => 'معرف الحساب غير صالح'];
 
     $accountName = $conn->real_escape_string(trim($data['account_name']   ?? ''));
@@ -93,9 +72,8 @@ function updateBankAccount($id, $data) {
     $iban        = $conn->real_escape_string(trim($data['iban']           ?? ''));
     $isActive    = (int)($data['is_active'] ?? 1);
 
-    if (empty($accountName) || empty($bankName)) {
+    if (empty($accountName) || empty($bankName))
         return ['success' => false, 'message' => 'اسم الحساب والبنك مطلوبان'];
-    }
 
     $sql = "UPDATE bank_accounts SET
                 account_name   = '$accountName',
@@ -106,33 +84,215 @@ function updateBankAccount($id, $data) {
                 is_active      = $isActive
             WHERE id = $id";
 
-    if ($conn->query($sql)) {
-        return ['success' => true, 'message' => 'تم تحديث الحساب بنجاح'];
-    }
-    return ['success' => false, 'message' => $conn->error];
+    return $conn->query($sql)
+        ? ['success' => true, 'message' => 'تم تحديث الحساب بنجاح']
+        : ['success' => false, 'message' => $conn->error];
 }
 
-/**
- * تحديث الرصيد الحالي لحساب بنكي
- */
 function updateAccountBalance($accountId, $newBalance) {
-    $conn       = db();
-    $accountId  = (int)$accountId;
-    $newBalance = (float)$newBalance;
-
-    return $conn->query("UPDATE bank_accounts SET current_balance = $newBalance WHERE id = $accountId");
+    $conn      = db();
+    $accountId = (int)$accountId;
+    return $conn->query("UPDATE bank_accounts SET current_balance = " . (float)$newBalance . " WHERE id = $accountId");
 }
 
 
 // ═══════════════════════════════════════════════════════════════
-// ② الحسابات البنكية
+// ② الأرصدة اليومية
 // ═══════════════════════════════════════════════════════════════
 
 /**
- * الحصول على جميع الودائع
+ * إنشاء جدول daily_balances إن لم يكن موجوداً
  */
-function getAllDeposits($limit = null) {
+function ensureDailyBalancesTable() {
     $conn = db();
+    $conn->query("CREATE TABLE IF NOT EXISTS daily_balances (
+        id                INT          NOT NULL AUTO_INCREMENT,
+        account_id        INT          NOT NULL,
+        balance_date      DATE         NOT NULL,
+        opening_balance   DECIMAL(15,2) NOT NULL DEFAULT 0,
+        closing_balance   DECIMAL(15,2) NOT NULL DEFAULT 0,
+        total_deposits    DECIMAL(15,2) NOT NULL DEFAULT 0,
+        total_withdrawals DECIMAL(15,2) NOT NULL DEFAULT 0,
+        notes             TEXT,
+        recorded_by       INT          DEFAULT 1,
+        created_at        TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at        TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        UNIQUE KEY uq_account_date (account_id, balance_date),
+        CONSTRAINT fk_db_account FOREIGN KEY (account_id)
+            REFERENCES bank_accounts(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+}
+
+/**
+ * جلب سجل الأرصدة اليومية
+ */
+function getDailyBalances(int $limit = 30, ?int $accountId = null): array {
+    $conn  = db();
+    ensureDailyBalancesTable();
+    $where = $accountId ? "WHERE db.account_id = " . (int)$accountId : '';
+    $limit = max(1, min($limit, 500));
+
+    $sql = "SELECT
+                db.*,
+                a.account_name,
+                a.bank_name
+            FROM daily_balances db
+            LEFT JOIN bank_accounts a ON db.account_id = a.id
+            $where
+            ORDER BY db.balance_date DESC, db.id DESC
+            LIMIT $limit";
+
+    $result   = $conn->query($sql);
+    $balances = [];
+    if ($result && $result->num_rows > 0) {
+        while ($row = $result->fetch_assoc()) $balances[] = $row;
+    }
+    return $balances;
+}
+
+/**
+ * مجموع الودائع المؤكدة لحساب في يوم معين
+ */
+function _getTotalDepositsForDate(int $accountId, string $date): float {
+    $conn = db();
+    ensureBankDepositsTable();
+    $date   = $conn->real_escape_string($date);
+    $result = $conn->query(
+        "SELECT COALESCE(SUM(amount), 0) AS total
+         FROM bank_deposits
+         WHERE account_id = $accountId
+           AND deposit_date = '$date'
+           AND status = 'مؤكد'"
+    );
+    return ($result) ? (float)$result->fetch_assoc()['total'] : 0.0;
+}
+
+/**
+ * تسجيل رصيد يومي — يُنشئ سجلاً جديداً أو يُحدّث الموجود لنفس اليوم والحساب
+ */
+function recordDailyBalance(array $data): array {
+    $conn = db();
+    ensureDailyBalancesTable();
+
+    $accountId      = (int)($data['account_id']      ?? 0);
+    $balanceDate    = $conn->real_escape_string($data['balance_date']    ?? date('Y-m-d'));
+    $openingBalance = (float)($data['opening_balance'] ?? 0);
+    $closingBalance = (float)($data['closing_balance'] ?? 0);
+    $notes          = $conn->real_escape_string(trim($data['notes']      ?? ''));
+    $recordedBy     = (int)($_SESSION['user_id']      ?? 1);
+    $updateCurrent  = (($data['update_current'] ?? '0') === '1');
+
+    if ($accountId <= 0) {
+        return ['success' => false, 'message' => 'معرّف الحساب مطلوب'];
+    }
+
+    // التحقق من وجود الحساب
+    $accCheck = $conn->query("SELECT id FROM bank_accounts WHERE id = $accountId LIMIT 1");
+    if (!$accCheck || $accCheck->num_rows === 0) {
+        return ['success' => false, 'message' => 'الحساب البنكي غير موجود'];
+    }
+
+    $deposits    = _getTotalDepositsForDate($accountId, $balanceDate);
+    $withdrawals = 0.0; // يمكن تفعيله لاحقاً من جدول المدفوعات
+
+    $sql = "INSERT INTO daily_balances
+                (account_id, balance_date, opening_balance, closing_balance,
+                 total_deposits, total_withdrawals, notes, recorded_by)
+            VALUES
+                ($accountId, '$balanceDate', $openingBalance, $closingBalance,
+                 $deposits, $withdrawals, '$notes', $recordedBy)
+            ON DUPLICATE KEY UPDATE
+                opening_balance   = $openingBalance,
+                closing_balance   = $closingBalance,
+                total_deposits    = $deposits,
+                total_withdrawals = $withdrawals,
+                notes             = '$notes',
+                recorded_by       = $recordedBy,
+                updated_at        = CURRENT_TIMESTAMP";
+
+    if (!$conn->query($sql)) {
+        return ['success' => false, 'message' => 'فشل تسجيل الرصيد: ' . $conn->error];
+    }
+
+    // تحديث الرصيد الحالي في bank_accounts إن طُلب ذلك
+    if ($updateCurrent) {
+        $conn->query("UPDATE bank_accounts SET current_balance = $closingBalance WHERE id = $accountId");
+    }
+
+    return [
+        'success' => true,
+        'message' => 'تم تسجيل الرصيد بنجاح',
+        'date'    => $balanceDate,
+        'closing' => $closingBalance,
+    ];
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// ③ الودائع البنكية (bank_deposits)
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * إنشاء جدول bank_deposits إن لم يكن موجوداً
+ */
+function ensureBankDepositsTable() {
+    $conn = db();
+    $conn->query("CREATE TABLE IF NOT EXISTS bank_deposits (
+        id               INT           NOT NULL AUTO_INCREMENT,
+        account_id       INT           NOT NULL,
+        amount           DECIMAL(15,2) NOT NULL DEFAULT 0,
+        deposit_date     DATE          NOT NULL,
+        deposit_type     VARCHAR(50)   NOT NULL DEFAULT 'إيداع',
+        reference_number VARCHAR(100)  DEFAULT '',
+        depositor_name   VARCHAR(200)  DEFAULT '',
+        notes            TEXT,
+        status           VARCHAR(30)   NOT NULL DEFAULT 'معلق',
+        confirmed_by     INT           DEFAULT NULL,
+        confirmed_at     TIMESTAMP     NULL DEFAULT NULL,
+        created_by       INT           DEFAULT 1,
+        created_at       TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at       TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        KEY idx_account_date (account_id, deposit_date),
+        KEY idx_status (status),
+        CONSTRAINT fk_bd_account FOREIGN KEY (account_id)
+            REFERENCES bank_accounts(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+}
+
+/**
+ * إنشاء جدول monthly_deposit_schedule إن لم يكن موجوداً
+ */
+function ensureMonthlyDepositsTable() {
+    $conn = db();
+    $conn->query("CREATE TABLE IF NOT EXISTS monthly_deposit_schedule (
+        id               INT           NOT NULL AUTO_INCREMENT,
+        account_id       INT           NOT NULL,
+        amount           DECIMAL(15,2) NOT NULL DEFAULT 0,
+        scheduled_date   DATE          NOT NULL,
+        deposit_day      TINYINT       NOT NULL DEFAULT 1,
+        notes            TEXT,
+        status           VARCHAR(30)   NOT NULL DEFAULT 'مجدول',
+        confirmed_by     INT           DEFAULT NULL,
+        confirmed_at     TIMESTAMP     NULL DEFAULT NULL,
+        created_by       INT           DEFAULT 1,
+        created_at       TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at       TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        KEY idx_mds_account (account_id),
+        KEY idx_mds_date (scheduled_date),
+        CONSTRAINT fk_mds_account FOREIGN KEY (account_id)
+            REFERENCES bank_accounts(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+}
+
+/**
+ * جلب جميع الودائع البنكية
+ */
+function getAllDeposits(?int $limit = null): array {
+    $conn = db();
+    ensureBankDepositsTable();
 
     $sql = "SELECT
                 d.*,
@@ -151,203 +311,200 @@ function getAllDeposits($limit = null) {
 
     $result   = $conn->query($sql);
     $deposits = [];
-    if ($result && $result->num_rows > 0) {
+    if ($result && $result->num_rows > 0)
         while ($row = $result->fetch_assoc()) $deposits[] = $row;
-    }
     return $deposits;
 }
 
 /**
  * إضافة إيداع بنكي
  */
-function addDeposit($data) {
+function addDeposit(array $data): array {
     $conn = db();
+    ensureBankDepositsTable();
 
-    $accountId       = (int)$data['account_id'];
-    $amount          = (float)$data['amount'];
-    $depositDate     = $conn->real_escape_string($data['deposit_date']);
-    $depositType     = $conn->real_escape_string($data['deposit_type']);
+    $accountId       = (int)($data['account_id']       ?? 0);
+    $amount          = (float)($data['amount']         ?? 0);
+    $depositDate     = $conn->real_escape_string($data['deposit_date']     ?? date('Y-m-d'));
+    $depositType     = $conn->real_escape_string($data['deposit_type']     ?? 'إيداع');
     $referenceNumber = $conn->real_escape_string($data['reference_number'] ?? '');
     $depositorName   = $conn->real_escape_string($data['depositor_name']   ?? '');
     $notes           = $conn->real_escape_string($data['notes']            ?? '');
-    $createdBy       = $_SESSION['user_id'] ?? 1;
-    $depositNumber   = generateDepositNumber();
+    $createdBy       = (int)($_SESSION['user_id']       ?? 1);
 
-    $sql = "INSERT INTO bank_deposits (
-                deposit_number, account_id, deposit_date, amount,
-                deposit_type, reference_number, depositor_name, notes,
-                status, created_by
-            ) VALUES (
-                '$depositNumber', $accountId, '$depositDate', $amount,
-                '$depositType', '$referenceNumber', '$depositorName', '$notes',
-                'معلق', $createdBy
-            )";
-
-    if ($conn->query($sql)) {
-        return ['success' => true, 'id' => $conn->insert_id, 'deposit_number' => $depositNumber];
-    }
-    return ['success' => false, 'message' => $conn->error];
-}
-
-/**
- * تأكيد الإيداع وتحديث رصيد الحساب
- */
-function confirmDeposit($id) {
-    $conn        = db();
-    $id          = (int)$id;
-    $confirmedBy = $_SESSION['user_id'] ?? 1;
-
-    $result = $conn->query("SELECT * FROM bank_deposits WHERE id = $id");
-    if (!$result || $result->num_rows === 0) {
-        return ['success' => false, 'message' => 'الإيداع غير موجود'];
+    if ($accountId <= 0 || $amount <= 0) {
+        return ['success' => false, 'message' => 'الحساب والمبلغ مطلوبان'];
     }
 
-    $deposit = $result->fetch_assoc();
-    if ($deposit['status'] === 'تم التأكيد') {
-        return ['success' => false, 'message' => 'الإيداع مؤكد مسبقاً'];
-    }
-
-    $accountResult = $conn->query("SELECT current_balance FROM bank_accounts WHERE id = " . (int)$deposit['account_id']);
-    if (!$accountResult || $accountResult->num_rows === 0) {
-        return ['success' => false, 'message' => 'الحساب البنكي غير موجود'];
-    }
-    $account = $accountResult->fetch_assoc();
-
-    $sql = "UPDATE bank_deposits SET
-                status       = 'تم التأكيد',
-                confirmed_by = $confirmedBy,
-                confirmed_at = NOW()
-            WHERE id = $id";
-
-    if ($conn->query($sql)) {
-        $newBalance = (float)$account['current_balance'] + (float)$deposit['amount'];
-        updateAccountBalance($deposit['account_id'], $newBalance);
-        return ['success' => true];
-    }
-    return ['success' => false, 'message' => $conn->error];
-}
-
-/**
- * توليد رقم إيداع فريد
- */
-function generateDepositNumber() {
-    $conn   = db();
-    $prefix = getSetting('prefix_deposit', 'DEP') . '-';
-    $date   = date('Ymd');
-
-    $result = $conn->query("SELECT COUNT(*) AS count FROM bank_deposits WHERE deposit_number LIKE '$prefix$date%'");
-    $count  = $result->fetch_assoc()['count'] + 1;
-
-    return $prefix . $date . '-' . str_pad($count, 4, '0', STR_PAD_LEFT);
-}
-
-
-// ═══════════════════════════════════════════════════════════════
-// ③ الأرصدة اليومية
-// ═══════════════════════════════════════════════════════════════
-
-/**
- * الحصول على الأرصدة اليومية
- */
-function getDailyBalances($limit = 30, $accountId = null) {
-    $conn  = db();
-    $where = $accountId ? "WHERE db.account_id = " . (int)$accountId : "";
-
-    $sql = "SELECT
-                db.*,
-                a.account_name,
-                a.bank_name
-            FROM daily_balances db
-            LEFT JOIN bank_accounts a ON db.account_id = a.id
-            $where
-            ORDER BY db.balance_date DESC, db.id DESC
-            LIMIT " . (int)$limit;
-
-    $result   = $conn->query($sql);
-    $balances = [];
-    if ($result && $result->num_rows > 0) {
-        while ($row = $result->fetch_assoc()) $balances[] = $row;
-    }
-    return $balances;
-}
-
-/**
- * تسجيل رصيد يومي
- */
-function recordDailyBalance($data) {
-    $conn = db();
-
-    $accountId      = (int)$data['account_id'];
-    $balanceDate    = $conn->real_escape_string($data['balance_date']);
-    $openingBalance = (float)$data['opening_balance'];
-    $closingBalance = (float)$data['closing_balance'];
-    $notes          = $conn->real_escape_string($data['notes'] ?? '');
-    $recordedBy     = $_SESSION['user_id'] ?? 1;
-
-    $deposits    = getTotalDepositsForDate($accountId, $balanceDate);
-    $withdrawals = getTotalWithdrawalsForDate($accountId, $balanceDate);
-
-    $sql = "INSERT INTO daily_balances (
-                account_id, balance_date, opening_balance, closing_balance,
-                total_deposits, total_withdrawals, notes, recorded_by
-            ) VALUES (
-                $accountId, '$balanceDate', $openingBalance, $closingBalance,
-                $deposits, $withdrawals, '$notes', $recordedBy
-            ) ON DUPLICATE KEY UPDATE
-                opening_balance  = $openingBalance,
-                closing_balance  = $closingBalance,
-                total_deposits   = $deposits,
-                total_withdrawals = $withdrawals,
-                notes = '$notes'";
+    $sql = "INSERT INTO bank_deposits
+                (account_id, amount, deposit_date, deposit_type,
+                 reference_number, depositor_name, notes, status, created_by)
+            VALUES
+                ($accountId, $amount, '$depositDate', '$depositType',
+                 '$referenceNumber', '$depositorName', '$notes', 'معلق', $createdBy)";
 
     if (!$conn->query($sql)) {
         return ['success' => false, 'message' => $conn->error];
     }
+    return ['success' => true, 'id' => $conn->insert_id, 'message' => 'تم إضافة الإيداع بنجاح'];
+}
 
-    // تحديث الرصيد الحالي في bank_accounts إذا طُلب ذلك
-    $updateCurrent = ($data['update_current'] ?? '0') === '1';
-    if ($updateCurrent && $accountId > 0) {
-        $conn->query("UPDATE bank_accounts SET current_balance = $closingBalance WHERE id = $accountId");
+/**
+ * تأكيد وديعة بنكية وتحديث رصيد الحساب
+ */
+function confirmDeposit(int $id): array {
+    $conn      = db();
+    $id        = (int)$id;
+    $confirmedBy = (int)($_SESSION['user_id'] ?? 1);
+
+    ensureBankDepositsTable();
+
+    $result = $conn->query("SELECT * FROM bank_deposits WHERE id = $id LIMIT 1");
+    if (!$result || $result->num_rows === 0) {
+        return ['success' => false, 'message' => 'الإيداع غير موجود'];
+    }
+    $deposit = $result->fetch_assoc();
+
+    if ($deposit['status'] === 'مؤكد') {
+        return ['success' => false, 'message' => 'الإيداع مؤكد مسبقاً'];
     }
 
-    return ['success' => true, 'message' => 'تم تسجيل الرصيد بنجاح'];
+    // تأكيد الوديعة
+    $conn->query("UPDATE bank_deposits
+                  SET status = 'مؤكد', confirmed_by = $confirmedBy, confirmed_at = NOW()
+                  WHERE id = $id");
+
+    // تحديث رصيد الحساب
+    $conn->query("UPDATE bank_accounts
+                  SET current_balance = current_balance + {$deposit['amount']}
+                  WHERE id = {$deposit['account_id']}");
+
+    return ['success' => true, 'message' => 'تم تأكيد الإيداع وتحديث الرصيد'];
 }
 
-
 // ═══════════════════════════════════════════════════════════════
-// ④ دوال مساعدة للودائع والسحوبات اليومية
+// ④ الودائع الشهرية المجدولة (monthly_deposit_schedule)
 // ═══════════════════════════════════════════════════════════════
 
 /**
- * إجمالي الودائع المؤكدة لتاريخ ومعرف حساب محددَين
+ * جلب ودائع الشهر الحالي أو فلتر بالشهر
  */
-function getTotalDepositsForDate($accountId, $date) {
-    $conn      = db();
-    $accountId = (int)$accountId;
-    $date      = $conn->real_escape_string($date);
+function getMonthlyDeposits(?string $month = null): array {
+    $conn = db();
+    ensureMonthlyDepositsTable();
 
-    $result = $conn->query("SELECT COALESCE(SUM(amount), 0) AS total
-                            FROM bank_deposits
-                            WHERE account_id  = $accountId
-                              AND deposit_date = '$date'
-                              AND status       = 'تم التأكيد'");
-    return (float)$result->fetch_assoc()['total'];
+    $monthFilter = $month
+        ? "WHERE DATE_FORMAT(m.scheduled_date, '%Y-%m') = '" . $conn->real_escape_string($month) . "'"
+        : "WHERE DATE_FORMAT(m.scheduled_date, '%Y-%m') = DATE_FORMAT(NOW(), '%Y-%m')";
+
+    $sql = "SELECT
+                m.*,
+                a.account_name,
+                a.bank_name,
+                e.name AS confirmed_by_name
+            FROM monthly_deposit_schedule m
+            LEFT JOIN bank_accounts a ON m.account_id = a.id
+            LEFT JOIN employees e     ON m.confirmed_by = e.id
+            $monthFilter
+            ORDER BY m.scheduled_date ASC, m.id ASC";
+
+    $result   = $conn->query($sql);
+    $deposits = [];
+    if ($result && $result->num_rows > 0)
+        while ($row = $result->fetch_assoc()) $deposits[] = $row;
+    return $deposits;
 }
 
 /**
- * إجمالي السحوبات المؤكدة لتاريخ ومعرف حساب محددَين
+ * إضافة وديعة شهرية مجدولة
  */
-function getTotalWithdrawalsForDate($accountId, $date) {
-    $conn      = db();
-    $accountId = (int)$accountId;
-    $date      = $conn->real_escape_string($date);
+function addMonthlyDeposit(array $data): array {
+    $conn = db();
+    ensureMonthlyDepositsTable();
 
-    $result = $conn->query("SELECT COALESCE(SUM(amount), 0) AS total
-                            FROM bank_withdrawals
-                            WHERE account_id      = $accountId
-                              AND withdrawal_date  = '$date'
-                              AND status           = 'تم التأكيد'");
-    return (float)$result->fetch_assoc()['total'];
+    $accountId     = (int)($data['account_id']     ?? 0);
+    $amount        = (float)($data['amount']       ?? 0);
+    $scheduledDate = $conn->real_escape_string($data['scheduled_date'] ?? date('Y-m-01'));
+    $depositDay    = (int)($data['deposit_day']    ?? 1);
+    $notes         = $conn->real_escape_string($data['notes']          ?? '');
+    $createdBy     = (int)($_SESSION['user_id']    ?? 1);
+
+    if ($accountId <= 0 || $amount <= 0) {
+        return ['success' => false, 'message' => 'الحساب والمبلغ مطلوبان'];
+    }
+
+    $sql = "INSERT INTO monthly_deposit_schedule
+                (account_id, amount, scheduled_date, deposit_day, notes, status, created_by)
+            VALUES
+                ($accountId, $amount, '$scheduledDate', $depositDay, '$notes', 'مجدول', $createdBy)";
+
+    if (!$conn->query($sql)) {
+        return ['success' => false, 'message' => $conn->error];
+    }
+    return ['success' => true, 'id' => $conn->insert_id, 'message' => 'تمت جدولة الوديعة الشهرية'];
+}
+
+/**
+ * تأكيد وديعة شهرية وإضافتها إلى bank_deposits
+ */
+function confirmMonthlyDeposit(int $id): array {
+    $conn        = db();
+    $id          = (int)$id;
+    $confirmedBy = (int)($_SESSION['user_id'] ?? 1);
+
+    ensureMonthlyDepositsTable();
+
+    $result = $conn->query("SELECT * FROM monthly_deposit_schedule WHERE id = $id LIMIT 1");
+    if (!$result || $result->num_rows === 0) {
+        return ['success' => false, 'message' => 'الوديعة الشهرية غير موجودة'];
+    }
+    $deposit = $result->fetch_assoc();
+
+    if ($deposit['status'] === 'مؤكد') {
+        return ['success' => false, 'message' => 'الوديعة مؤكدة مسبقاً'];
+    }
+
+    // تأكيد الجدولة
+    $conn->query("UPDATE monthly_deposit_schedule
+                  SET status = 'مؤكد', confirmed_by = $confirmedBy, confirmed_at = NOW()
+                  WHERE id = $id");
+
+    // إضافة إيداع فعلي في bank_deposits وتحديث الرصيد
+    $addResult = addDeposit([
+        'account_id'   => $deposit['account_id'],
+        'amount'       => $deposit['amount'],
+        'deposit_date' => $deposit['scheduled_date'],
+        'deposit_type' => 'وديعة شهرية',
+        'notes'        => $deposit['notes'] ?? '',
+    ]);
+
+    if ($addResult['success']) {
+        $depositId = $addResult['id'];
+        confirmDeposit($depositId);
+    }
+
+    return ['success' => true, 'message' => 'تم تأكيد الوديعة الشهرية وتحديث الرصيد'];
+}
+
+/**
+ * حذف وديعة شهرية مجدولة (فقط إن لم تكن مؤكدة)
+ */
+function deleteMonthlyDeposit(int $id): array {
+    $conn = db();
+    $id   = (int)$id;
+    ensureMonthlyDepositsTable();
+
+    $result = $conn->query("SELECT status FROM monthly_deposit_schedule WHERE id = $id LIMIT 1");
+    if (!$result || $result->num_rows === 0) {
+        return ['success' => false, 'message' => 'الوديعة غير موجودة'];
+    }
+    $row = $result->fetch_assoc();
+    if ($row['status'] === 'مؤكد') {
+        return ['success' => false, 'message' => 'لا يمكن حذف وديعة مؤكدة'];
+    }
+
+    $conn->query("DELETE FROM monthly_deposit_schedule WHERE id = $id");
+    return ['success' => true, 'message' => 'تم حذف الوديعة الشهرية'];
 }
 
 
@@ -355,40 +512,15 @@ function getTotalWithdrawalsForDate($accountId, $date) {
 // ⑤ الإحصائيات
 // ═══════════════════════════════════════════════════════════════
 
-/**
- * الحصول على إحصائيات البنوك
- */
 function getBankStats() {
-    $conn  = db();
-    $today = date('Y-m-d');
-
-    // إجمالي الأرصدة النشطة
-    $result      = $conn->query("SELECT COALESCE(SUM(current_balance), 0) AS total FROM bank_accounts WHERE is_active = 1");
-    $totalBalance = $result->fetch_assoc()['total'];
-
-    // الودائع اليوم
-    $result       = $conn->query("SELECT COUNT(*) AS count, COALESCE(SUM(amount), 0) AS total
-                                  FROM bank_deposits WHERE deposit_date = '$today'");
-    $depositsToday = $result->fetch_assoc();
-
-    // السحوبات اليوم
-    $result           = $conn->query("SELECT COUNT(*) AS count, COALESCE(SUM(amount), 0) AS total
-                                      FROM bank_withdrawals WHERE withdrawal_date = '$today'");
-    $withdrawalsToday = $result->fetch_assoc();
-
-    // عدد الحسابات
-    $result   = $conn->query("SELECT COUNT(*) AS active,
-                               (SELECT COUNT(*) FROM bank_accounts) AS total
-                               FROM bank_accounts WHERE is_active = 1");
-    $accounts = $result->fetch_assoc();
-
+    $conn         = db();
+    $r1           = $conn->query("SELECT COALESCE(SUM(current_balance),0) AS total FROM bank_accounts WHERE is_active=1");
+    $totalBalance = $r1->fetch_assoc()['total'];
+    $r2           = $conn->query("SELECT COUNT(*) AS active,(SELECT COUNT(*) FROM bank_accounts) AS total FROM bank_accounts WHERE is_active=1");
+    $accounts     = $r2->fetch_assoc();
     return [
-        'total_balance'           => $totalBalance,
-        'today_deposits_count'    => $depositsToday['count'],
-        'today_deposits_amount'   => $depositsToday['total'],
-        'today_withdrawals_count' => $withdrawalsToday['count'],
-        'today_withdrawals_amount'=> $withdrawalsToday['total'],
-        'active_accounts'         => $accounts['active'],
-        'total_accounts'          => $accounts['total'],
+        'total_balance'   => $totalBalance,
+        'active_accounts' => $accounts['active'],
+        'total_accounts'  => $accounts['total'],
     ];
 }

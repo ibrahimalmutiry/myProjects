@@ -38,7 +38,7 @@ $empCols = [
     'password'         => "ALTER TABLE employees ADD COLUMN IF NOT EXISTS password VARCHAR(255) DEFAULT NULL",
     'is_registered'    => "ALTER TABLE employees ADD COLUMN IF NOT EXISTS is_registered TINYINT(1) DEFAULT 0",
     'last_login'       => "ALTER TABLE employees ADD COLUMN IF NOT EXISTS last_login DATETIME DEFAULT NULL",
-    'permission_level' => "ALTER TABLE employees ADD COLUMN IF NOT EXISTS permission_level ENUM('system_admin','manager','employee') NOT NULL DEFAULT 'employee'",
+    'permission_level' => "ALTER TABLE employees ADD COLUMN IF NOT EXISTS permission_level ENUM('system_admin','CEO','sector_head','division_manager','employee_l1','employee') NOT NULL DEFAULT 'employee'",
     'can_delete'       => "ALTER TABLE employees ADD COLUMN IF NOT EXISTS can_delete TINYINT(1) NOT NULL DEFAULT 0",
     'failed_attempts'  => "ALTER TABLE employees ADD COLUMN IF NOT EXISTS failed_attempts TINYINT UNSIGNED NOT NULL DEFAULT 0",
 ];
@@ -81,10 +81,25 @@ $prCols = [
     'budget_code'          => "ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS budget_code VARCHAR(50) DEFAULT NULL",
     'priority'             => "ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS priority ENUM('normal','urgent') NOT NULL DEFAULT 'normal'",
     'updated_at'           => "ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS updated_at DATETIME DEFAULT NULL ON UPDATE NOW()",
+    'payment_ref'          => "ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS payment_ref VARCHAR(100) DEFAULT NULL",
+    'payment_method'       => "ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS payment_method VARCHAR(60) DEFAULT NULL",
+    'payment_notes'        => "ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS payment_notes TEXT DEFAULT NULL",
+    'payment_executed_by'  => "ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS payment_executed_by INT DEFAULT NULL",
+    'payment_executed_at'  => "ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS payment_executed_at DATETIME DEFAULT NULL",
+    'linked_transaction_id'=> "ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS linked_transaction_id INT DEFAULT NULL",
+    'completed_at'         => "ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS completed_at DATETIME DEFAULT NULL",
 ];
 foreach ($prCols as $name => $sql) {
     runMigration($conn, "purchase_requests.$name", $sql);
 }
+
+// ── ربط المعاملات بطلبات الشراء ──────────────────────────────
+runMigration($conn, 'transactions.pr_source_id',
+    "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS pr_source_id INT DEFAULT NULL"
+);
+runMigration($conn, 'transactions.source_type',
+    "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS source_type ENUM('manual','purchase_request') NOT NULL DEFAULT 'manual'"
+);
 
 // ════════════════════════════════════════════════════════════
 // ③ pr_workflow_stages — أعمدة مفقودة
@@ -177,13 +192,16 @@ runMigration($conn, 'CREATE pr_sla_policies', "
 
 // إضافة سياسات SLA الافتراضية لكل مرحلة
 $slaDefaults = [
+    ['reception',               'الاستلام والتحقق',              24, 70, 100],
     ['budget_review',           'مراجعة الموازنة',              24, 70, 100],
     ['treasury_review',         'مراجعة مدير الخزينة',           48, 70, 100],
     ['finance_review',          'مراجعة المدير المالي',           48, 70, 100],
     ['ceo_approval',            'اعتماد الرئيس التنفيذي',         72, 70, 100],
-    ['purchasing',              'المشتريات',                      48, 70, 100],
-    ['waiting_budget_approval', 'انتظار اعتماد الحجز',            0,  70, 100],
-    ['payment',                 'المالية — الدفع',                24, 70, 100],
+    ['purchasing',              'المشتريات — إنشاء حجز',         48, 70, 100],
+    ['waiting_budget_approval', 'اعتماد حجز الموازنة',           24, 70, 100],
+    ['accounts_review',         'الحسابات — مراجعة وتوزيع',      24, 70, 100],
+    ['po_issuance',             'إصدار أمر الشراء',              72, 70, 100],
+    ['payment',                 'المالية — الدفع',               48, 70, 100],
     ['referral',                'وقت الانتظار عند الإحالة',       24, 70, 100],
 ];
 foreach ($slaDefaults as [$stage, $name, $hours, $warn, $esc]) {
@@ -308,7 +326,7 @@ $log[] = str_repeat('═', 50);
 runMigration($conn, 'ALTER employees.permission_level ENUM expand', "
     ALTER TABLE employees
     MODIFY COLUMN permission_level
-    ENUM('system_admin','sector_head','division_manager','employee_l1','employee','manager')
+    ENUM('system_admin','CEO','sector_head','division_manager','employee_l1','employee')
     NOT NULL DEFAULT 'employee'
 ");
 
@@ -324,6 +342,7 @@ runMigration($conn, 'Sync permission_level from permission_level_code', "
     UPDATE employees
     SET permission_level = CASE permission_level_code
         WHEN 'system_admin'     THEN 'system_admin'
+        WHEN 'CEO'              THEN 'CEO'
         WHEN 'sector_head'      THEN 'sector_head'
         WHEN 'division_manager' THEN 'division_manager'
         WHEN 'employee_l1'      THEN 'employee_l1'
@@ -333,10 +352,10 @@ runMigration($conn, 'Sync permission_level from permission_level_code', "
     WHERE permission_level_code IS NOT NULL AND permission_level_code != ''
 ");
 
-// CEO → sector_head
-runMigration($conn, 'Set CEO employees to sector_head', "
+// CEO role → CEO permission level
+runMigration($conn, 'Set CEO employees to CEO level', "
     UPDATE employees
-    SET permission_level = 'sector_head', permission_level_code = 'sector_head'
+    SET permission_level = 'CEO', permission_level_code = 'CEO'
     WHERE role = 'CEO' AND permission_level != 'system_admin'
 ");
 

@@ -11,59 +11,508 @@
 async function renderSystemSection() {
     var cont = document.getElementById('settingsContent');
     cont.innerHTML = `
-    <div class="settings-section-header"><h2>⚙️ إعدادات النظام</h2></div>
-    <div class="system-grid">
+    <!-- ══ رأس الصفحة ══ -->
+    <div class="sys-page-header">
+        <div class="sys-page-title">
+            <div class="sys-page-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="3"/>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                </svg>
+            </div>
+            <div>
+                <div class="sys-page-title-text">إعدادات النظام</div>
+                <div class="sys-page-subtitle">إدارة البادئات والموقّعين وطلبات الشراء والأقسام</div>
+            </div>
+        </div>
+    </div>
 
-        <!-- بادئات -->
-        <div class="system-card prefixes-card">
-            <h3>🏷️ بادئات الأرقام التلقائية</h3>
-            <p class="prefixes-desc">أحرف إنجليزية كبيرة فقط (1-10 محارف)</p>
-            <div id="prefixes-list"><div class="loading-inline">⏳</div></div>
+    <!-- ══ الصف الأول: بادئات + موقّعون ══ -->
+    <div class="sys-row-2col">
+
+        <!-- بادئات الأرقام -->
+        <div class="sys-card">
+            <div class="sys-card-head">
+                <div class="sys-card-head-icon sys-icon-teal">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/>
+                        <line x1="7" y1="7" x2="7.01" y2="7"/>
+                    </svg>
+                </div>
+                <div>
+                    <div class="sys-card-title">بادئات الأرقام التلقائية</div>
+                    <div class="sys-card-sub">أحرف إنجليزية كبيرة فقط (1–10 محارف)</div>
+                </div>
+            </div>
+            <div id="prefixes-list" class="sys-card-body">
+                <div class="sys-loading">جاري التحميل...</div>
+            </div>
         </div>
 
-        <!-- موقعون -->
-        <div class="system-card prefixes-card">
-            <h3>✍️ موقّعو أوامر الدفع</h3>
-            <p class="prefixes-desc">تظهر في مربعات التوقيع عند الطباعة</p>
-            <div id="signers-list"><div class="loading-inline">⏳</div></div>
+        <!-- موقّعو أوامر الدفع -->
+        <div class="sys-card">
+            <div class="sys-card-head">
+                <div class="sys-card-head-icon sys-icon-purple">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+                    </svg>
+                </div>
+                <div>
+                    <div class="sys-card-title">موقّعو أوامر الدفع</div>
+                    <div class="sys-card-sub">تظهر في مربعات التوقيع عند الطباعة</div>
+                </div>
+            </div>
+            <div id="signers-list" class="sys-card-body">
+                <div class="sys-loading">جاري التحميل...</div>
+            </div>
         </div>
+
+    </div>
+
+    <!-- ══ إعدادات طلبات الشراء ══ -->
+    <div class="sys-card sys-card-full">
+        <div class="sys-card-head sys-card-head-bordered">
+            <div class="sys-card-head-icon sys-icon-blue">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                    <line x1="16" y1="17" x2="8" y2="17"/>
+                </svg>
+            </div>
+            <div style="flex:1">
+                <div class="sys-card-title">إعدادات طلبات الشراء</div>
+                <div class="sys-card-sub">حد المبلغ الفاصل بين المسارين ومدد SLA لكل مرحلة</div>
+            </div>
+            <button class="sys-save-btn" onclick="savePrSettings()">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <polyline points="20 6 9 17 4 12"/>
+                </svg>
+                حفظ الإعدادات
+            </button>
+        </div>
+
+        <div class="sys-card-body">
+            <!-- حد المبلغ -->
+            <div class="sys-threshold-row">
+                <div class="sys-threshold-info">
+                    <div class="sys-threshold-label">حد المبلغ الفاصل</div>
+                    <div class="sys-threshold-desc">
+                        <span class="sys-path-pill sys-path-short">مسار قصير</span>
+                        أقل من الحد
+                        <span style="color:var(--text-muted);margin:0 .25rem">|</span>
+                        <span class="sys-path-pill sys-path-long">مسار كامل</span>
+                        أكبر منه أو يساوي
+                    </div>
+                </div>
+                <div class="sys-threshold-input-wrap">
+                    <input type="number" id="pr-threshold-input" class="sys-number-input"
+                           placeholder="5000" min="0" step="500">
+                    <span class="sys-input-unit">ر.س</span>
+                </div>
+            </div>
+
+            <!-- جدول SLA -->
+            <div class="sys-sla-section">
+                <div class="sys-sla-label">مدد SLA لكل مرحلة</div>
+                <div id="pr-sla-table"><div class="sys-loading">جاري التحميل...</div></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══ الصف الثاني: خطر + أقسام ══ -->
+    <div class="sys-row-danger">
 
         <!-- منطقة الخطر -->
-        <div class="system-card danger-zone">
-            <h3>⚠️ منطقة الخطر</h3>
-            <p>هذه الإجراءات لا يمكن التراجع عنها</p>
-            <div class="danger-buttons">
-                <button class="btn btn-danger" onclick="clearAllTransactions()">حذف جميع المعاملات</button>
-            </div>
-        </div>
-
-        <!-- ══ الأقسام التنظيمية ══ -->
-        <div class="system-card" style="grid-column:1/-1">
-            <div class="div-section-head">
+        <div class="sys-card sys-danger-card">
+            <div class="sys-card-head">
+                <div class="sys-card-head-icon sys-icon-red">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                        <line x1="12" y1="9" x2="12" y2="13"/>
+                        <line x1="12" y1="17" x2="12.01" y2="17"/>
+                    </svg>
+                </div>
                 <div>
-                    <h3 style="margin:0">🏢 الأقسام التنظيمية</h3>
-                    <p class="div-sub">الوحدات الداخلية داخل كل قطاع — يُربط بها الموظفون</p>
-                </div>
-                <div style="display:flex;gap:.5rem;flex-wrap:wrap">
-                    <select id="div-sector-filter" class="form-select form-select-sm"
-                            onchange="loadDivisionsSection()" style="min-width:150px">
-                        <option value="">كل القطاعات</option>
-                    </select>
-                    <button class="btn btn-outline-sm" onclick="openBulkImportModal()"
-                            title="إدراج أقسام متعددة دفعةً واحدة">
-                        📥 استيراد دفعي
-                    </button>
-                    <button class="btn btn-primary btn-sm" onclick="openAddDivisionModal()">+ إضافة قسم</button>
+                    <div class="sys-card-title sys-danger-title">منطقة الخطر</div>
+                    <div class="sys-card-sub">هذه الإجراءات لا يمكن التراجع عنها</div>
                 </div>
             </div>
-            <div id="divisions-list"><div class="loading-inline">⏳ جاري التحميل...</div></div>
+            <div class="sys-card-body">
+                <div class="sys-danger-item">
+                    <div class="sys-danger-item-info">
+                        <div class="sys-danger-item-name">حذف جميع المعاملات</div>
+                        <div class="sys-danger-item-desc">يحذف كل المعاملات وبياناتها المرتبطة نهائياً</div>
+                    </div>
+                    <button class="sys-danger-btn" onclick="clearAllTransactions()">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="3 6 5 6 21 6"/>
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                        </svg>
+                        حذف الكل
+                    </button>
+                </div>
+            </div>
         </div>
 
-    </div>`;
+    </div>
 
+    <!-- ══ الأقسام التنظيمية ══ -->
+    <div class="sys-card sys-card-full">
+        <div class="sys-card-head sys-card-head-bordered">
+            <div class="sys-card-head-icon sys-icon-amber">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                    <polyline points="9 22 9 12 15 12 15 22"/>
+                </svg>
+            </div>
+            <div style="flex:1">
+                <div class="sys-card-title">الأقسام التنظيمية</div>
+                <div class="sys-card-sub">الوحدات الداخلية داخل كل قطاع — يُربط بها الموظفون</div>
+            </div>
+            <div class="sys-card-actions">
+                <select id="div-sector-filter" class="sys-select" onchange="loadDivisionsSection()">
+                    <option value="">كل القطاعات</option>
+                </select>
+                <button class="sys-outline-btn" onclick="openBulkImportModal()">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="7 10 12 15 17 10"/>
+                        <line x1="12" y1="15" x2="12" y2="3"/>
+                    </svg>
+                    استيراد دفعي
+                </button>
+                <button class="sys-save-btn" onclick="openAddDivisionModal()">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                    </svg>
+                    إضافة قسم
+                </button>
+            </div>
+        </div>
+        <div id="divisions-list" class="sys-card-body sys-divisions-body">
+            <div class="sys-loading">جاري التحميل...</div>
+        </div>
+    </div>
+    `;
+
+    _injectSysStyles();
     loadPrefixesSection();
     loadSignersSection();
-    await loadDivisionsSection();          // يجلب القطاعات أيضاً لملء الفلتر
+    await loadDivisionsSection();
+    await loadPrSettings();
+}
+
+function _injectSysStyles() {
+    if (document.getElementById('sys-redesign-css')) return;
+    const s = document.createElement('style');
+    s.id = 'sys-redesign-css';
+    s.textContent = `
+/* ── رأس الصفحة ── */
+.sys-page-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1.5rem;
+}
+.sys-page-title {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+}
+.sys-page-icon {
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    background: rgba(63,89,80,.12);
+    border: 1px solid rgba(63,89,80,.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--btn-primary-bg, #3F5950);
+    flex-shrink: 0;
+}
+.sys-page-title-text {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+.sys-page-subtitle {
+    font-size: .78rem;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+/* ── بطاقات ── */
+.sys-row-2col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+.sys-card-full { width: 100%; margin-bottom: 1rem; }
+.sys-row-danger { margin-bottom: 1rem; }
+
+.sys-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    overflow: hidden;
+}
+.sys-card-head {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    padding: .9rem 1.1rem;
+    background: var(--bg-surface);
+}
+.sys-card-head-bordered {
+    border-bottom: 1px solid var(--border-color);
+}
+.sys-card-head-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+.sys-icon-teal   { background: rgba(29,158,117,.1);  color: #1D9E75; border: 1px solid rgba(29,158,117,.2); }
+.sys-icon-purple { background: rgba(83,74,183,.1);   color: #534AB7; border: 1px solid rgba(83,74,183,.2); }
+.sys-icon-blue   { background: rgba(24,95,165,.1);   color: #185FA5; border: 1px solid rgba(24,95,165,.2); }
+.sys-icon-amber  { background: rgba(186,117,23,.1);  color: #BA7517; border: 1px solid rgba(186,117,23,.2); }
+.sys-icon-red    { background: rgba(163,45,45,.1);   color: #A32D2D; border: 1px solid rgba(163,45,45,.2); }
+.sys-card-title  { font-size: .88rem; font-weight: 700; color: var(--text-primary); }
+.sys-card-sub    { font-size: .74rem; color: var(--text-muted); margin-top: 2px; }
+.sys-card-body   { padding: .85rem 1.1rem; }
+.sys-card-actions {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+}
+
+/* ── حقل البادئات / الموقّعين (prefix-row يبقى كما هو) ── */
+.sys-card-body .prefix-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: .55rem 0;
+    border-bottom: 1px solid var(--border-color);
+    gap: .75rem;
+}
+.sys-card-body .prefix-row:last-child { border-bottom: none; }
+.sys-card-body .prefix-label {
+    font-size: .82rem;
+    color: var(--text-secondary);
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.sys-card-body .prefix-input-wrap {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    flex-shrink: 0;
+}
+.sys-card-body .prefix-input {
+    width: 90px;
+    padding: .35rem .6rem;
+    border-radius: 7px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-card);
+    color: var(--text-primary);
+    font-size: .82rem;
+    text-align: center;
+    font-family: monospace;
+    outline: none;
+    transition: border-color .15s;
+}
+.sys-card-body .prefix-input:focus { border-color: var(--btn-primary-bg); }
+.sys-card-body .prefix-save-btn {
+    padding: .3rem .7rem;
+    border-radius: 7px;
+    border: 1px solid var(--btn-primary-bg);
+    background: rgba(63,89,80,.1);
+    color: var(--btn-primary-bg);
+    font-size: .76rem;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: var(--font-primary);
+    transition: all .15s;
+}
+.sys-card-body .prefix-save-btn:hover {
+    background: var(--btn-primary-bg);
+    color: var(--btn-primary-text, #fff);
+}
+.sys-card-body .prefix-save-btn:disabled { opacity: .45; cursor: not-allowed; }
+.sys-card-body .prefix-status { font-size: .72rem; min-width: 60px; }
+
+/* ── حد المبلغ ── */
+.sys-threshold-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: .7rem .9rem;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+.sys-threshold-label { font-size: .88rem; font-weight: 600; color: var(--text-primary); margin-bottom: .2rem; }
+.sys-threshold-desc  { font-size: .76rem; color: var(--text-muted); display: flex; align-items: center; gap: .3rem; flex-wrap: wrap; }
+.sys-path-pill {
+    font-size: .68rem;
+    font-weight: 600;
+    padding: 1px 7px;
+    border-radius: 999px;
+}
+.sys-path-short { background: rgba(29,158,117,.1); color: #1D9E75; }
+.sys-path-long  { background: rgba(186,117,23,.1); color: #BA7517; }
+
+.sys-threshold-input-wrap { display: flex; align-items: center; gap: .4rem; flex-shrink: 0; }
+.sys-number-input {
+    width: 120px;
+    padding: .45rem .75rem;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-card);
+    color: var(--text-primary);
+    font-size: .88rem;
+    text-align: center;
+    font-family: var(--font-primary);
+    outline: none;
+    transition: border-color .15s;
+}
+.sys-number-input:focus { border-color: var(--btn-primary-bg); }
+.sys-input-unit { font-size: .8rem; color: var(--text-muted); }
+
+/* ── قسم SLA ── */
+.sys-sla-section { margin-top: 1rem; }
+.sys-sla-label {
+    font-size: .74rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    margin-bottom: .5rem;
+}
+
+/* ── منطقة الخطر ── */
+.sys-danger-card { border-color: rgba(163,45,45,.25); }
+.sys-danger-title { color: #A32D2D !important; }
+.sys-danger-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: .6rem .75rem;
+    background: rgba(163,45,45,.04);
+    border: 1px solid rgba(163,45,45,.15);
+    border-radius: 9px;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+.sys-danger-item-name { font-size: .85rem; font-weight: 600; color: #A32D2D; }
+.sys-danger-item-desc { font-size: .74rem; color: var(--text-muted); margin-top: 2px; }
+.sys-danger-btn {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    padding: .38rem .85rem;
+    border-radius: 8px;
+    border: 1px solid rgba(163,45,45,.4);
+    background: rgba(163,45,45,.08);
+    color: #A32D2D;
+    font-size: .78rem;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: var(--font-primary);
+    transition: all .15s;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.sys-danger-btn:hover { background: #A32D2D; color: #fff; border-color: #A32D2D; }
+
+/* ── أزرار مشتركة ── */
+.sys-save-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    padding: .42rem .9rem;
+    border-radius: 8px;
+    border: none;
+    background: var(--btn-primary-bg, #3F5950);
+    color: var(--btn-primary-text, #fff);
+    font-size: .78rem;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: var(--font-primary);
+    transition: opacity .15s;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.sys-save-btn:hover { opacity: .87; }
+
+.sys-outline-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    padding: .4rem .85rem;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: .78rem;
+    font-weight: 500;
+    cursor: pointer;
+    font-family: var(--font-primary);
+    transition: all .15s;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.sys-outline-btn:hover { background: var(--bg-card); color: var(--text-primary); }
+
+.sys-select {
+    padding: .38rem .7rem;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-card);
+    color: var(--text-secondary);
+    font-size: .78rem;
+    font-family: var(--font-primary);
+    cursor: pointer;
+    outline: none;
+    min-width: 130px;
+}
+.sys-select:focus { border-color: var(--btn-primary-bg); }
+
+/* ── الأقسام ── */
+.sys-divisions-body { padding: 0; }
+.sys-divisions-body .div-sector-group-label { padding: .6rem 1.1rem; }
+.sys-divisions-body .div-row { padding: .6rem 1.1rem; }
+
+/* ── loading ── */
+.sys-loading {
+    padding: 1rem;
+    font-size: .8rem;
+    color: var(--text-muted);
+    text-align: center;
+}
+
+/* ── Responsive ── */
+@media (max-width: 700px) {
+    .sys-row-2col { grid-template-columns: 1fr; }
+    .sys-card-actions { width: 100%; justify-content: flex-start; }
+    .sys-card-head { flex-wrap: wrap; }
+    .sys-threshold-row { flex-direction: column; align-items: flex-start; }
+}
+    `;
+    document.head.appendChild(s);
 }
 
 // ════════════════════════════════════════════════════════════
@@ -1069,3 +1518,170 @@ async function submitBulkImport() {
     `;
     document.head.appendChild(s);
 })();
+// ══════════════════════════════════════════════════════════════
+// إعدادات طلبات الشراء — حد المبلغ + SLA
+// ══════════════════════════════════════════════════════════════
+
+var _prSlaData = [];
+
+async function loadPrSettings() {
+    try {
+        // جلب حد المبلغ
+        var r1 = await fetch('api/settings.php?action=get_setting&key=pr_amount_threshold');
+        var d1 = await r1.json();
+        var inp = document.getElementById('pr-threshold-input');
+        if (inp) inp.value = d1.value || '5000';
+
+        // جلب سياسات SLA
+        var r2 = await fetch('api/settings.php?action=get_pr_sla_policies');
+        var d2 = await r2.json();
+        _prSlaData = d2.success ? d2.data : [];
+        renderPrSlaTable(_prSlaData);
+    } catch (e) {
+        var el = document.getElementById('pr-sla-table');
+        if (el) el.innerHTML = '<div style="color:var(--accent-red);font-size:.82rem">خطأ في التحميل</div>';
+    }
+}
+
+function renderPrSlaTable(policies) {
+    var el = document.getElementById('pr-sla-table');
+    if (!el) return;
+
+    var stageLabels = {
+        reception: 'الاستلام والتحقق',
+        budget_review: 'مراجعة الموازنة',
+        treasury_review: 'مراجعة مدير الخزينة',
+        finance_review: 'مراجعة رئيس القطاع المالي',
+        ceo_approval: 'موافقة CEO — مبدئية',
+        purchasing: 'المشتريات — إنشاء حجز',
+        waiting_budget_approval: 'اعتماد حجز الموازنة',
+        accounts_review: 'الحسابات — مراجعة وتوزيع',
+        po_issuance: 'إصدار أمر الشراء (PO)',
+        payment: 'المالية — الدفع',
+        referral: 'الإحالة',
+    };
+
+    var stagePaths = {
+        reception: 'كلا المسارين',
+        budget_review: 'قصير',
+        treasury_review: 'طويل',
+        finance_review: 'طويل',
+        ceo_approval: 'طويل',
+        purchasing: 'كلا المسارين',
+        waiting_budget_approval: 'كلا المسارين',
+        accounts_review: 'كلا المسارين',
+        po_issuance: 'كلا المسارين (مسار PO)',
+        payment: 'كلا المسارين',
+        referral: 'عند الإحالة',
+    };
+
+    // دمج مع البيانات المحفوظة
+    var rows = Object.keys(stageLabels).map(function (stage) {
+        var saved = (policies || []).find(function (p) { return p.stage_name === stage; });
+        return {
+            stage: stage,
+            label: stageLabels[stage],
+            path: stagePaths[stage] || '—',
+            hours: saved ? saved.allowed_hours : (stage === 'po_issuance' ? 72 : stage === 'ceo_approval' ? 72 : 24),
+            warn: saved ? saved.warning_pct : 70,
+            esc: saved ? saved.escalate_pct : 100,
+            id: saved ? saved.id : null,
+        };
+    });
+
+    var html = '<table class="pr-sla-tbl">'
+        + '<thead><tr>'
+        + '<th>المرحلة</th>'
+        + '<th>المسار</th>'
+        + '<th style="width:110px">المدة المسموحة</th>'
+        + '<th style="width:90px">تحذير %</th>'
+        + '<th style="width:90px">تصعيد %</th>'
+        + '</tr></thead><tbody>';
+
+    rows.forEach(function (r) {
+        html += '<tr data-stage="' + r.stage + '" data-id="' + (r.id || '') + '">'
+            + '<td><span class="pr-sla-stage-name">' + r.label + '</span></td>'
+            + '<td><span class="pr-sla-path-badge">' + r.path + '</span></td>'
+            + '<td><div style="display:flex;align-items:center;gap:4px">'
+            + '<input type="number" class="pr-sla-inp" data-field="hours" value="' + r.hours + '" min="0" step="0.5" style="width:65px">'
+            + '<span style="font-size:.75rem;color:var(--text-muted)">ساعة</span></div></td>'
+            + '<td><input type="number" class="pr-sla-inp" data-field="warn" value="' + r.warn + '" min="0" max="100" style="width:60px">'
+            + '<span style="font-size:.75rem;color:var(--text-muted)"> %</span></td>'
+            + '<td><input type="number" class="pr-sla-inp" data-field="esc" value="' + r.esc + '" min="0" max="100" style="width:60px">'
+            + '<span style="font-size:.75rem;color:var(--text-muted)"> %</span></td>'
+            + '</tr>';
+    });
+
+    html += '</tbody></table>'
+        + '<div style="margin-top:.6rem;font-size:.76rem;color:var(--text-muted)">'
+        + '⏱ عند تجاوز نسبة التحذير يُرسل تنبيه للمسؤول — عند تجاوز نسبة التصعيد يُرسل تنبيه عاجل لرئيس القطاع'
+        + '</div>';
+
+    el.innerHTML = html;
+    injectPrSettingsStyles();
+}
+
+async function savePrSettings() {
+    // جمع حد المبلغ
+    var threshold = document.getElementById('pr-threshold-input')?.value?.trim();
+    if (!threshold || isNaN(threshold) || parseFloat(threshold) < 0) {
+        showToast('أدخل حد مبلغ صحيح', 'error'); return;
+    }
+
+    // جمع بيانات SLA
+    var slaRows = [];
+    document.querySelectorAll('#pr-sla-table tr[data-stage]').forEach(function (row) {
+        var stage = row.dataset.stage;
+        var id = row.dataset.id || '';
+        var inps = row.querySelectorAll('.pr-sla-inp');
+        var hours = 0, warn = 70, esc = 100;
+        inps.forEach(function (inp) {
+            if (inp.dataset.field === 'hours') hours = parseFloat(inp.value) || 0;
+            if (inp.dataset.field === 'warn') warn = parseInt(inp.value) || 70;
+            if (inp.dataset.field === 'esc') esc = parseInt(inp.value) || 100;
+        });
+        slaRows.push({ stage: stage, id: id, hours: hours, warn: warn, esc: esc });
+    });
+
+    try {
+        // حفظ حد المبلغ
+        var r1 = await fetch('api/settings.php?action=save_setting', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ key: 'pr_amount_threshold', value: threshold })
+        });
+        var d1 = await r1.json();
+        if (!d1.success) { showToast('خطأ في حفظ حد المبلغ', 'error'); return; }
+
+        // حفظ SLA
+        var r2 = await fetch('api/settings.php?action=save_pr_sla_policies', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ policies: slaRows })
+        });
+        var d2 = await r2.json();
+        if (!d2.success) { showToast('خطأ في حفظ سياسات SLA', 'error'); return; }
+
+        showToast('✅ تم حفظ الإعدادات', 'success');
+    } catch (e) {
+        showToast('خطأ في الاتصال', 'error');
+    }
+}
+
+function injectPrSettingsStyles() {
+    if (document.getElementById('pr-set-css')) return;
+    var s = document.createElement('style'); s.id = 'pr-set-css';
+    s.textContent = [
+        '.pr-set-amount-row{display:flex;align-items:center;justify-content:space-between;padding:.75rem 1rem;background:var(--bg-surface);border-radius:10px;border:1px solid var(--border-color)}',
+        '.pr-sla-tbl{width:100%;border-collapse:collapse;font-size:.82rem}',
+        '.pr-sla-tbl th{text-align:right;padding:.5rem .75rem;background:var(--bg-surface);color:var(--text-muted);font-weight:600;font-size:.75rem;text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid var(--border-color)}',
+        '.pr-sla-tbl td{padding:.5rem .75rem;border-bottom:1px solid var(--border-color);vertical-align:middle}',
+        '.pr-sla-tbl tr:last-child td{border-bottom:none}',
+        '.pr-sla-tbl tr:hover td{background:var(--bg-surface)}',
+        '.pr-sla-stage-name{font-weight:500;color:var(--text-primary)}',
+        '.pr-sla-path-badge{font-size:.72rem;padding:2px 7px;border-radius:6px;background:var(--bg-surface);border:1px solid var(--border-color);color:var(--text-muted)}',
+        '.pr-sla-inp{padding:4px 7px;border-radius:6px;border:1px solid var(--border-color);background:var(--bg-card);color:var(--text-primary);font-family:inherit;font-size:.82rem;text-align:center;outline:none}',
+        '.pr-sla-inp:focus{border-color:var(--btn-primary-bg)}',
+    ].join('');
+    document.head.appendChild(s);
+}

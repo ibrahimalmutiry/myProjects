@@ -1,9 +1,8 @@
 /* =============================================
-   نظام إدارة المعاملات - الملف الرئيسي
-   Workflow Management System - Main Stylesheet
+   نظام مسار MASAR - الملف الرئيسي
+   MASAR Workflow System - Main Stylesheet
    =============================================
-   هذا الملف يستورد جميع ملفات CSS المقسمة
-   الترتيب مهم: الألوان والمتغيرات أولاً، ثم القاعدة، ثم المكونات
+   الترتيب مهم: الألوان والمتغيرات أولاً
    ============================================= */
 
 /* 1. نظام الألوان والمتغيرات */
@@ -32,9 +31,115 @@
 @import url('notifications.css');
 
 /* 6. الأنظمة الفرعية */
-@import url('bank-deposits.css');
 @import url('daily-log.css');
 @import url('edit-modal.css');
 
 /* 7. الأدوات المساعدة */
 @import url('utilities.css');
+
+/* 8. محرر الثيم الديناميكي — MASAR Theme Editor */
+@import url('theme-editor.css');
+
+/* ══════════════════════════════════════════════════════════════
+   دعم متعدد اللغات — RTL / LTR
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── انتقال سلس عند تبديل الاتجاه ── */
+html {
+   transition: font-family 0.2s ease;
+}
+
+/* ── تصحيح المسافات في LTR ── */
+html[data-lang="en"] .modal {
+   text-align: left;
+}
+
+html[data-lang="en"] .modal-header {
+   flex-direction: row;
+}
+
+html[data-lang="en"] .toast {
+   text-align: left;
+}
+
+/* ── تصحيح الجداول في LTR ── */
+html[data-lang="en"] table {
+   text-align: left;
+}
+
+html[data-lang="en"] th,
+html[data-lang="en"] td {
+   text-align: left;
+}
+
+/* ── النماذج في LTR ── */
+html[data-lang="en"] .form-group label,
+html[data-lang="en"] .field-label {
+   text-align: left;
+}
+
+html[data-lang="en"] select,
+html[data-lang="en"] input,
+html[data-lang="en"] textarea {
+   text-align: left;
+   direction: ltr;
+}
+
+/* ── الـ dropdowns في LTR ── */
+html[data-lang="en"] .dropdown-menu {
+   right: auto;
+   left: 0;
+   text-align: left;
+}
+
+/* ── Cards / Headers في LTR ── */
+html[data-lang="en"] .card-title,
+html[data-lang="en"] .section-title,
+html[data-lang="en"] .page-title {
+   text-align: left;
+}
+
+/* ── أزرار في LTR ── */
+html[data-lang="en"] .btn-group {
+   flex-direction: row;
+}
+
+/* ── شريط البحث في LTR ── */
+html[data-lang="en"] .search-input,
+html[data-lang="en"] input[type="search"] {
+   direction: ltr;
+   text-align: left;
+}
+
+/* ── الأرقام دائماً LTR ── */
+.amount,
+.number,
+.stat-value,
+.badge-number {
+   direction: ltr;
+   unicode-bidi: isolate;
+}
+
+/* ── زر اللغة في الوضع المظلم ── */
+[data-theme="dark"] .lang-toggle-btn {
+   background: rgba(255, 255, 255, 0.08);
+   border-color: rgba(255, 255, 255, 0.15);
+}
+
+[data-theme="dark"] .lang-toggle-btn:hover {
+   background: rgba(255, 255, 255, 0.14);
+   border-color: var(--primary, #5a8a78);
+}
+
+[data-theme="dark"] .lang-code {
+   color: var(--primary, #5a8a78);
+}
+
+/* ── اتجاه سهم الصفوف في LTR ── */
+html[data-lang="en"] .dash-row-arrow {
+   transform: scaleX(-1);
+}
+
+html[data-lang="en"] .dash-panel-link svg {
+   transform: scaleX(-1);
+}

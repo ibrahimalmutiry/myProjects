@@ -1,0 +1,411 @@
+/* ═══════════════════════════════════════════════════════
+   theme-editor.css — نمط لوحة محرر الثيم
+   ═══════════════════════════════════════════════════════ */
+
+/* ── اللوحة الرئيسية ── */
+.te-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+
+/* ── رأس اللوحة ── */
+.te-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1rem;
+    padding: 1.25rem 1.5rem;
+    background: var(--primary, #3F5950);
+    border-radius: 14px;
+    color: #fff;
+}
+
+.te-header-left h2 {
+    font-size: 1rem;
+    font-weight: 800;
+    margin-bottom: 0.2rem;
+}
+
+.te-header-left p {
+    font-size: 0.75rem;
+    opacity: 0.65;
+}
+
+.te-header-actions {
+    display: flex;
+    gap: 0.625rem;
+    flex-wrap: wrap;
+}
+
+.te-btn {
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    border: none;
+    font-family: var(--font-primary);
+    font-size: 0.8rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.te-btn-save {
+    background: #fff;
+    color: var(--primary, #3F5950);
+}
+
+.te-btn-save:hover {
+    background: #ECE8E3;
+}
+
+.te-btn-reset {
+    background: rgba(255,255,255,0.15);
+    color: #fff;
+    border: 1px solid rgba(255,255,255,0.3);
+}
+
+.te-btn-reset:hover {
+    background: rgba(255,255,255,0.25);
+}
+
+.te-btn-export {
+    background: rgba(242,111,99,0.25);
+    color: #fff;
+    border: 1px solid rgba(242,111,99,0.4);
+}
+
+.te-btn-export:hover {
+    background: rgba(242,111,99,0.4);
+}
+
+/* ── شبكة المجموعات ── */
+.te-groups {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1rem;
+}
+
+/* ── بطاقة مجموعة ── */
+.te-group {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    overflow: hidden;
+}
+
+.te-group-head {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    padding: 0.875rem 1.1rem;
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.te-group-icon {
+    font-size: 1rem;
+    flex-shrink: 0;
+}
+
+.te-group-title {
+    font-size: 0.82rem;
+    font-weight: 800;
+    color: var(--text-primary);
+}
+
+.te-group-body {
+    padding: 0.875rem 1.1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+/* ── صف اللون الواحد ── */
+.te-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.te-row-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.te-row-label {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 0.15rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.te-row-desc {
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    line-height: 1.4;
+}
+
+/* ── مدخل اللون ── */
+.te-color-input-wrap {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-shrink: 0;
+}
+
+.te-color-picker {
+    width: 36px;
+    height: 36px;
+    border-radius: 9px;
+    border: 2px solid var(--border-color);
+    padding: 2px;
+    background: transparent;
+    cursor: pointer;
+    transition: border-color 0.2s, transform 0.2s;
+    flex-shrink: 0;
+}
+
+.te-color-picker:hover {
+    border-color: var(--primary, #3F5950);
+    transform: scale(1.08);
+}
+
+.te-color-hex {
+    width: 82px;
+    padding: 0.35rem 0.5rem;
+    border: 1.5px solid var(--border-color);
+    border-radius: 7px;
+    background: var(--bg-card);
+    color: var(--text-primary);
+    font-family: monospace;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    transition: border-color 0.2s;
+    outline: none;
+    letter-spacing: 0.04em;
+}
+
+.te-color-hex:focus {
+    border-color: var(--primary, #3F5950);
+    box-shadow: 0 0 0 3px var(--primary-subtle, rgba(63,89,80,0.1));
+}
+
+/* ── شريط المعاينة الحية ── */
+.te-preview-bar {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    overflow: hidden;
+}
+
+.te-preview-head {
+    padding: 0.75rem 1.1rem;
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border-color);
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.te-preview-body {
+    padding: 1.25rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: center;
+}
+
+/* عناصر المعاينة */
+.te-prev-btn-p {
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    background: var(--primary, #3F5950);
+    color: #fff;
+    border: none;
+    font-family: var(--font-primary);
+    font-size: 0.78rem;
+    font-weight: 700;
+    cursor: default;
+    transition: background 0.3s;
+}
+
+.te-prev-btn-s {
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--primary, #3F5950);
+    border: 1.5px solid var(--primary, #3F5950);
+    font-family: var(--font-primary);
+    font-size: 0.78rem;
+    font-weight: 700;
+    cursor: default;
+    transition: all 0.3s;
+}
+
+.te-prev-btn-d {
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    background: var(--accent, #F26F63);
+    color: #fff;
+    border: none;
+    font-family: var(--font-primary);
+    font-size: 0.78rem;
+    font-weight: 700;
+    cursor: default;
+    transition: background 0.3s;
+}
+
+.te-prev-table-wrap {
+    width: 100%;
+    margin-top: 0.5rem;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid var(--border-color);
+}
+
+.te-prev-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--font-primary);
+    font-size: 0.75rem;
+}
+
+.te-prev-table th {
+    background: var(--primary, #3F5950);
+    color: #fff;
+    padding: 0.45rem 0.75rem;
+    text-align: right;
+    font-weight: 700;
+    transition: background 0.3s;
+}
+
+.te-prev-table td {
+    padding: 0.4rem 0.75rem;
+    border-bottom: 1px solid var(--border-color);
+    color: var(--text-primary);
+    transition: background 0.3s;
+}
+
+.te-prev-table tr:nth-child(odd) td  { background: #fff; }
+.te-prev-table tr:nth-child(even) td { background: var(--secondary-bg2, #F2EEEB); transition: background 0.3s; }
+
+.te-prev-badge-g {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 20px;
+    background: var(--badge-green-bg);
+    color: var(--badge-green-text);
+    font-size: 0.68rem;
+    font-weight: 700;
+    font-family: var(--font-primary);
+    transition: all 0.3s;
+}
+
+.te-prev-badge-r {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 20px;
+    background: var(--badge-red-bg);
+    color: var(--badge-red-text);
+    font-size: 0.68rem;
+    font-weight: 700;
+    font-family: var(--font-primary);
+    transition: all 0.3s;
+}
+
+/* ── Preset ثيمات ── */
+.te-presets {
+    display: flex;
+    gap: 0.625rem;
+    flex-wrap: wrap;
+    padding: 0.875rem 1.1rem;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    align-items: center;
+}
+
+.te-preset-label {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    margin-left: 0.25rem;
+}
+
+.te-preset-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.4rem 0.75rem;
+    border-radius: 8px;
+    border: 1.5px solid transparent;
+    background: var(--bg-surface);
+    color: var(--text-secondary);
+    font-family: var(--font-primary);
+    font-size: 0.72rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.te-preset-btn:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+}
+
+.te-preset-btn.active {
+    background: var(--primary-subtle);
+    border-color: var(--primary);
+    color: var(--primary);
+}
+
+.te-preset-swatch {
+    width: 14px;
+    height: 14px;
+    border-radius: 4px;
+    display: inline-block;
+    flex-shrink: 0;
+}
+
+/* ── Toast تأكيد الحفظ ── */
+.te-toast {
+    position: fixed;
+    bottom: 2rem;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: var(--primary, #3F5950);
+    color: #fff;
+    padding: 0.65rem 1.5rem;
+    border-radius: 50px;
+    font-family: var(--font-primary);
+    font-size: 0.82rem;
+    font-weight: 700;
+    z-index: 9999;
+    opacity: 0;
+    transition: all 0.3s ease;
+    pointer-events: none;
+    box-shadow: 0 8px 24px rgba(63,89,80,0.35);
+    white-space: nowrap;
+}
+
+.te-toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+
+/* ── Responsive ── */
+@media (max-width: 640px) {
+    .te-groups { grid-template-columns: 1fr; }
+    .te-header { flex-direction: column; align-items: flex-start; }
+}

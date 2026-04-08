@@ -21,7 +21,6 @@ function renderDailyPaymentsPage() {
     page.innerHTML = `
     <div class="dp-root">
 
-        <!-- Header -->
         <div class="dp-topbar">
             <div class="dp-topbar-left">
                 <div class="dp-page-title">
@@ -31,261 +30,176 @@ function renderDailyPaymentsPage() {
                     </svg>
                     المدفوعات اليومية
                 </div>
-                <div class="dp-date-badge" id="dp-date-badge">
+                <div class="dp-date-badge">
                     ${new Date().toLocaleDateString('ar-SA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
                 </div>
             </div>
             <div class="dp-topbar-right">
-                <button class="dp-btn dp-btn-ghost" onclick="loadDailyPayments()" title="تحديث">
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
-                    </svg>
-                </button>
-                <button class="dp-btn dp-btn-ghost" onclick="openPaymentHistory()" title="سجل أوامر الدفع السابقة">
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                        <polyline points="14 2 14 8 20 8"/>
-                        <line x1="16" y1="13" x2="8" y2="13"/>
-                        <line x1="16" y1="17" x2="8" y2="17"/>
-                    </svg>
-                    السجل السابق
-                </button>
+                <button class="dp-btn dp-btn-ghost" onclick="loadDailyPayments()" title="تحديث">↻</button>
                 <button class="dp-btn dp-btn-primary" id="dp-issue-btn" onclick="openIssuePaymentModal()" disabled>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M12 5v14M5 12h14"/>
-                    </svg>
-                    إصدار أمر الدفع
+                    + إصدار أمر الدفع
                     <span class="dp-sel-count" id="dp-sel-badge" style="display:none">0</span>
                 </button>
             </div>
         </div>
 
-        <!-- Stats Row -->
+        <!-- تبويبان -->
+        <div class="dp-tabs">
+            <button class="dp-tab dp-tab-active" id="dp-tab-pending" onclick="dpSwitchTab('pending')">
+                ⏳ في الانتظار
+                <span class="dp-tab-badge" id="dp-tab-pending-badge">0</span>
+            </button>
+            <button class="dp-tab" id="dp-tab-history" onclick="dpSwitchTab('history')">
+                📅 السجل اليومي
+            </button>
+        </div>
+
+        <!-- إحصائيات -->
         <div class="dp-stats-row" id="dp-stats-row">
-            <div class="dp-stat-card dp-stat-pending">
-                <div class="dp-stat-icon">⏳</div>
+            <div class="dp-stat-card"><div class="dp-stat-icon">⏳</div>
                 <div><div class="dp-stat-val" id="dps-pending">—</div><div class="dp-stat-lbl">في الانتظار</div></div>
             </div>
-            <div class="dp-stat-card dp-stat-amount">
-                <div class="dp-stat-icon">💰</div>
+            <div class="dp-stat-card"><div class="dp-stat-icon">💰</div>
                 <div><div class="dp-stat-val" id="dps-amount">—</div><div class="dp-stat-lbl">إجمالي المبالغ</div></div>
             </div>
-            <div class="dp-stat-card dp-stat-breach">
-                <div class="dp-stat-icon">🔴</div>
+            <div class="dp-stat-card"><div class="dp-stat-icon">🔴</div>
                 <div><div class="dp-stat-val" id="dps-breach">—</div><div class="dp-stat-lbl">تجاوزت SLA</div></div>
             </div>
-            <div class="dp-stat-card dp-stat-warn">
-                <div class="dp-stat-icon">🟡</div>
+            <div class="dp-stat-card"><div class="dp-stat-icon">🟡</div>
                 <div><div class="dp-stat-val" id="dps-warn">—</div><div class="dp-stat-lbl">تحذير SLA</div></div>
             </div>
-            <div class="dp-stat-card dp-stat-ok">
-                <div class="dp-stat-icon">🟢</div>
-                <div><div class="dp-stat-val" id="dps-ok">—</div><div class="dp-stat-lbl">ضمن الوقت</div></div>
-            </div>
         </div>
 
-        <!-- Toolbar -->
-        <div class="dp-toolbar">
-            <div class="dp-toolbar-right">
+        <!-- قسم المعلقة -->
+        <div id="dp-section-pending">
+            <div class="dp-filters-bar">
+                <!-- بحث -->
                 <div class="dp-search-wrap">
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
                         <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
                     </svg>
-                    <input type="text" id="dp-search" placeholder="بحث في المعاملات..." oninput="filterDailyPayments()">
+                    <input type="search" id="dp-search" placeholder="بحث في المعاملات..."
+                           oninput="filterDailyPayments()">
                 </div>
-                <select class="dp-select" id="dp-filter-priority" onchange="filterDailyPayments()">
-                    <option value="">كل الأولويات</option>
-                    <option value="urgent">عاجل 🔴</option>
-                    <option value="high">مرتفع 🟠</option>
-                    <option value="normal">عادي</option>
-                </select>
-                <select class="dp-select" id="dp-filter-sla" onchange="filterDailyPayments()">
-                    <option value="">كل الحالات</option>
-                    <option value="breach">تجاوز SLA</option>
-                    <option value="warn">تحذير</option>
-                    <option value="ok">ضمن الوقت</option>
-                </select>
-            </div>
-            <div class="dp-toolbar-left">
-                <label class="dp-check-all-wrap">
-                    <input type="checkbox" id="dp-check-all" onchange="toggleSelectAll(this.checked)">
-                    <span>تحديد الكل</span>
-                </label>
-                <span class="dp-sel-label" id="dp-sel-label" style="display:none">
-                    تم تحديد <strong id="dp-sel-count-txt">0</strong> معاملة
-                </span>
-            </div>
-        </div>
 
-        <!-- Table -->
-        <div class="dp-table-wrap">
-            <table class="dp-table">
-                <thead>
-                    <tr>
-                        <th class="dp-th-check"></th>
-                        <th>رقم المعاملة</th>
-                        <th>الوصف</th>
-                        <th>النوع</th>
-                        <th>المبلغ</th>
-                        <th>الأولوية</th>
-                        <th>رمز الموازنة</th>
-                        <th>SLA</th>
-                        <th>OLA (مرحلة الدفع)</th>
-                        <th>التاريخ</th>
-                    </tr>
-                </thead>
-                <tbody id="dp-tbody">
-                    <tr><td colspan="10" class="dp-empty-row">
-                        <div class="dp-loading">
-                            <div class="dp-spinner"></div>
-                            <span>جاري التحميل...</span>
-                        </div>
-                    </td></tr>
-                </tbody>
-            </table>
-        </div>
-
-        <!-- Selected Summary Bar -->
-        <div class="dp-sel-bar" id="dp-sel-bar" style="display:none">
-            <div class="dp-sel-bar-info">
-                <strong id="dp-sel-bar-count">0</strong> معاملة محددة
-                &nbsp;|&nbsp;
-                الإجمالي: <strong id="dp-sel-bar-amount">0</strong>
-            </div>
-            <div class="dp-sel-bar-actions">
-                <button class="dp-btn dp-btn-ghost" onclick="clearSelection()">إلغاء التحديد</button>
-                <button class="dp-btn dp-btn-primary" onclick="openIssuePaymentModal()">
-                    إصدار أمر الدفع
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="m9 18 6-6-6-6"/>
-                    </svg>
-                </button>
-            </div>
-        </div>
-
-    </div>
-
-    <!-- Modal: إصدار أمر الدفع -->
-    <div class="dp-modal-overlay" id="dp-issue-modal" style="display:none">
-        <div class="dp-modal">
-            <div class="dp-modal-header">
-                <div>
-                    <div class="dp-modal-title">إصدار أمر دفع</div>
-                    <div class="dp-modal-sub" id="dp-modal-sub">—</div>
+                <!-- فلاتر -->
+                <div class="dp-filter-group">
+                    <select class="dp-select" id="dp-filter-priority" onchange="filterDailyPayments()">
+                        <option value="">كل الأولويات</option>
+                        <option value="urgent">⚡ عاجل</option>
+                        <option value="normal">عادي</option>
+                    </select>
+                    <select class="dp-select" id="dp-filter-sla" onchange="filterDailyPayments()">
+                        <option value="">كل الحالات</option>
+                        <option value="breach">🔴 تجاوز SLA</option>
+                        <option value="warn">🟡 تحذير</option>
+                        <option value="ok">🟢 ضمن الوقت</option>
+                    </select>
+                    <select class="dp-select" id="dp-filter-vendor" onchange="filterDailyPayments()">
+                        <option value="">كل الجهات</option>
+                    </select>
                 </div>
-                <button class="dp-modal-close" onclick="closeIssueModal()">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                    </svg>
-                </button>
-            </div>
-            <div class="dp-modal-body">
-                <div class="dp-form-group">
-                    <label>ملاحظات (اختياري)</label>
-                    <textarea class="dp-textarea" id="dp-order-notes" placeholder="ملاحظة على أمر الدفع..."></textarea>
-                </div>
-                <div class="dp-preview-table" id="dp-preview-table"><!-- تُعبأ ديناميكياً --></div>
-            </div>
-            <div class="dp-modal-footer">
-                <button class="dp-btn dp-btn-ghost" onclick="closeIssueModal()">إلغاء</button>
-                <button class="dp-btn dp-btn-confirm" id="dp-confirm-btn" onclick="confirmPaymentOrder()">
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
-                    </svg>
-                    تأكيد الإصدار
-                </button>
-            </div>
-        </div>
-    </div>
 
-
-    <!-- Modal: سجل أوامر الدفع السابقة -->
-    <div class="dp-modal-overlay" id="dp-history-modal" style="display:none">
-        <div class="dp-modal dp-history-box">
-            <div class="dp-modal-header">
-                <div>
-                    <div class="dp-modal-title">سجل أوامر الدفع</div>
-                    <div class="dp-modal-sub">ابحث حسب التاريخ أو رقم الأمر</div>
-                </div>
-                <button class="dp-modal-close" onclick="closeHistoryModal()">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                    </svg>
-                </button>
-            </div>
-            <div class="dp-modal-body">
-                <div class="dp-hist-filters">
-                    <div class="dp-form-group">
-                        <label>من تاريخ</label>
-                        <input type="date" class="dp-select" id="dp-hist-from" value="">
-                    </div>
-                    <div class="dp-form-group">
-                        <label>إلى تاريخ</label>
-                        <input type="date" class="dp-select" id="dp-hist-to" value="">
-                    </div>
-                    <div class="dp-form-group dp-hist-search-group">
-                        <label>رقم الأمر</label>
-                        <input type="text" class="dp-select" id="dp-hist-ref" placeholder="PO-...">
-                    </div>
-                    <button class="dp-btn dp-btn-primary" onclick="loadPaymentHistory()" style="align-self:flex-end">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+                <!-- تحديد الكل -->
+                <label class="dp-check-all">
+                    <span class="dp-check-box">
+                        <input type="checkbox" id="dp-check-all" onchange="toggleSelectAll(this.checked)">
+                        <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="white" stroke-width="2" stroke-linecap="round">
+                            <polyline points="2 6 5 9 10 3"/>
                         </svg>
-                        بحث
-                    </button>
-                </div>
-                <div id="dp-hist-results">
-                    <div class="dp-empty-row" style="padding:2rem;text-align:center;color:var(--text-muted)">
-                        اضغط بحث لعرض النتائج
-                    </div>
-                </div>
+                    </span>
+                    تحديد الكل
+                </label>
+            </div>
+            <div class="dp-table-wrap">
+                <table class="dp-table">
+                    <thead><tr>
+                        <th style="width:36px"></th>
+                        <th>رقم المعاملة</th><th>الوصف</th><th>النوع</th>
+                        <th>المبلغ</th><th>الأولوية</th><th>SLA</th>
+                        <th>OLA (مرحلة الدفع)</th><th>التاريخ</th>
+                    </tr></thead>
+                    <tbody id="dp-tbody">
+                        <tr><td colspan="9" class="dp-empty">
+                            ⏳ لا توجد معاملات في انتظار الدفع
+                        </td></tr>
+                    </tbody>
+                </table>
             </div>
         </div>
-    </div>
 
-    <!-- Modal: أمر الدفع الصادر (قابل للطباعة) -->
-    <div class="dp-modal-overlay" id="dp-order-modal" style="display:none">
-        <div class="dp-order-box" id="dp-order-box">
-            <!-- Header controls (لا تُطبع) -->
-            <div class="dp-order-controls no-print">
-                <button class="dp-btn dp-btn-ghost" onclick="closeOrderModal()">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                    </svg>
-                    إغلاق
-                </button>
-                <button class="dp-btn dp-btn-ghost" onclick="downloadOrderPDF()">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                        <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-                    </svg>
-                    تحميل PDF
-                </button>
-                <button class="dp-btn dp-btn-primary" onclick="printOrder()">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <polyline points="6 9 6 2 18 2 18 9"/>
-                        <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
-                        <rect x="6" y="14" width="12" height="8"/>
-                    </svg>
-                    طباعة
-                </button>
-            </div>
-            <!-- محتوى الأمر القابل للطباعة -->
-            <div class="dp-printable" id="dp-printable-content">
-                <!-- يُعبأ بعد الإصدار -->
+        <!-- قسم السجل اليومي -->
+        <div id="dp-section-history" style="display:none">
+            <div id="dp-history-days" class="dp-history-days">
+                <div class="dp-empty" style="padding:3rem">📅 اضغط على التبويب لعرض السجل</div>
             </div>
         </div>
+
     </div>
     `;
+
+    // الـ modals خارج الصفحة لتجنب تعارض CSS
+    if (!document.getElementById('dp-issue-modal')) {
+        const wrap = document.createElement('div');
+        wrap.id = 'dp-modals-root';
+        document.body.appendChild(wrap);
+        // تُعبأ لاحقاً عند أول فتح
+    }
 }
 
-// ────────────────────────────────────────────
-//  تحميل البيانات
-// ────────────────────────────────────────────
+
 async function loadDailyPayments() {
     try {
+        const res = await fetch('api/purchase_requests_api.php?action=payment_queue_v2');
+        const data = await res.json();
+        if (!data.success) throw new Error(data.message || 'فشل تحميل المدفوعات');
+
+        dpTransactions = (data.data || []).map(t => ({
+            ...t,
+            id: parseInt(t.id),
+            pr_id: parseInt(t.pr_id || t.id),
+            source: 'purchase_request',
+        }));
+
+        dpSelected.clear();
+        renderDpRows(dpTransactions);
+        updateDpStats();
+        updateSelectionUI();
+        _dpBuildVendorGroups();
+    } catch (e) {
+        const tbody = document.getElementById('dp-tbody');
+        if (tbody) tbody.innerHTML = `<tr><td colspan="10" class="dp-empty">خطأ في التحميل: ${e.message}</td></tr>`;
+    }
+}
+
+// ── بناء مجموعات الجهات المستفيدة ──────────
+function _dpBuildVendorGroups() {
+    const groups = {};
+    dpTransactions.forEach(t => {
+        const key = t.beneficiary || t.supplier_name || '—';
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(t);
+    });
+    window._dpVendorGroups = groups;
+
+    // تحديث فلتر الجهة إن وجد
+    const sel = document.getElementById('dp-filter-vendor');
+    if (!sel) return;
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">كل الجهات</option>';
+    Object.keys(groups).sort().forEach(k => {
+        const opt = document.createElement('option');
+        opt.value = k; opt.textContent = `${k} (${groups[k].length})`;
+        if (k === cur) opt.selected = true;
+        sel.appendChild(opt);
+    });
+}
+
+// ── LEGACY stub: لا يُستخدم لكن لا يكسر الكود القديم ──
+async function _legacyLoadDailyPayments_UNUSED() {
+    try {
         // ── المعاملات التقليدية ──────────────────────────────
-        const res = await fetch('api/?action=get_pending_payments');
+        const res = await fetch('api/daily_payments_api.php?action=get_pending_payments');
         const data = await res.json();
         if (!data.success) throw new Error(data.message);
         let txList = (data.data || []).map(t => ({ ...t, id: parseInt(t.id), source: 'transaction' }));
@@ -296,15 +210,16 @@ async function loadDailyPayments() {
             const prData = await prRes.json();
             if (prData.success && prData.data?.length) {
                 const prItems = prData.data.map(pr => ({
-                    id: 'PR-' + pr.id,
+                    id: pr.id + 1000000,
                     transaction_number: pr.request_number,
                     description: pr.title + (pr.po_number ? ' — PO: ' + pr.po_number : ''),
-                    amount: parseFloat(pr.final_amount || 0),
-                    currency: pr.currency,
-                    amount_sar: parseFloat(pr.final_amount_sar || 0),
+                    transaction_type: 'طلب شراء',
+                    amount: parseFloat(pr.final_amount || pr.amount || 0),
+                    currency: pr.currency || 'SAR',
+                    amount_sar: parseFloat(pr.final_amount_sar || pr.amount_sar || 0),
                     supplier_name: pr.supplier_name,
                     department_name: pr.department_name,
-                    priority: pr.priority,
+                    priority: pr.priority || 'normal',
                     sla_pct: 0,
                     ola_pct: 0,
                     source: 'purchase_request',
@@ -339,15 +254,17 @@ function updateDpStats() {
     const warn = dpTransactions.filter(t => (t.sla_pct || 0) >= 70 && (t.sla_pct || 0) < 100).length;
     const ok = total - breach - warn;
 
-    document.getElementById('dps-pending').textContent = total;
-    // عرض الإجمالي بالعملة إذا كانت موحدة، وإلا بالريال
+    const _sel = id => document.getElementById(id);
+    if (_sel('dps-pending')) _sel('dps-pending').textContent = total;
     const allCurs = dpTransactions.map(t => t.currency || 'SAR');
     const uniqCur = [...new Set(allCurs)];
     const displayCur = uniqCur.length === 1 ? uniqCur[0] : 'SAR';
-    document.getElementById('dps-amount').innerHTML = fmtMoneyCur(amount, displayCur);
-    document.getElementById('dps-breach').textContent = breach;
-    document.getElementById('dps-warn').textContent = warn;
-    document.getElementById('dps-ok').textContent = ok;
+    if (_sel('dps-amount')) _sel('dps-amount').innerHTML = fmtMoneyCur(amount, displayCur);
+    if (_sel('dps-breach')) _sel('dps-breach').textContent = breach;
+    if (_sel('dps-warn')) _sel('dps-warn').textContent = warn;
+    if (_sel('dps-ok')) _sel('dps-ok').textContent = ok;
+    // تحديث badge التبويب
+    if (_sel('dp-tab-pending-badge')) _sel('dp-tab-pending-badge').textContent = total;
 }
 
 // ────────────────────────────────────────────
@@ -509,19 +426,17 @@ function updateSelectionUI() {
     const bar = document.getElementById('dp-sel-bar');
     if (bar) bar.style.display = count > 0 ? 'flex' : 'none';
 
-    document.getElementById('dp-sel-bar-count').textContent = count;
-    // حساب العملة الغالبة على المعاملات المحددة
+    const _sb = document.getElementById('dp-sel-bar-count');
+    if (_sb) _sb.textContent = count;
     const selCurrencies = [...dpSelected].map(id => dpTransactions.find(x => x.id == id)?.currency || 'SAR');
     const selCurrency = selCurrencies.every(c => c === selCurrencies[0]) ? selCurrencies[0] : 'mixed';
-    document.getElementById('dp-sel-bar-amount').innerHTML = selCurrency === 'mixed'
-        ? formatMoneyWithSAR(amount)
-        : fmtMoneyCur(amount, selCurrency);
-
-    // label
+    const _sba = document.getElementById('dp-sel-bar-amount');
+    if (_sba) _sba.innerHTML = selCurrency === 'mixed' ? formatMoneyWithSAR(amount) : fmtMoneyCur(amount, selCurrency);
     const lbl = document.getElementById('dp-sel-label');
     if (lbl) {
         lbl.style.display = count > 0 ? '' : 'none';
-        document.getElementById('dp-sel-count-txt').textContent = count;
+        const _sct = document.getElementById('dp-sel-count-txt');
+        if (_sct) _sct.textContent = count;
     }
 }
 
@@ -532,13 +447,14 @@ function filterDailyPayments() {
     const q = (document.getElementById('dp-search')?.value || '').toLowerCase();
     const pri = document.getElementById('dp-filter-priority')?.value || '';
     const sla = document.getElementById('dp-filter-sla')?.value || '';
+    const vendor = document.getElementById('dp-filter-vendor')?.value || '';
 
     const list = dpTransactions.filter(t => {
         const matchQ = !q ||
             (t.transaction_number || '').toLowerCase().includes(q) ||
             (t.description || '').toLowerCase().includes(q) ||
-            (t.transaction_type || '').toLowerCase().includes(q) ||
-            (t.budget_code || '').toLowerCase().includes(q);
+            (t.beneficiary || t.supplier_name || '').toLowerCase().includes(q) ||
+            (t.department_name || '').toLowerCase().includes(q);
 
         const matchP = !pri || t.priority === pri;
 
@@ -548,7 +464,10 @@ function filterDailyPayments() {
             (sla === 'warn' && pct >= 70 && pct < 100) ||
             (sla === 'ok' && pct < 70);
 
-        return matchQ && matchP && matchS;
+        const matchV = !vendor ||
+            (t.beneficiary || t.supplier_name || '—') === vendor;
+
+        return matchQ && matchP && matchS && matchV;
     });
 
     renderDpRows(list);
@@ -576,50 +495,79 @@ function getFilteredRows() {
 // ────────────────────────────────────────────
 //  Modal: إصدار أمر الدفع
 // ────────────────────────────────────────────
-function openIssuePaymentModal() {
+async function openIssuePaymentModal() {
     if (dpSelected.size === 0) return;
 
     const selected = dpTransactions.filter(t => dpSelected.has(t.id));
-    const total = selected.reduce((s, t) => s + parseFloat(t.amount || 0), 0);
+    const total = selected.reduce((s, t) => s + parseFloat(t.amount_sar || t.amount || 0), 0);
 
-    // ملخص
+    // ── ملخص ─────────────────────────────────────────────────
     document.getElementById('dp-modal-sub').innerHTML =
-        (() => {
-            const currencies = selected.map(t => t.currency || 'SAR');
-            const singleCur = currencies.every(c => c === currencies[0]) ? currencies[0] : 'mixed';
-            const totalStr = singleCur === 'mixed' ? formatMoneyWithSAR(total) : fmtMoneyCur(total, singleCur);
-            return `${selected.length} معاملة — إجمالي: ${totalStr}`;
-        })();
+        `${selected.length} طلب — إجمالي: ${formatMoneyWithSAR(total)}`;
 
-    // جدول المعاينة
-    const rows = selected.map(t => `
-        <tr>
-            <td>${t.transaction_number || '#' + t.id}</td>
-            <td>${truncate(t.description, 40)}</td>
-            <td>${t.transaction_type || '—'}</td>
-            <td style="text-align:left;font-variant-numeric:tabular-nums">${fmtMoneyCur(parseFloat(t.amount || 0), t.currency || 'SAR')}</td>
-            <td>${getPriorityBadge(t.priority)}</td>
-        </tr>
-    `).join('');
+    // ── جدول معاينة مع تجميع بالجهة ─────────────────────────
+    const byVendor = {};
+    selected.forEach(t => {
+        const v = t.beneficiary || t.supplier_name || '—';
+        if (!byVendor[v]) byVendor[v] = [];
+        byVendor[v].push(t);
+    });
+
+    let previewRows = '';
+    Object.entries(byVendor).forEach(([vendor, items]) => {
+        const vTotal = items.reduce((s, t) => s + parseFloat(t.amount_sar || t.amount || 0), 0);
+        previewRows += `
+            <tr style="background:var(--color-background-secondary)">
+                <td colspan="4" style="font-weight:600;padding:6px 10px;font-size:.82rem">
+                    🏢 ${vendor}
+                    <span style="font-weight:400;color:var(--color-text-secondary);margin-right:8px">${items.length} طلب</span>
+                </td>
+                <td style="font-weight:700;text-align:left;padding:6px 10px;direction:ltr">${formatMoneyWithSAR(vTotal)}</td>
+            </tr>`;
+        items.forEach(t => {
+            previewRows += `
+                <tr>
+                    <td style="padding:4px 10px 4px 24px;color:var(--color-text-secondary);font-size:.78rem">${t.transaction_number || '#' + t.id}</td>
+                    <td style="font-size:.8rem">${truncate(t.description, 38)}</td>
+                    <td style="font-size:.78rem">${t.department_name || '—'}</td>
+                    <td>${getPriorityBadge(t.priority)}</td>
+                    <td style="text-align:left;direction:ltr;font-size:.8rem">${fmtMoneyCur(parseFloat(t.amount || 0), t.currency || 'SAR')}</td>
+                </tr>`;
+        });
+    });
 
     document.getElementById('dp-preview-table').innerHTML = `
-        <div class="dp-preview-title">المعاملات المحددة</div>
+        <div class="dp-preview-title">المعاملات المحددة — مجمّعة حسب الجهة</div>
         <table class="dp-preview-tbl">
             <thead><tr>
-                <th>الرقم</th><th>الوصف</th><th>النوع</th><th>المبلغ</th><th>الأولوية</th>
+                <th>الرقم</th><th>الوصف</th><th>الإدارة</th><th>الأولوية</th><th>المبلغ</th>
             </tr></thead>
-            <tbody>${rows}</tbody>
+            <tbody>${previewRows}</tbody>
             <tfoot><tr>
-                <td colspan="3" style="font-weight:700;text-align:right">الإجمالي</td>
-                <td style="font-weight:800;color:var(--accent-green);text-align:left">${(() => {
-            const cs = selected.map(t => t.currency || 'SAR');
-            const sc = cs.every(c => c === cs[0]) ? cs[0] : 'mixed';
-            return sc === 'mixed' ? formatMoneyWithSAR(total) : fmtMoneyCur(total, sc);
-        })()}</td>
-                <td></td>
+                <td colspan="4" style="font-weight:700;text-align:right">الإجمالي الكلي</td>
+                <td style="font-weight:800;color:var(--accent-green);text-align:left;direction:ltr">${formatMoneyWithSAR(total)}</td>
             </tr></tfoot>
-        </table>
-    `;
+        </table>`;
+
+    // ── تحقق من الرصيد البنكي ────────────────────────────────
+    const balanceBar = document.getElementById('dp-balance-bar');
+    try {
+        const bRes = await fetch(`api/purchase_requests_api.php?action=check_bank_balance&total=${encodeURIComponent(total)}`);
+        const bData = await bRes.json();
+        if (bData.success && balanceBar) {
+            const sufficient = bData.sufficient;
+            const deficit = bData.deficit;
+            balanceBar.style.display = '';
+            balanceBar.className = `dp-balance-bar ${sufficient ? 'dp-balance-ok' : 'dp-balance-warn'}`;
+            balanceBar.innerHTML = sufficient
+                ? `<span>✅ الرصيد كافٍ — حساب: <strong>${bData.account_name}</strong> | الرصيد: <strong>${formatMoneyWithSAR(bData.balance)}</strong> | المطلوب: <strong>${formatMoneyWithSAR(total)}</strong></span>`
+                : `<span>⚠️ تحذير: رصيد <strong>${bData.account_name}</strong> غير كافٍ — العجز: <strong>${formatMoneyWithSAR(deficit)}</strong> | الرصيد الحالي: ${formatMoneyWithSAR(bData.balance)}</span>`;
+            // حفظ account_id للاستخدام عند التأكيد
+            document.getElementById('dp-issue-modal').dataset.bankAccountId = bData.account_id || 0;
+        }
+    } catch (_) {
+        if (balanceBar) balanceBar.style.display = 'none';
+    }
 
     const modal = document.getElementById('dp-issue-modal');
     modal.style.display = 'flex';
@@ -633,42 +581,67 @@ function closeIssueModal() {
 }
 
 // ────────────────────────────────────────────
-//  تأكيد إصدار أمر الدفع
+//  تأكيد إصدار أمر الدفع — batch موحّد
 // ────────────────────────────────────────────
 async function confirmPaymentOrder() {
     const btn = document.getElementById('dp-confirm-btn');
-    const notes = document.getElementById('dp-order-notes').value;
+    const notes = (document.getElementById('dp-order-notes') || {}).value || '';
+    const ref = (document.getElementById('dp-order-ref') || {}).value || '';
+    const method = (document.getElementById('dp-order-method') || {}).value || 'تحويل بنكي';
+    const modal = document.getElementById('dp-issue-modal');
+    const bankAccountId = parseInt(modal?.dataset?.bankAccountId || 0);
+
+    const selected = dpTransactions.filter(t => dpSelected.has(t.id));
+    if (!selected.length) return;
 
     btn.disabled = true;
-    btn.textContent = '⏳ جاري الإصدار...';
+    btn.textContent = '⏳ جاري التنفيذ...';
 
     try {
-        const res = await fetch('api/?action=issue_payment_order', {
+        const prIds = selected.map(t => t.pr_id || t.id);
+
+        const res = await fetch('api/purchase_requests_api.php?action=execute_batch_payment', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                ids: [...dpSelected],
-                notes,
-            })
+            body: JSON.stringify({ pr_ids: prIds, method, ref, notes, bank_account_id: bankAccountId }),
         });
         const data = await res.json();
-        if (!data.success) throw new Error(data.message);
 
-        dpLastOrder = data;
+        if (!data.success) {
+            if (data.balance_error) {
+                const balBar = document.getElementById('dp-balance-bar');
+                if (balBar) {
+                    balBar.style.display = '';
+                    balBar.className = 'dp-balance-bar dp-balance-warn';
+                    balBar.innerHTML = `⚠️ رصيد غير كافٍ — العجز: <strong>${formatMoneyWithSAR(data.deficit)}</strong>`;
+                }
+                return;
+            }
+            throw new Error(data.message || 'فشل الإصدار');
+        }
 
-        // احذف المعاملات المُصدرة من القائمة فوراً بدون انتظار
-        const issuedIds = new Set((data.details || []).map(t => parseInt(t.id)));
-        dpTransactions = dpTransactions.filter(t => !issuedIds.has(parseInt(t.id)));
+        // ── نجاح: تحديث الواجهة ──────────────────────────────
+        const successIds = new Set(data.details.map(d => parseInt(d.id)));
+        dpTransactions = dpTransactions.filter(t => !successIds.has(parseInt(t.pr_id || t.id)));
         dpSelected.clear();
         renderDpRows(dpTransactions);
         updateDpStats();
         updateSelectionUI();
-
+        _dpBuildVendorGroups();
         closeIssueModal();
+
+        dpLastOrder = data;
         showPaymentOrderModal(data);
 
-        // ثم حمّل من السيرفر للتأكد من التزامن
-        loadDailyPayments();
+        // ── حفظ أمر الدفع كمرفق لكل طلب (في الخلفية) ────────
+        _dpSaveOrderAttachments(data);
+
+        setTimeout(loadDailyPayments, 1500);
+
+        if (data.failed > 0) {
+            const failMsgs = (data.failed_details || []).map(f => `#${f.id}: ${f.reason}`).join('\n');
+            alert(`اكتمل جزئياً — ${data.updated} ناجح، ${data.failed} فشل:\n${failMsgs}`);
+        }
 
     } catch (e) {
         alert('خطأ: ' + e.message);
@@ -679,9 +652,34 @@ async function confirmPaymentOrder() {
 }
 
 // ────────────────────────────────────────────
-//  Modal: أمر الدفع الصادر
+//  حفظ أمر الدفع كمرفق لكل طلب (خلفية)
 // ────────────────────────────────────────────
-// حساب إجمالي أمر الدفع مع مراعاة العملات المختلطة
+async function _dpSaveOrderAttachments(orderData) {
+    if (!orderData?.details?.length) return;
+
+    const htmlContent = document.getElementById('dp-printable-content')?.innerHTML || '';
+    const orderRef = orderData.order_ref || '';
+
+    for (const detail of orderData.details) {
+        const prId = detail.id;
+        const amount = parseFloat(detail.amount_sar || detail.amount || 0);
+
+        try {
+            await fetch('api/purchase_requests_api.php?action=save_payment_attachment', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    pr_id: prId,
+                    order_ref: orderRef,
+                    html_content: htmlContent,
+                    amount: amount,
+                }),
+            });
+        } catch (e) {
+            console.warn(`تعذّر حفظ المرفق للطلب #${prId}:`, e.message);
+        }
+    }
+}
 function calcOrderTotal(details) {
     if (!details || !details.length) return { amount: 0, currency: 'SAR', isMixed: false };
     const currencies = [...new Set(details.map(t => t.currency || 'SAR'))];
@@ -975,4 +973,191 @@ async function viewHistoryOrder(ref) {
     } catch (e) {
         alert('خطأ: ' + e.message);
     }
+}
+
+// ══════════════════════════════════════════════════════════
+//  التبويب + السجل اليومي + رفع الإيصالات
+// ══════════════════════════════════════════════════════════
+
+function dpSwitchTab(tab) {
+    const p = tab === 'pending';
+    ['dp-section-pending', 'dp-stats-row'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = p ? '' : 'none';
+    });
+    const sh = document.getElementById('dp-section-history');
+    if (sh) sh.style.display = p ? 'none' : '';
+    document.getElementById('dp-tab-pending')?.classList.toggle('dp-tab-active', p);
+    document.getElementById('dp-tab-history')?.classList.toggle('dp-tab-active', !p);
+    if (!p) dpLoadHistory();
+}
+
+async function dpLoadHistory() {
+    const c = document.getElementById('dp-history-days');
+    if (!c) return;
+    c.innerHTML = '<div class="dp-empty" style="padding:3rem">📅 جارٍ التحميل...</div>';
+    try {
+        const res = await fetch('api/daily_payments_api.php?action=get_orders_by_day&days=30');
+        const d = await res.json();
+        if (!d.success) throw new Error(d.message);
+        const byDay = d.data || {};
+        const days = Object.keys(byDay);
+        if (!days.length) {
+            c.innerHTML = '<div class="dp-empty" style="padding:3rem">📅 لا توجد مدفوعات مسجّلة</div>';
+            return;
+        }
+        const today = new Date().toISOString().slice(0, 10);
+        const yest = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+
+        c.innerHTML = days.map(day => {
+            const orders = byDay[day];
+            const tot = orders.reduce((s, o) => s + parseFloat(o.total_amount || 0), 0);
+            const lbl = day === today ? 'اليوم' : day === yest ? 'أمس' :
+                new Date(day + 'T12:00').toLocaleDateString('ar-SA',
+                    { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
+            const ordH = orders.map(o => {
+                const sid = _dpSafeId(o.order_ref);
+                const amt = parseFloat(o.total_amount || 0);
+                const fmtAmt = amt.toLocaleString('ar-SA', { minimumFractionDigits: 2 }) + ' ريال';
+                return `<div class="dp-day-order">
+                    <div class="dp-day-order-header">
+                        <div class="dp-day-order-ref">🧾 ${o.order_ref || '—'}</div>
+                        <div class="dp-day-order-meta">
+                            <span>${o.txn_count || 0} طلب</span>
+                            <span class="dp-meta-dot"></span>
+                            <span>${o.payment_method || 'تحويل بنكي'}</span>
+                            ${o.issued_by ? `<span class="dp-meta-dot"></span><span>${o.issued_by}</span>` : ''}
+                            ${o.issued_at ? `<span class="dp-meta-dot"></span><span style="font-family:monospace;font-size:.74rem">${o.issued_at.slice(11, 16)}</span>` : ''}
+                        </div>
+                        <div class="dp-day-order-amount">${fmtAmt}</div>
+                    </div>
+                    <div class="dp-receipts-section" id="dp-receipts-${sid}"></div>
+                    <div class="dp-receipt-upload">
+                        <input type="text" class="dp-receipt-name" id="dp-rlabel-${sid}" placeholder="تسمية الإيصال">
+                        <label class="dp-receipt-file-btn">
+                            📎 رفع إيصال (أو أكثر)
+                            <input type="file" hidden multiple accept=".pdf,.jpg,.jpeg,.png,.webp" onchange="dpUploadReceipt(this,'${o.order_ref}')">
+                        </label>
+                    </div>
+                </div>`;
+            }).join('');
+
+            return `<div class="dp-day-block">
+                <div class="dp-day-header">
+                    <div class="dp-day-label">${lbl}</div>
+                    <div class="dp-day-date">${day}</div>
+                    <div class="dp-day-total">${tot.toLocaleString('ar-SA', { minimumFractionDigits: 2 })} ريال</div>
+                    <div class="dp-day-count">${orders.length} أمر</div>
+                </div>
+                ${ordH}
+            </div>`;
+        }).join('');
+
+        // تحميل الإيصالات
+        for (const day of days)
+            for (const o of byDay[day])
+                dpLoadReceipts(o.order_ref);
+
+    } catch (e) {
+        c.innerHTML = `<div class="dp-empty" style="padding:3rem">خطأ: ${e.message}</div>`;
+    }
+}
+
+function _dpSafeId(r) { return (r || '').replace(/[^a-zA-Z0-9]/g, '_'); }
+
+async function dpLoadReceipts(orderRef) {
+    const c = document.getElementById('dp-receipts-' + _dpSafeId(orderRef));
+    if (!c) return;
+    try {
+        const res = await fetch('api/daily_payments_api.php?action=get_order_attachments&order_ref=' + encodeURIComponent(orderRef));
+        const d = await res.json();
+        const atts = d.data || [];
+        if (!atts.length) {
+            c.innerHTML = '<div class="dp-receipts-empty">لا توجد إيصالات مرفقة</div>';
+            return;
+        }
+        c.innerHTML = atts.map(a => `
+            <div class="dp-receipt-item">
+                <div class="dp-receipt-icon">${a.file_type && a.file_type.includes('pdf') ? '📕' : '🖼️'}</div>
+                <div class="dp-receipt-info">
+                    <div class="dp-receipt-name2">${a.file_label || a.original_name}</div>
+                    <div class="dp-receipt-meta">${a.original_name} · ${a.file_size > 1048576 ? (a.file_size / 1048576).toFixed(1) + ' MB' : (a.file_size / 1024 | 0) + ' KB'} · ${a.uploader_name || ''}</div>
+                </div>
+                <div class="dp-receipt-actions">
+                    <a href="${a.file_path}" target="_blank" class="dp-receipt-open">فتح</a>
+                    ${parseInt(a.linked_count) > 0
+                ? `<span class="dp-receipt-linked" title="مرتبط بـ ${a.linked_count} طلب">✅</span>`
+                : `<button class="dp-receipt-link" onclick="dpLinkReceiptToPr(${a.id},'${orderRef}')" title="ربط بالطلب">🔗 ربط</button>`
+            }
+                    <button class="dp-receipt-del" onclick="dpDeleteReceipt(${a.id},'${_dpSafeId(orderRef)}','${orderRef.replace(/'/g, "\\'")}')">🗑</button>
+                </div>
+            </div>`).join('');
+    } catch (e) { c.innerHTML = '<div class="dp-receipts-empty">خطأ في التحميل</div>'; }
+}
+
+async function dpUploadReceipt(input, orderRef) {
+    const files = [...(input.files || [])];
+    if (!files.length) return;
+
+    const li = document.getElementById('dp-rlabel-' + _dpSafeId(orderRef));
+    const label = li?.value?.trim() || '';
+    const btn = input.closest('label');
+    if (btn) btn.textContent = `⏳ جارٍ رفع ${files.length} ملف...`;
+    input.disabled = true;
+
+    let uploaded = 0, failed = 0;
+    for (const file of files) {
+        const fd = new FormData();
+        fd.append('order_ref', orderRef);
+        // اسم الملف يُعطى من حقل التسمية، أو يُترك فارغاً ليُولَّد تلقائياً من الـ API
+        fd.append('label', label || file.name);
+        fd.append('file', file);
+        try {
+            const res = await fetch('api/daily_payments_api.php?action=upload_order_attachment', { method: 'POST', body: fd });
+            const d = await res.json();
+            if (d.success) uploaded++;
+            else { failed++; console.warn('فشل رفع ' + file.name + ':', d.message); }
+        } catch (e) { failed++; }
+    }
+
+    if (li) li.value = '';
+    input.value = '';
+    input.disabled = false;
+    if (btn) btn.innerHTML = '📎 رفع إيصال (أو أكثر)<input type="file" hidden multiple accept=".pdf,.jpg,.jpeg,.png,.webp" onchange="dpUploadReceipt(this,\'' + orderRef + '\'">';
+
+    await dpLoadReceipts(orderRef);
+    const msg = failed > 0
+        ? `رُفع ${uploaded} — فشل ${failed}`
+        : `✅ تم رفع ${uploaded} ملف`;
+    if (typeof showToast === 'function') showToast(msg, failed > 0 ? 'warning' : 'success');
+}
+
+async function dpDeleteReceipt(attId, safeRef, orderRef) {
+    if (!confirm('هل تريد حذف هذا الإيصال؟')) return;
+    try {
+        const res = await fetch('api/daily_payments_api.php?action=delete_order_attachment',
+            { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: attId }) });
+        const d = await res.json();
+        if (d.success) await dpLoadReceipts(orderRef);
+        else alert('خطأ: ' + d.message);
+    } catch (e) { alert('خطأ: ' + e.message); }
+}
+
+async function dpLinkReceiptToPr(attId, orderRef) {
+    try {
+        const res = await fetch('api/daily_payments_api.php?action=link_receipt_to_pr', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ attachment_id: attId, order_ref: orderRef }),
+        });
+        const d = await res.json();
+        if (d.success) {
+            const msg = d.message || (d.linked_count > 0 ? `✅ تم الربط` : '⚠️ لم يُعثر على طلبات');
+            if (typeof showToast === 'function') showToast(msg, d.linked_count > 0 ? 'success' : 'warning');
+            else alert(msg);
+        } else {
+            alert('خطأ: ' + d.message);
+        }
+    } catch (e) { alert('خطأ: ' + e.message); }
 }

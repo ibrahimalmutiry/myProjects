@@ -447,12 +447,11 @@ try {
             jsonResponse(['success' => true, 'data' => $events]);
             break;
         
-            /* ── نهاية الـ PATCH ── أضف هذا قبل default: في الـ switch ── */
+
         // ═══════════════════════════════════════════════════════
-        //  APIs الودائع البنكية
+        //  APIs الحسابات البنكية
         // ═══════════════════════════════════════════════════════
 
-        // ─── الحسابات البنكية ───────────────────────────────────
         case 'bank_accounts':
             require_once __DIR__ . '/../includes/bank_functions.php';
             $accounts = getAllBankAccounts();
@@ -462,29 +461,64 @@ try {
         // ─── جميع الودائع البنكية ──────────────────────────────
         case 'bank_deposits':
             require_once __DIR__ . '/../includes/bank_functions.php';
-            $limit    = isset($_GET['limit']) ? (int)$_GET['limit'] : null;
-            $deposits = getAllDeposits($limit);
+            $deposits = getAllDeposits();
             jsonResponse(['success' => true, 'data' => $deposits]);
             break;
 
-        // ─── الأرصدة اليومية ───────────────────────────────────
-        case 'daily_balances':
-            require_once __DIR__ . '/../includes/bank_functions.php';
-            $limit    = isset($_GET['limit']) ? (int)$_GET['limit'] : 30;
-            $accountId = isset($_GET['account_id']) ? (int)$_GET['account_id'] : null;
-            $balances = getDailyBalances($limit, $accountId);
-            jsonResponse(['success' => true, 'data' => $balances]);
-            break;
-
-        // ─── إضافة إيداع بنكي ──────────────────────────────────
+        // ─── إضافة وديعة بنكية ─────────────────────────────────
         case 'add_deposit':
-            if ($method !== 'POST') {
-                jsonResponse(['success' => false, 'message' => 'طريقة الطلب غير صحيحة'], 405);
-            }
+            if ($method !== 'POST') jsonResponse(['success' => false, 'message' => 'طريقة غير صحيحة'], 405);
             require_once __DIR__ . '/../includes/bank_functions.php';
             $input  = json_decode(file_get_contents('php://input'), true);
             $result = addDeposit($input);
             jsonResponse($result);
+            break;
+
+        // ─── تأكيد وديعة بنكية ─────────────────────────────────
+        case 'confirm_deposit':
+            if ($method !== 'POST') jsonResponse(['success' => false, 'message' => 'طريقة غير صحيحة'], 405);
+            require_once __DIR__ . '/../includes/bank_functions.php';
+            $input  = json_decode(file_get_contents('php://input'), true);
+            $id     = (int)($input['id'] ?? 0);
+            if ($id <= 0) jsonResponse(['success' => false, 'message' => 'معرف غير صالح'], 400);
+            jsonResponse(confirmDeposit($id));
+            break;
+
+        // ─── الودائع الشهرية المجدولة ──────────────────────────
+        case 'monthly_deposits':
+            require_once __DIR__ . '/../includes/bank_functions.php';
+            $month    = $_GET['month'] ?? null;
+            $deposits = getMonthlyDeposits($month);
+            jsonResponse(['success' => true, 'data' => $deposits]);
+            break;
+
+        // ─── إضافة وديعة شهرية ─────────────────────────────────
+        case 'add_monthly_deposit':
+            if ($method !== 'POST') jsonResponse(['success' => false, 'message' => 'طريقة غير صحيحة'], 405);
+            require_once __DIR__ . '/../includes/bank_functions.php';
+            $input  = json_decode(file_get_contents('php://input'), true);
+            $result = addMonthlyDeposit($input);
+            jsonResponse($result);
+            break;
+
+        // ─── تأكيد وديعة شهرية ─────────────────────────────────
+        case 'confirm_monthly_deposit':
+            if ($method !== 'POST') jsonResponse(['success' => false, 'message' => 'طريقة غير صحيحة'], 405);
+            require_once __DIR__ . '/../includes/bank_functions.php';
+            $input  = json_decode(file_get_contents('php://input'), true);
+            $id     = (int)($input['id'] ?? 0);
+            if ($id <= 0) jsonResponse(['success' => false, 'message' => 'معرف غير صالح'], 400);
+            jsonResponse(confirmMonthlyDeposit($id));
+            break;
+
+        // ─── حذف وديعة شهرية ───────────────────────────────────
+        case 'delete_monthly_deposit':
+            if ($method !== 'POST') jsonResponse(['success' => false, 'message' => 'طريقة غير صحيحة'], 405);
+            require_once __DIR__ . '/../includes/bank_functions.php';
+            $input  = json_decode(file_get_contents('php://input'), true);
+            $id     = (int)($input['id'] ?? 0);
+            if ($id <= 0) jsonResponse(['success' => false, 'message' => 'معرف غير صالح'], 400);
+            jsonResponse(deleteMonthlyDeposit($id));
             break;
 
         // ─── إضافة حساب بنكي ───────────────────────────────────
@@ -511,17 +545,21 @@ try {
             }
             $result = updateBankAccount($id, $input);
             jsonResponse($result);
+            break; // ← كان مفقوداً — يسبب سقوط مباشر إلى bank_stats
+
+        case 'bank_stats':
+            require_once __DIR__ . '/../includes/bank_functions.php';
+            $stats = getBankStats();
+            jsonResponse(['success' => true, 'data' => $stats]);
             break;
 
-        // ─── تأكيد إيداع بنكي ──────────────────────────────────
-        case 'confirm_deposit':
-            if ($method !== 'POST') {
-                jsonResponse(['success' => false, 'message' => 'طريقة الطلب غير صحيحة'], 405);
-            }
+        // ─── سجل الأرصدة اليومية ───────────────────────────────
+        case 'daily_balances':
             require_once __DIR__ . '/../includes/bank_functions.php';
-            $input  = json_decode(file_get_contents('php://input'), true);
-            $result = confirmDeposit((int)($input['id'] ?? 0));
-            jsonResponse($result);
+            $limit     = (int)($_GET['limit']      ?? 30);
+            $accountId = isset($_GET['account_id']) ? (int)$_GET['account_id'] : null;
+            $balances  = getDailyBalances($limit, $accountId);
+            jsonResponse(['success' => true, 'data' => $balances]);
             break;
 
         // ─── تسجيل رصيد يومي ───────────────────────────────────
@@ -535,162 +573,34 @@ try {
             jsonResponse($result);
             break;
 
-        // ─── إحصاءات البنوك ────────────────────────────────────
-        case 'bank_stats':
-            require_once __DIR__ . '/../includes/bank_functions.php';
-            $stats = getBankStats();
-            jsonResponse(['success' => true, 'data' => $stats]);
-            break;
-
-        // ═══════════════════════════════════════════════════════
-        //  APIs الودائع الشهرية المجدولة  ← جديد
-        // ═══════════════════════════════════════════════════════
-
-        // ─── جلب ودائع الشهر ───────────────────────────────────
-        case 'monthly_deposits':
-            require_once __DIR__ . '/../includes/bank_functions.php';
-            require_once __DIR__ . '/../includes/bank_monthly_functions.php';
-            $month    = (int)($_GET['month'] ?? date('m'));
-            $year     = (int)($_GET['year']  ?? date('Y'));
-            $deposits = getMonthlyDeposits($month, $year);
-            jsonResponse(['success' => true, 'data' => $deposits]);
-            break;
-
-        // ─── إحصاءات ودائع الشهر ───────────────────────────────
-        case 'monthly_deposit_stats':
-            require_once __DIR__ . '/../includes/bank_functions.php';
-            require_once __DIR__ . '/../includes/bank_monthly_functions.php';
-            $month = (int)($_GET['month'] ?? date('m'));
-            $year  = (int)($_GET['year']  ?? date('Y'));
-            $stats = getMonthlyDepositStats($month, $year);
-            jsonResponse(['success' => true, 'data' => $stats]);
-            break;
-
-        // ─── إضافة وديعة شهرية مجدولة ─────────────────────────
-        case 'add_monthly_deposit':
+        // ─── تعديل رصيد الحساب مباشرةً ────────────────────────
+        case 'edit_balance':
             if ($method !== 'POST') {
                 jsonResponse(['success' => false, 'message' => 'طريقة الطلب غير صحيحة'], 405);
             }
             require_once __DIR__ . '/../includes/bank_functions.php';
-            require_once __DIR__ . '/../includes/bank_monthly_functions.php';
-            $input  = json_decode(file_get_contents('php://input'), true);
-            $result = addMonthlyDeposit($input);
-            jsonResponse($result);
-            break;
-
-        // ─── تأكيد وديعة شهرية ─────────────────────────────────
-        case 'confirm_monthly_deposit':
-            if ($method !== 'POST') {
-                jsonResponse(['success' => false, 'message' => 'طريقة الطلب غير صحيحة'], 405);
+            $input      = json_decode(file_get_contents('php://input'), true);
+            $accountId  = (int)($input['account_id']  ?? 0);
+            $newBalance = (float)($input['new_balance'] ?? -1);
+            if ($accountId <= 0 || $newBalance < 0) {
+                jsonResponse(['success' => false, 'message' => 'account_id أو new_balance غير صالح'], 400);
             }
-            require_once __DIR__ . '/../includes/bank_functions.php';
-            require_once __DIR__ . '/../includes/bank_monthly_functions.php';
-            $input  = json_decode(file_get_contents('php://input'), true);
-            $id     = (int)($input['id'] ?? 0);
-            if ($id <= 0) {
-                jsonResponse(['success' => false, 'message' => 'معرف الوديعة غير صالح'], 400);
+            $ok = updateAccountBalance($accountId, $newBalance);
+            if ($ok) {
+                // تسجيل الحركة في سجل الأرصدة اليومية
+                recordDailyBalance([
+                    'account_id'      => $accountId,
+                    'balance_date'    => date('Y-m-d'),
+                    'opening_balance' => $newBalance,
+                    'closing_balance' => $newBalance,
+                    'notes'           => $input['notes'] ?? 'تعديل يدوي للرصيد',
+                    'update_current'  => '0',
+                ]);
+                jsonResponse(['success' => true, 'message' => 'تم تحديث الرصيد بنجاح']);
+            } else {
+                jsonResponse(['success' => false, 'message' => 'فشل تحديث الرصيد'], 500);
             }
-            $result = confirmMonthlyDeposit($id);
-            jsonResponse($result);
             break;
-
-        // ─── حذف وديعة شهرية ───────────────────────────────────
-        case 'delete_monthly_deposit':
-            if ($method !== 'POST') {
-                jsonResponse(['success' => false, 'message' => 'طريقة الطلب غير صحيحة'], 405);
-            }
-            require_once __DIR__ . '/../includes/bank_functions.php';
-            require_once __DIR__ . '/../includes/bank_monthly_functions.php';
-            $input  = json_decode(file_get_contents('php://input'), true);
-            $id     = (int)($input['id'] ?? 0);
-            if ($id <= 0) {
-                jsonResponse(['success' => false, 'message' => 'معرف الوديعة غير صالح'], 400);
-            }
-            $result = deleteMonthlyDeposit($id);
-            jsonResponse($result);
-            break;
-
-        // ═══════════════════════════════════════════════════════
-        //  APIs السجل اليومي
-        // ═══════════════════════════════════════════════════════
-
-        // ─── إحصاءات يوم ───────────────────────────────────────
-        case 'daily_register_stats':
-            require_once __DIR__ . '/../includes/daily_register_functions.php';
-            $date  = $_GET['date'] ?? date('Y-m-d');
-            $stats = getTodayFullStats($date);
-            jsonResponse(['success' => true, 'data' => $stats]);
-            break;
-
-        // ─── تاريخ السجلات ─────────────────────────────────────
-        case 'daily_register_history':
-            require_once __DIR__ . '/../includes/daily_register_functions.php';
-            $history = getDailyRegisterHistory(30);
-            jsonResponse(['success' => true, 'data' => $history]);
-            break;
-
-        // ─── حفظ أرصدة اليوم ───────────────────────────────────
-        case 'save_daily_register':
-            if ($method !== 'POST') {
-                jsonResponse(['success' => false, 'message' => 'طريقة الطلب غير صحيحة'], 405);
-            }
-            require_once __DIR__ . '/../includes/daily_register_functions.php';
-            $input  = json_decode(file_get_contents('php://input'), true);
-            $result = saveDailyRegister(
-                $input['date'],
-                $input['bank1_balance'] ?? 0,
-                $input['bank2_balance'] ?? 0,
-                $input['notes']         ?? ''
-            );
-            jsonResponse($result);
-            break;
-
-        // ─── تحميل المصروفات ────────────────────────────────────
-        case 'daily_expenses':
-            require_once __DIR__ . '/../includes/daily_register_functions.php';
-            $date     = $_GET['date'] ?? date('Y-m-d');
-            $expenses = getDailyExpenses($date);
-            jsonResponse(['success' => true, 'data' => $expenses]);
-            break;
-
-        // ─── إضافة مصروف ───────────────────────────────────────
-        case 'add_daily_expense':
-            if ($method !== 'POST') {
-                jsonResponse(['success' => false, 'message' => 'طريقة الطلب غير صحيحة'], 405);
-            }
-            require_once __DIR__ . '/../includes/daily_register_functions.php';
-            $input  = json_decode(file_get_contents('php://input'), true);
-            $result = addDailyExpense(
-                $input['date'],
-                $input['supplier_name'],
-                $input['amount'],
-                $input['description'] ?? ''
-            );
-            jsonResponse($result);
-            break;
-
-        // ─── حذف مصروف ─────────────────────────────────────────
-        case 'delete_daily_expense':
-            if ($method !== 'POST') {
-                jsonResponse(['success' => false, 'message' => 'طريقة الطلب غير صحيحة'], 405);
-            }
-            require_once __DIR__ . '/../includes/daily_register_functions.php';
-            $input  = json_decode(file_get_contents('php://input'), true);
-            $result = deleteDailyExpense((int)($input['id'] ?? 0));
-            jsonResponse($result);
-            break;
-
-        // ─── الودائع النشطة ────────────────────────────────────
-        case 'active_deposits':
-            require_once __DIR__ . '/../includes/daily_register_functions.php';
-            $deposits = getActiveDeposits();
-            jsonResponse(['success' => true, 'data' => $deposits]);
-            break;
-
-
-        // ═══════════════════════════════════════════════════════
-        //  APIs الودائع الاستثمارية
-        // ═══════════════════════════════════════════════════════
 
         case 'investments':
             require_once __DIR__ . '/../includes/bank_investment_functions.php';

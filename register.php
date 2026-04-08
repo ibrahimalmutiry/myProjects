@@ -23,7 +23,7 @@ if (empty($empNumber)) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>إنشاء كلمة المرور | نظام إدارة معاملات القطاع المالي</title>
-    <link rel="icon" href="images/logo.png">
+    <!-- <link rel="icon" href="images/logo.png"> -->
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@300;400;500;600;700&display=swap"
         rel="stylesheet">
     <style>
@@ -70,7 +70,7 @@ if (empty($empNumber)) {
     }
 
     body {
-        font-family:var(--font-primary);
+        font-family: var(--font-primary);
         background: var(--bg-primary);
         color: var(--text-primary);
         min-height: 100vh;
@@ -276,7 +276,7 @@ if (empty($empNumber)) {
 
     .emp-info .emp-number {
         color: var(--accent-blue);
-        font-family:var(--font-primary);
+        font-family: var(--font-primary);
         font-size: 0.9rem;
     }
 

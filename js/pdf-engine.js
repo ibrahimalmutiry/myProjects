@@ -110,7 +110,7 @@ const PdfEngine = (() => {
 
 })();
 
-// ── توافق مع الكود القديم ─────────────────────────────────────
+;// ── توافق مع الكود القديم ─────────────────────────────────────
 async function downloadAsPDF(elementId, filename, extraCSS) {
     return PdfEngine.print(elementId, filename, extraCSS);
 }

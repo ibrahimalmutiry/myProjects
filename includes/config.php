@@ -44,17 +44,27 @@ date_default_timezone_set('Asia/Riyadh');
 // ============================================================
 //  الأخطاء — إنتاج vs تطوير
 // ============================================================
-$_isProduction = !in_array($_SERVER['HTTP_HOST'] ?? '', ['localhost', '127.0.0.1'], true)
+// localhost:8080, localhost:3000 etc. are all local dev
+$_httpHost = strtolower(explode(':', $_SERVER['HTTP_HOST'] ?? '')[0]);
+$_isProduction = !in_array($_httpHost, ['localhost', '127.0.0.1', '::1'], true)
               && ($_ENV['APP_ENV'] ?? 'production') !== 'development';
+unset($_httpHost);
 
 if ($_isProduction) {
     error_reporting(0);
     ini_set('display_errors', '0');
     ini_set('log_errors',     '1');
     $__logDir = dirname(__DIR__) . '/logs';
-    if (!is_dir($__logDir)) @mkdir($__logDir, 0750, true);
-    ini_set('error_log', $__logDir . '/php_errors.log');
-    unset($__logDir);
+    // إنشاء مجلد logs بأمان — تجاهل الخطأ إن لم تتوفر الصلاحية
+    if (!is_dir($__logDir)) {
+        $__oldErr = set_error_handler(null); // أوقف error handler مؤقتاً
+        @mkdir($__logDir, 0750, true);
+        if ($__oldErr) set_error_handler($__oldErr); // أعده
+    }
+    if (is_dir($__logDir) && is_writable($__logDir)) {
+        ini_set('error_log', $__logDir . '/php_errors.log');
+    }
+    unset($__logDir, $__oldErr);
 } else {
     error_reporting(E_ALL);
     ini_set('display_errors', '1');

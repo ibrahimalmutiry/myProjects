@@ -388,6 +388,89 @@ try {
             }
             break;
 
+        // ── تعديل حجز (مسودة أو مرفوض فقط) ────────────────
+        case 'edit':
+            if ($method !== 'POST') { jsonResponse(['success'=>false,'error'=>'POST فقط']); break; }
+            $body = json_decode(file_get_contents('php://input'), true) ?? [];
+            $rid  = (int)($body['id'] ?? 0);
+            if (!$rid) { jsonResponse(['success'=>false,'error'=>'id مطلوب']); break; }
+
+            // التحقق أن الحجز قابل للتعديل
+            $chkR = $conn->query("SELECT status, requested_by FROM budget_reservations WHERE id=$rid LIMIT 1");
+            $chkRow = $chkR ? $chkR->fetch_assoc() : null;
+            if (!$chkRow) { jsonResponse(['success'=>false,'error'=>'الحجز غير موجود']); break; }
+            if (!in_array($chkRow['status'], ['مسودة','مرفوض'])) {
+                jsonResponse(['success'=>false,'error'=>'لا يمكن تعديل الحجز في حالته الحالية']); break;
+            }
+
+            $purpose      = $conn->real_escape_string($body['purpose'] ?? '');
+            $itemsDesc    = $conn->real_escape_string($body['items_description'] ?? '');
+            $itemsJsonRaw = is_array($body['items'] ?? null) ? $body['items'] : null;
+            $priority     = $conn->real_escape_string($body['priority'] ?? 'عادي');
+            $budgetCat    = $conn->real_escape_string($body['budget_category'] ?? '');
+            $costCenter   = $conn->real_escape_string($body['cost_center'] ?? '');
+            $suppId       = (!empty($body['supplier_id']) && $body['supplier_id'] !== 'manual')
+                             ? (int)$body['supplier_id'] : 'NULL';
+            $suppManual   = $conn->real_escape_string($body['supplier_name_manual'] ?? '');
+            $quotNo       = $conn->real_escape_string($body['quotation_number'] ?? '');
+            $quotDate     = !empty($body['quotation_date'])
+                             ? "'".$conn->real_escape_string($body['quotation_date'])."'" : 'NULL';
+            $currency     = strtoupper($conn->real_escape_string($body['currency'] ?? 'SAR'));
+            $reqDate      = $conn->real_escape_string($body['request_date'] ?? date('Y-m-d'));
+
+            $totalAmount = 0;
+            if ($itemsJsonRaw && count($itemsJsonRaw)) {
+                foreach ($itemsJsonRaw as $it) {
+                    $totalAmount += round((float)($it['qty']??1) * (float)($it['price']??$it['unit_price']??0), 2);
+                }
+            } else {
+                $totalAmount = (float)($body['total_amount'] ?? 0);
+            }
+            $grandTotal = $totalAmount;
+
+            $exchangeRate = 1.0;
+            if ($currency !== 'SAR') {
+                $manualRate = (float)($body['exchange_rate'] ?? 0);
+                if ($manualRate > 0) {
+                    $exchangeRate = $manualRate;
+                } else {
+                    $rEx = $conn->query("SELECT rate_to_sar FROM exchange_rates WHERE currency='$currency' LIMIT 1");
+                    if ($rEx && ($exRow = $rEx->fetch_assoc())) $exchangeRate = (float)$exRow['rate_to_sar'];
+                }
+            }
+            $grandTotalSar = round($grandTotal * $exchangeRate, 2);
+
+            $conn->query("UPDATE budget_reservations SET
+                purpose='$purpose', priority='$priority',
+                budget_category='$budgetCat', cost_center='$costCenter',
+                supplier_id=$suppId, supplier_name_manual='$suppManual',
+                quotation_number='$quotNo', quotation_date=$quotDate,
+                items_description='$itemsDesc', request_date='$reqDate',
+                currency='$currency', exchange_rate=$exchangeRate, exchange_rate_sar=$exchangeRate,
+                total_amount=$totalAmount, vat_amount=0,
+                grand_total=$grandTotal, grand_total_sar=$grandTotalSar, amount_sar=$grandTotalSar,
+                status='قيد المراجعة'
+                WHERE id=$rid");
+
+            // إعادة إدراج الأصناف
+            if ($itemsJsonRaw) {
+                $conn->query("DELETE FROM budget_reservation_items WHERE reservation_id=$rid");
+                foreach ($itemsJsonRaw as $i => $it) {
+                    $iDesc  = $conn->real_escape_string($it['description'] ?? '');
+                    $iQty   = (float)($it['qty']   ?? 1);
+                    $iPrice = (float)($it['price']  ?? $it['unit_price'] ?? 0);
+                    $iUnit  = $conn->real_escape_string($it['unit'] ?? '');
+                    $iTotal = round($iQty * $iPrice, 2);
+                    $conn->query("INSERT INTO budget_reservation_items
+                        (reservation_id, sort_order, description, qty, unit, unit_price, line_total)
+                        VALUES ($rid, $i, '$iDesc', $iQty, '$iUnit', $iPrice, $iTotal)");
+                }
+            }
+
+            logReservation($conn, $rid, $userId, 'edit', null, 'قيد المراجعة', 'تم تعديل الحجز وإعادة تقديمه');
+            jsonResponse(['success' => true, 'message' => 'تم حفظ التعديلات وإعادة تقديم الحجز']);
+            break;
+
         // ── مراجعة موظف الموازنة ────────────────────────────
         // ── تحديث أصناف حجز موجود ─────────────────────────────
         case 'update_items':

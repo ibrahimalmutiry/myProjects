@@ -321,6 +321,121 @@ try {
 
         default:
             ob_end_clean();
+
+        // ══ إعادة تسمية ملف ══════════════════════════════════
+        case 'rename':
+            if ($method !== 'POST') { ob_end_clean(); echo json_encode(['success'=>false,'message'=>'طريقة غير مسموحة'],JSON_UNESCAPED_UNICODE); break; }
+            $body = json_decode(file_get_contents('php://input'), true);
+            $id   = (int)($body['id'] ?? 0);
+            $name = trim($body['name'] ?? '');
+            ob_end_clean();
+            if (!$id || !$name) { echo json_encode(['success'=>false,'message'=>'بيانات غير مكتملة'],JSON_UNESCAPED_UNICODE); break; }
+            $conn = db();
+            $name = $conn->real_escape_string($name);
+            $ok   = $conn->query("UPDATE financial_archive SET display_name='$name' WHERE id=$id AND is_active=1");
+            echo json_encode(['success'=>(bool)$ok,'message'=>$ok?'تم تغيير الاسم':'فشل'],JSON_UNESCAPED_UNICODE);
+            break;
+
+        // ══ تغيير تصنيف ملف ══════════════════════════════════
+        case 'update_category':
+            if ($method !== 'POST') { ob_end_clean(); echo json_encode(['success'=>false,'message'=>'طريقة غير مسموحة'],JSON_UNESCAPED_UNICODE); break; }
+            $body     = json_decode(file_get_contents('php://input'), true);
+            $id       = (int)($body['id'] ?? 0);
+            $category = trim($body['category'] ?? '');
+            ob_end_clean();
+            if (!$id || !$category) { echo json_encode(['success'=>false,'message'=>'بيانات غير مكتملة'],JSON_UNESCAPED_UNICODE); break; }
+            $conn     = db();
+            $category = $conn->real_escape_string($category);
+            $ok       = $conn->query("UPDATE financial_archive SET category='$category' WHERE id=$id AND is_active=1");
+            echo json_encode(['success'=>(bool)$ok,'message'=>$ok?'تم تحديث التصنيف':'فشل'],JSON_UNESCAPED_UNICODE);
+            break;
+
+        // ══ استعادة ملف محذوف ════════════════════════════════
+        case 'restore':
+            if ($method !== 'POST') { ob_end_clean(); echo json_encode(['success'=>false,'message'=>'طريقة غير مسموحة'],JSON_UNESCAPED_UNICODE); break; }
+            $body = json_decode(file_get_contents('php://input'), true);
+            $id   = (int)($body['id'] ?? 0);
+            ob_end_clean();
+            if (!$id) { echo json_encode(['success'=>false,'message'=>'معرّف غير صالح'],JSON_UNESCAPED_UNICODE); break; }
+            $conn = db();
+            $ok   = $conn->query("UPDATE financial_archive SET is_active=1 WHERE id=$id");
+            echo json_encode(['success'=>(bool)$ok,'message'=>$ok?'تمت الاستعادة':'فشل'],JSON_UNESCAPED_UNICODE);
+            break;
+
+        // ══ تحديث ملاحظات ════════════════════════════════════
+        case 'update_notes':
+            if ($method !== 'POST') { ob_end_clean(); echo json_encode(['success'=>false,'message'=>'طريقة غير مسموحة'],JSON_UNESCAPED_UNICODE); break; }
+            $body  = json_decode(file_get_contents('php://input'), true);
+            $id    = (int)($body['id'] ?? 0);
+            $notes = $conn_global = trim($body['notes'] ?? '');
+            ob_end_clean();
+            if (!$id) { echo json_encode(['success'=>false,'message'=>'معرّف غير صالح'],JSON_UNESCAPED_UNICODE); break; }
+            $conn  = db();
+            $notes = $conn->real_escape_string($notes);
+            $ok    = $conn->query("UPDATE financial_archive SET notes='$notes' WHERE id=$id AND is_active=1");
+            echo json_encode(['success'=>(bool)$ok,'message'=>$ok?'تم الحفظ':'فشل'],JSON_UNESCAPED_UNICODE);
+            break;
+
+        // ══ تحديث شامل للمستند (اسم + صلاحية + مرجع + ملاحظات + ملف اختياري) ══
+        case 'update':
+            if ($method !== 'POST') { ob_end_clean(); echo json_encode(['success'=>false,'message'=>'طريقة غير مسموحة'],JSON_UNESCAPED_UNICODE); break; }
+            $id          = (int)($_POST['id'] ?? 0);
+            $display_name = trim($_POST['display_name'] ?? '');
+            $expiry_date  = trim($_POST['expiry_date']  ?? '');
+            $source_ref   = trim($_POST['source_ref']   ?? '');
+            $notes        = trim($_POST['notes']        ?? '');
+            ob_end_clean();
+            if (!$id || !$display_name) {
+                echo json_encode(['success'=>false,'message'=>'بيانات غير مكتملة: الاسم مطلوب'],JSON_UNESCAPED_UNICODE);
+                break;
+            }
+            $conn         = db();
+            $display_name = $conn->real_escape_string($display_name);
+            $source_ref   = $conn->real_escape_string($source_ref);
+            $notes        = $conn->real_escape_string($notes);
+            $expiry_sql   = $expiry_date ? "'$expiry_date'" : 'NULL';
+            $has_expiry   = $expiry_date ? 1 : 0;
+
+            $ok = $conn->query("UPDATE financial_archive
+                SET display_name='$display_name',
+                    expiry_date=$expiry_sql,
+                    has_expiry=$has_expiry,
+                    source_ref='$source_ref',
+                    description='$notes'
+                WHERE id=$id AND is_active=1");
+
+            if (!$ok) {
+                echo json_encode(['success'=>false,'message'=>'فشل تحديث البيانات: '.$conn->error],JSON_UNESCAPED_UNICODE);
+                break;
+            }
+
+            // استبدال الملف إذا رُفع ملف جديد
+            if (!empty($_FILES['file']['tmp_name'])) {
+                $row = $conn->query("SELECT file_path FROM financial_archive WHERE id=$id")->fetch_assoc();
+                $oldPath = $row['file_path'] ?? '';
+                $file     = $_FILES['file'];
+                $ext      = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+                $newName  = 'arch_' . $id . '_' . time() . '.' . $ext;
+                $uploadDir = __DIR__ . '/uploads/archive/';
+                if (!is_dir($uploadDir)) mkdir($uploadDir, 0755, true);
+                $newPath = $uploadDir . $newName;
+                if (move_uploaded_file($file['tmp_name'], $newPath)) {
+                    $relPath = 'uploads/archive/' . $newName;
+                    $size    = $file['size'];
+                    $conn->query("UPDATE financial_archive
+                        SET file_path='$relPath', file_size=$size,
+                            file_type='" . $conn->real_escape_string($file['type']) . "',
+                            file_extension='$ext'
+                        WHERE id=$id");
+                    if ($oldPath && file_exists(__DIR__ . '/' . $oldPath)) {
+                        @unlink(__DIR__ . '/' . $oldPath);
+                    }
+                }
+            }
+
+            echo json_encode(['success'=>true,'message'=>'تم الحفظ بنجاح'],JSON_UNESCAPED_UNICODE);
+            break;
+
             echo json_encode(['success' => false, 'message' => 'إجراء غير معروف: ' . $action], JSON_UNESCAPED_UNICODE);
     }
 

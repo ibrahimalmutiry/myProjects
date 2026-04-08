@@ -1,10 +1,9 @@
 <?php
 /**
- * صفحة تسجيل الدخول
- * Login Page
+ * صفحة تسجيل الدخول — مسار MASAR
+ * Login Page — MASAR Brand
  */
 session_start();
-
 if (isset($_SESSION['user_id'])) {
     header('Location: index.php');
     exit;
@@ -16,514 +15,565 @@ if (isset($_SESSION['user_id'])) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>تسجيل الدخول | نظام إدارة معاملات القطاع المالي</title>
+    <title>تسجيل الدخول | مسار MASAR</title>
     <link rel="icon"
-        href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@300;400;500;600;700&display=swap"
+        href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%233F5950'/><text y='.85em' font-size='60' x='50%' text-anchor='middle' fill='white'>م</text></svg>">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&display=swap"
         rel="stylesheet">
+
+    <!-- ① تطبيق الثيم قبل رسم أي شيء — يمنع الوميض -->
+    <script>
+    (function() {
+        var MAP = {
+            theme_primary: '--primary',
+            theme_primary_dark: '--primary-dark',
+            theme_accent: '--accent',
+            theme_brand_dark: '--brand-dark',
+            theme_bg_primary: '--bg',
+            theme_bg_card: '--bg-card',
+            theme_bg_surface: '--bg-surface',
+            theme_bg_secondary: '--bg-secondary',
+            theme_text_primary: '--text-primary',
+            theme_text_secondary: '--text-secondary',
+            theme_text_muted: '--text-muted',
+            theme_border: '--border',
+        };
+        var root = document.documentElement;
+        try {
+            for (var k in MAP) {
+                var v = localStorage.getItem(k);
+                if (v) root.style.setProperty(MAP[k], v);
+            }
+            var p = localStorage.getItem('theme_primary');
+            if (p) {
+                var r = parseInt(p.slice(1, 3), 16),
+                    g = parseInt(p.slice(3, 5), 16),
+                    b = parseInt(p.slice(5, 7), 16);
+                root.style.setProperty('--primary-subtle', 'rgba(' + r + ',' + g + ',' + b + ',.12)');
+                root.style.setProperty('--primary-dark-subtle', 'rgba(' + r + ',' + g + ',' + b + ',.08)');
+            }
+        } catch (e) {}
+    })();
+    </script>
+
     <style>
-    * {
+    *,
+    *::before,
+    *::after {
         margin: 0;
         padding: 0;
         box-sizing: border-box;
     }
 
-    /* 🌙 الوضع الليلي */
     :root {
-        --bg-primary: #222831;
-        --bg-secondary: #393E46;
-        --bg-surface: #1B2026;
-        --bg-card: #2d343c;
-        --text-primary: #DFD0B8;
-        --text-secondary: #948979;
-        --text-muted: #7A6F63;
-        --border-color: #4A4F57;
-        --btn-primary-bg: #948979;
-        --btn-primary-text: #222831;
-        --accent-green: #69db7c;
-        --accent-red: #ff6b6b;
-        --accent-blue: #4dabf7;
+        /* الافتراضي — يُستبدل بواسطة الثيم المحفوظ */
+        --primary: #3F5950;
+        --primary-dark: #2e4139;
+        --primary-subtle: rgba(63, 89, 80, .12);
+        --accent: #F26F63;
+        --accent-dark: #d4574b;
+        --bg: #ECE8E3;
+        --bg-card: #F2EEEB;
+        --bg-surface: #E5E0DA;
+        --text-primary: #402B29;
+        --text-secondary: #5a4240;
+        --text-muted: #9a8f8c;
+        --border: #cdc8c2;
+        --font: 'Cairo', sans-serif;
     }
 
-    /* ☀️ الوضع النهاري (الافتراضي) */
-    [data-theme="light"] {
-        --bg-primary: #F5F1EB;
-        --bg-secondary: #DFD0B8;
-        --bg-surface: #E6DED3;
-        --bg-card: #FFFFFF;
-        --text-primary: #222831;
-        --text-secondary: #393E46;
-        --text-muted: #948979;
-        --border-color: #CFC6B8;
-        --btn-primary-bg: #222831;
-        --btn-primary-text: #DFD0B8;
-        --accent-green: #40c057;
-        --accent-red: #fa5252;
-        --accent-blue: #228be6;
+    [data-theme="dark"] {
+        --primary: #3F5950;
+        --primary-dark: #2e4139;
+        --primary-subtle: rgba(63, 89, 80, .15);
+        --accent: #F26F63;
+        --bg: #1e2c28;
+        --bg-card: #2a3830;
+        --bg-surface: #253029;
+        --text-primary: #ECE8E3;
+        --text-secondary: #b5b0aa;
+        --text-muted: #7a7570;
+        --border: #3a4f47;
     }
 
     body {
-        font-family:var(--font-primary);
-        background: var(--bg-primary);
+        font-family: var(--font);
+        background: var(--bg);
         color: var(--text-primary);
         min-height: 100vh;
         display: flex;
         align-items: center;
         justify-content: center;
-        transition: background 0.3s ease, color 0.3s ease;
+        transition: background .3s, color .3s;
+        position: relative;
+        overflow: hidden;
     }
 
-    /* البطاقة الرئيسية */
-    .login-container {
+    /* خلفية هندسية */
+    body::before {
+        content: '';
+        position: fixed;
+        inset: 0;
+        background:
+            radial-gradient(circle at 15% 15%, rgba(var(--primary-rgb, 63, 89, 80), .1) 0%, transparent 50%),
+            radial-gradient(circle at 85% 85%, rgba(var(--accent-rgb, 242, 111, 99), .07) 0%, transparent 50%);
+        pointer-events: none;
+    }
+
+    /* زر الثيم */
+    .theme-btn {
+        position: fixed;
+        top: 1.25rem;
+        left: 1.25rem;
+        width: 38px;
+        height: 38px;
+        border-radius: 10px;
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        color: var(--text-muted);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all .2s;
+        font-size: 1.1rem;
+        z-index: 10;
+    }
+
+    .theme-btn:hover {
+        border-color: var(--primary);
+        color: var(--primary);
+        background: var(--primary-subtle);
+    }
+
+    /* البطاقة */
+    .wrap {
         width: 100%;
         max-width: 440px;
-        padding: 20px;
+        padding: 1.25rem;
+        position: relative;
+        z-index: 1;
     }
 
-    .login-card {
-        /* background: var(--bg-card); */
-        /* border: 1px solid var(--border-color); */
-        border-radius: 24px;
-        padding: 2.5rem;
-        /* box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.1); */
-        transition: all 0.3s ease;
-    }
-
-
-
-    /* الشعار */
-    .logo {
-        text-align: center;
-        margin-bottom: 2rem;
-    }
-
-    .logo-icon {
-        width: 60px;
-        height: 60px;
-        background: var(--btn-primary-bg);
-        border-radius: 20px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 2.5rem;
-        margin: 0 auto;
-        color: var(--btn-primary-text);
-        box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.2);
-    }
-
-    .logo h1 {
-        font-size: 1.4rem;
-        font-weight: 700;
-        color: var(--text-primary);
-        margin-bottom: 0.5rem;
-    }
-
-    .logo p {
-        color: var(--text-muted);
-        font-size: 0.9rem;
-    }
-
-    /* زر تبديل الوضع */
-    .theme-toggle {
-        position: fixed;
-        top: 20px;
-        left: 20px;
-        width: 44px;
-        height: 44px;
-        border-radius: 12px;
+    .card {
         background: var(--bg-card);
-        border: 1px solid var(--border-color);
-        color: var(--text-secondary);
-        cursor: pointer;
+        border: 1px solid var(--border);
+        border-radius: 24px;
+        padding: 2.5rem 2.25rem;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, .1);
+    }
+
+    /* ── الشعارات ── */
+    .logos-section {
+        text-align: center;
+        margin-bottom: 1.75rem;
+    }
+
+    .logos-row {
         display: flex;
         align-items: center;
         justify-content: center;
-        transition: all 0.3s ease;
-        z-index: 100;
+        gap: 1rem;
+        margin-bottom: 1.1rem;
     }
 
-    .theme-toggle:hover {
-        background: var(--bg-surface);
-        color: var(--text-primary);
+    /* شعار المنظمة — خلفية بيضاء دائماً */
+    .logo-box {
+        width: 56px;
+        height: 56px;
+        border-radius: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        flex-shrink: 0;
     }
 
-    .theme-toggle .sun-icon {
+    .logo-box.org-logo {
+        background: #ffffff !important;
+        border: 1.5px solid var(--border);
+        box-shadow: 0 4px 14px rgba(0, 0, 0, .1);
+    }
+
+    /* شعار مسار — خلفية primary */
+    .logo-box.masar-logo {
+        background: var(--primary);
+        box-shadow: 0 6px 20px rgba(0, 0, 0, .2);
+    }
+
+    .logo-box img {
+        width: 46px;
+        height: 46px;
+        object-fit: contain;
         display: block;
     }
 
-    .theme-toggle .moon-icon {
-        display: none;
+    .logo-masar-inner {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        height: 100%;
+        font-size: .58rem;
+        font-weight: 900;
+        color: #fff;
+        line-height: 1.3;
+        letter-spacing: .03em;
+        text-align: center;
     }
 
-    :root .theme-toggle .sun-icon {
-        display: none;
+    .logos-sep {
+        width: 1px;
+        height: 36px;
+        background: var(--border);
     }
 
-    :root .theme-toggle .moon-icon {
-        display: block;
+    .sys-name h1 {
+        font-size: 2.55rem;
+        font-weight: 900;
+        color: var(--primary);
+        letter-spacing: -.02em;
+        line-height: 1.1;
+        margin-bottom: .2rem;
     }
 
-    [data-theme="light"] .theme-toggle .sun-icon {
-        display: block;
+    .sys-name p {
+        font-size: .8rem;
+        color: var(--text-muted);
     }
 
-    [data-theme="light"] .theme-toggle .moon-icon {
-        display: none;
-    }
-
-    /* بطاقة الموظف */
-    .employee-card {
+    /* ── بطاقة الموظف ── */
+    .emp-card {
         display: none;
         align-items: center;
-        gap: 1rem;
-        background: rgba(64, 192, 87, 0.1);
-        border: 1px solid rgba(64, 192, 87, 0.3);
+        gap: .875rem;
+        padding: .875rem 1rem;
+        background: var(--bg-surface);
+        border: 1px solid var(--border);
         border-radius: 12px;
-        padding: 0.5rem;
-        margin-bottom: 1.5rem;
-        animation: slideIn 0.3s ease;
+        margin-bottom: 1rem;
+        transition: all .3s;
     }
 
-    :root .employee-card {
-        background: rgba(105, 219, 124, 0.1);
-        border-color: rgba(105, 219, 124, 0.3);
-    }
-
-    .employee-card.show {
+    .emp-card.show {
         display: flex;
+        animation: slideIn .25s ease;
     }
 
     @keyframes slideIn {
         from {
             opacity: 0;
-            transform: translateY(-10px);
+            transform: translateY(-8px)
         }
 
         to {
             opacity: 1;
-            transform: translateY(0);
+            transform: none
         }
     }
 
     .emp-avatar {
-        width: 50px;
-        height: 50px;
-        background: var(--btn-primary-bg);
-        border-radius: 12px;
+        width: 40px;
+        height: 40px;
+        border-radius: 10px;
+        background: var(--primary);
+        color: #fff;
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 1.25rem;
-        font-weight: 700;
-        color: var(--btn-primary-text);
+        font-size: 1.1rem;
+        font-weight: 800;
         flex-shrink: 0;
     }
 
-    .emp-info h4 {
+    .emp-name {
+        font-size: .88rem;
+        font-weight: 800;
         color: var(--text-primary);
-        font-size: 1rem;
-        margin-bottom: 0.25rem;
     }
 
-    .emp-info p {
-        color: var(--text-muted);
-        font-size: 0.8rem;
-        margin: 0;
+    .emp-role {
+        font-size: .72rem;
+        color: var(--primary);
+        font-weight: 600;
+        margin-top: 1px;
     }
 
-    /* رسائل التنبيه */
-    .message {
-        display: none;
-        align-items: center;
-        gap: 0.75rem;
-        padding: 1rem;
-        border-radius: 12px;
-        margin-bottom: 1.5rem;
-        font-size: 0.9rem;
-        animation: slideIn 0.3s ease;
-    }
-
-    .message.show {
-        display: flex;
-    }
-
-    .message.error {
-        background: rgba(250, 82, 82, 0.1);
-        border: 1px solid rgba(250, 82, 82, 0.3);
-        color: var(--accent-red);
-    }
-
-    .message.success {
-        background: rgba(64, 192, 87, 0.1);
-        border: 1px solid rgba(64, 192, 87, 0.3);
-        color: var(--accent-green);
-    }
-
-    .message.info {
-        background: rgba(34, 139, 230, 0.1);
-        border: 1px solid rgba(34, 139, 230, 0.3);
-        color: var(--accent-blue);
-    }
-
-    /* النموذج */
+    /* ── النموذج ── */
     .form-group {
-        margin-bottom: 1.5rem;
+        margin-bottom: 1rem;
     }
 
     .form-label {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
+        display: block;
+        font-size: .82rem;
+        font-weight: 700;
         color: var(--text-secondary);
-        font-size: 0.9rem;
-        margin-bottom: 0.75rem;
-        font-weight: 500;
+        margin-bottom: .375rem;
     }
 
-    .input-wrapper {
+    .input-wrap {
         position: relative;
     }
 
     .form-input {
         width: 100%;
-        padding: 1rem 1.25rem;
-        background: var(--bg-surface);
-        border: 2px solid var(--border-color);
-        border-radius: 12px;
+        padding: .68rem .875rem .68rem 2.5rem;
+        border: 1.5px solid var(--border);
+        border-radius: 10px;
+        background: var(--bg-card);
         color: var(--text-primary);
-        font-size: 1rem;
-        font-family: inherit;
-        transition: all 0.3s ease;
+        font-family: var(--font);
+        font-size: .875rem;
+        transition: border-color .2s, box-shadow .2s;
+        outline: none;
+    }
+
+    .form-input:focus {
+        border-color: var(--primary);
+        box-shadow: 0 0 0 3px var(--primary-subtle);
     }
 
     .form-input::placeholder {
         color: var(--text-muted);
     }
 
-    .form-input:focus {
-        outline: none;
-        border-color: var(--btn-primary-bg);
-        background: var(--bg-card);
-    }
-
     .form-input.locked {
-        background: var(--bg-surface);
-        opacity: 0.7;
+        opacity: .75;
+        cursor: default;
     }
 
-    .password-toggle {
+    .input-icon {
         position: absolute;
-        left: 12px;
+        right: .875rem;
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--text-muted);
+        pointer-events: none;
+        transition: color .2s;
+    }
+
+    .input-wrap:focus-within .input-icon {
+        color: var(--primary);
+    }
+
+    .pw-toggle {
+        position: absolute;
+        left: .875rem;
         top: 50%;
         transform: translateY(-50%);
         background: none;
         border: none;
         color: var(--text-muted);
         cursor: pointer;
-        padding: 5px;
-        transition: color 0.3s ease;
+        padding: 0;
+        display: flex;
+        align-items: center;
+        transition: color .2s;
     }
 
-    .password-toggle:hover {
-        color: var(--text-primary);
+    .pw-toggle:hover {
+        color: var(--primary);
     }
 
-    /* الأزرار */
-    .btn {
-        width: 100%;
-        padding: 1rem 2rem;
-        border-radius: 12px;
-        border: none;
-        font-family: inherit;
-        font-size: 1rem;
+    /* ── رسائل ── */
+    .message {
+        display: none;
+        align-items: center;
+        gap: .5rem;
+        padding: .65rem .875rem;
+        border-radius: 9px;
+        font-size: .82rem;
         font-weight: 600;
+        margin-bottom: .875rem;
+    }
+
+    .message.show {
+        display: flex;
+        animation: slideIn .2s ease;
+    }
+
+    .message.error {
+        background: rgba(242, 111, 99, .1);
+        color: var(--accent-dark);
+        border: 1px solid rgba(242, 111, 99, .25);
+    }
+
+    .message.success {
+        background: var(--primary-subtle);
+        color: var(--primary);
+        border: 1px solid rgba(0, 0, 0, .08);
+    }
+
+    .message.info {
+        background: rgba(34, 139, 230, .1);
+        color: #1864ab;
+        border: 1px solid rgba(34, 139, 230, .2);
+    }
+
+    /* ── زر الدخول ── */
+    .btn-login {
+        width: 100%;
+        padding: .78rem;
+        background: var(--primary);
+        color: #fff;
+        border: none;
+        border-radius: 12px;
+        font-family: var(--font);
+        font-size: .95rem;
+        font-weight: 700;
         cursor: pointer;
-        transition: all 0.3s ease;
+        transition: all .2s;
         display: flex;
         align-items: center;
         justify-content: center;
-        gap: 0.75rem;
+        gap: .5rem;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, .2);
+        margin-top: 1.1rem;
     }
 
-    .btn-primary {
-        background: var(--btn-primary-bg);
-        color: var(--btn-primary-text);
+    .btn-login:hover:not(:disabled) {
+        background: var(--primary-dark);
+        transform: translateY(-1px);
+        box-shadow: 0 6px 20px rgba(0, 0, 0, .25);
     }
 
-    .btn-primary:hover {
-        opacity: 0.9;
-        transform: translateY(-2px);
-        box-shadow: 0 10px 20px -10px rgba(0, 0, 0, 0.3);
-    }
-
-    .btn-primary:disabled {
-        opacity: 0.6;
+    .btn-login:disabled {
+        opacity: .7;
         cursor: not-allowed;
         transform: none;
     }
 
     .btn-loader {
         display: none;
-        width: 20px;
-        height: 20px;
-        border: 2px solid transparent;
-        border-top-color: currentColor;
-        border-radius: 50%;
-        animation: spin 0.8s linear infinite;
     }
 
     @keyframes spin {
         to {
-            transform: rotate(360deg);
+            transform: rotate(360deg)
         }
     }
 
-    /* التذييل */
+    .spin {
+        animation: spin .9s linear infinite;
+    }
+
+    .register-link {
+        text-align: center;
+        margin-top: 1rem;
+        font-size: .78rem;
+        color: var(--text-muted);
+    }
+
+    .register-link a {
+        color: var(--primary);
+        font-weight: 700;
+        text-decoration: none;
+    }
+
+    .register-link a:hover {
+        text-decoration: underline;
+    }
+
     .login-footer {
         text-align: center;
         margin-top: 1.5rem;
+        font-size: .72rem;
         color: var(--text-muted);
-        font-size: 0.85rem;
     }
 
-    .features {
-        display: flex;
-        justify-content: center;
-        gap: 2rem;
-        margin-top: 1.5rem;
-        color: var(--text-muted);
-        font-size: 0.8rem;
-    }
-
-    .feature {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-    }
-
-    .feature svg {
-        color: var(--accent-green);
-    }
-
-    /* Responsive */
-    @media (max-width: 480px) {
-        .login-card {
-            padding: 2rem 1.5rem;
-        }
-
-        .features {
-            flex-direction: column;
-            gap: 0.75rem;
-            align-items: center;
-        }
-
-        .theme-toggle {
-            top: 10px;
-            left: 10px;
-        }
+    .login-footer strong {
+        color: var(--primary);
     }
     </style>
 </head>
 
 <body>
-    <!-- زر تبديل الوضع -->
-    <button class="theme-toggle" onclick="toggleTheme()" title="تبديل الوضع">
-        <svg class="sun-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            stroke-width="2">
-            <circle cx="12" cy="12" r="5"></circle>
-            <line x1="12" y1="1" x2="12" y2="3"></line>
-            <line x1="12" y1="21" x2="12" y2="23"></line>
-            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
-            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
-            <line x1="1" y1="12" x2="3" y2="12"></line>
-            <line x1="21" y1="12" x2="23" y2="12"></line>
-            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
-            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
-        </svg>
-        <svg class="moon-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            stroke-width="2">
-            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
-        </svg>
-    </button>
 
-    <div class="login-container">
-        <div class="login-card">
-            <div class="logo">
-                <div class="sidebar-logo-icon">
-                    <img src="images/logo.png" alt="الشعار" style="border-radius:50%;object-fit:cover;">
+    <button class="theme-btn" onclick="toggleTheme()" id="themeBtn" title="تغيير المظهر">🌙</button>
+
+    <div class="wrap">
+        <div class="card">
+
+            <!-- الشعارات -->
+            <div class="logos-section">
+                <!-- <div class="logos-row">
+
+                    <div class="logo-box org-logo">
+                        <img src="images/logo.png" alt="الشعار"
+                            onerror="this.style.display='none';this.parentElement.innerHTML+='<svg width=\'32\' height=\'32\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'%23334155\' stroke-width=\'1.5\'><path d=\'M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z\'></path></svg>'">
+                    </div>
+
+                    <div class="logos-sep"></div>
+                    <div class="logo-box masar-logo" id="masarLogoBox">
+                        <img src="images/logo-masar.png" alt="مسار MASAR"
+                            onerror="this.style.display='none'; document.getElementById('masarFallback').style.display='flex'">
+                        <div class="logo-masar-inner" id="masarFallback" style="display:none">
+                            مسار<br><span style="font-size:.5rem;letter-spacing:.1em;opacity:.8">MASAR</span>
+                        </div>
+                    </div>
+                </div> -->
+
+                <div class="sys-name">
+                    <h1>مسار MASAR</h1>
+                    <p>نظام إدارة المعاملات المالية</p>
                 </div>
-                <h1>نظام إدارة معاملات القطاع المالي</h1>
-                <p>سجّل دخولك للمتابعة</p>
             </div>
 
-            <div class="employee-card" id="employeeCard">
+            <!-- بطاقة الموظف -->
+            <div class="emp-card" id="employeeCard">
                 <div class="emp-avatar" id="empAvatar">م</div>
                 <div class="emp-info">
-                    <h4 id="empName">الاسم</h4>
-                    <p id="empRole">القسم</p>
-
+                    <div class="emp-name" id="empName"></div>
+                    <div class="emp-role" id="empRole"></div>
                 </div>
             </div>
 
+            <!-- رسائل -->
             <div class="message" id="message"></div>
 
-            <form id="loginForm">
+            <!-- النموذج -->
+            <form id="loginForm" onsubmit="return false">
                 <div class="form-group">
-                    <label class="form-label">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                            <circle cx="12" cy="7" r="4"></circle>
-                        </svg>
-                        الرقم الوظيفي
-                    </label>
-                    <input type="text" class="form-input" id="employeeNumber" placeholder="أدخل رقمك الوظيفي"
-                        autocomplete="off" required>
+                    <label class="form-label" for="employeeNumber">الرقم الوظيفي</label>
+                    <div class="input-wrap">
+                        <input type="text" id="employeeNumber" class="form-input" placeholder="أدخل رقمك الوظيفي"
+                            autocomplete="username" inputmode="text" required>
+
+                    </div>
                 </div>
 
-                <div class="form-group" id="passwordGroup" style="display: none;">
-                    <label class="form-label">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-                            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-                        </svg>
-                        كلمة المرور
-                    </label>
-                    <div class="input-wrapper">
-                        <input type="password" class="form-input" id="password" placeholder="أدخل كلمة المرور">
-                        <button type="button" class="password-toggle" onclick="togglePassword()">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                stroke-width="2" id="eyeIcon">
-                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                                <circle cx="12" cy="12" r="3"></circle>
+                <div class="form-group" id="passwordGroup" style="display:none">
+                    <label class="form-label" for="password">كلمة المرور</label>
+                    <div class="input-wrap">
+                        <input type="password" id="password" class="form-input" placeholder="أدخل كلمة المرور"
+                            autocomplete="current-password">
+
+                        <button type="button" class="pw-toggle" onclick="togglePw()" title="إظهار/إخفاء كلمة المرور">
+                            <svg id="eyeIcon" width="35" height="35" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" stroke-width="2">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                                <circle cx="12" cy="12" r="3" />
                             </svg>
                         </button>
                     </div>
                 </div>
 
-                <button type="submit" class="btn btn-primary" id="submitBtn">
-                    <span id="btnText">التحقق من الرقم الوظيفي</span>
-                    <div class="btn-loader" id="btnLoader"></div>
+                <button class="btn-login" id="submitBtn" onclick="handleSubmit()">
+                    <svg class="btn-loader spin" id="btnLoader" width="18" height="18" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2.5">
+                        <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                    </svg>
+                    <span id="btnText">التالي</span>
                 </button>
             </form>
 
-            <div class="login-footer">أول مرة؟ سيتم توجيهك لإنشاء كلمة المرور</div>
-        </div>
-
-        <div class="features">
-            <div class="feature">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
-                </svg>
-                آمن ومشفر
+            <div class="register-link">
+                أول مرة؟ <a href="register.php">سجّل حسابك</a>
             </div>
-            <div class="feature">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <polyline points="12 6 12 12 16 14"></polyline>
-                </svg>
-                متاح 24/7
+            <div class="login-footer">
+                <strong>مسار MASAR</strong> · نظام إدارة المعاملات
             </div>
         </div>
     </div>
@@ -531,51 +581,138 @@ if (isset($_SESSION['user_id'])) {
     <script>
     let step = 'check';
 
-    // تحميل الوضع المحفوظ
-    function loadSavedTheme() {
-        const savedTheme = localStorage.getItem('theme');
-        if (savedTheme === 'dark') {
-            document.documentElement.removeAttribute('data-theme');
-        } else {
-            // الوضع النهاري هو الافتراضي
-            document.documentElement.setAttribute('data-theme', 'light');
-        }
+    /* ════════════════════════════════════════════════
+       تطبيق الثيم الكامل من localStorage
+    ════════════════════════════════════════════════ */
+    function applyFullTheme() {
+        const root = document.documentElement;
+        const MAP = {
+            theme_primary: '--primary',
+            theme_primary_dark: '--primary-dark',
+            theme_accent: '--accent',
+            theme_brand_dark: '--brand-dark',
+            theme_bg_primary: '--bg',
+            theme_bg_card: '--bg-card',
+            theme_bg_surface: '--bg-surface',
+            theme_bg_secondary: '--bg-secondary',
+            theme_text_primary: '--text-primary',
+            theme_text_secondary: '--text-secondary',
+            theme_text_muted: '--text-muted',
+            theme_border: '--border',
+        };
+        try {
+            for (const [k, v] of Object.entries(MAP)) {
+                const val = localStorage.getItem(k);
+                if (val) root.style.setProperty(v, val);
+            }
+            // primary-subtle
+            const p = localStorage.getItem('theme_primary');
+            if (p) {
+                const r = parseInt(p.slice(1, 3), 16),
+                    g = parseInt(p.slice(3, 5), 16),
+                    b = parseInt(p.slice(5, 7), 16);
+                root.style.setProperty('--primary-subtle', `rgba(${r},${g},${b},.12)`);
+            }
+            // accent-dark مشتق
+            const a = localStorage.getItem('theme_accent');
+            if (a) root.style.setProperty('--accent-dark', a);
+        } catch (e) {}
     }
 
-    // تبديل الوضع
+    function loadSavedTheme() {
+        const saved = localStorage.getItem('theme');
+        const html = document.documentElement;
+        if (saved === 'dark') {
+            html.setAttribute('data-theme', 'dark');
+            document.getElementById('themeBtn').textContent = '☀️';
+        } else {
+            html.setAttribute('data-theme', 'light');
+        }
+        applyFullTheme();
+    }
+
     function toggleTheme() {
         const html = document.documentElement;
-        const currentTheme = html.getAttribute('data-theme');
-
-        if (currentTheme === 'light') {
-            html.removeAttribute('data-theme');
+        const btn = document.getElementById('themeBtn');
+        if (html.getAttribute('data-theme') === 'light') {
+            html.setAttribute('data-theme', 'dark');
+            btn.textContent = '☀️';
             localStorage.setItem('theme', 'dark');
         } else {
             html.setAttribute('data-theme', 'light');
+            btn.textContent = '🌙';
             localStorage.setItem('theme', 'light');
         }
     }
 
-    // تحميل الوضع عند بدء الصفحة
     loadSavedTheme();
 
-    document.getElementById('loginForm').addEventListener('submit', async function(e) {
-        e.preventDefault();
+    /* ── إظهار/إخفاء كلمة المرور ── */
+    function togglePw() {
+        const inp = document.getElementById('password');
+        const icon = document.getElementById('eyeIcon');
+        if (inp.type === 'password') {
+            inp.type = 'text';
+            icon.innerHTML =
+                `<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/>`;
+        } else {
+            inp.type = 'password';
+            icon.innerHTML = `<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>`;
+        }
+    }
 
-        const empNumber = document.getElementById('employeeNumber').value.trim();
-        const password = document.getElementById('password').value;
+    /* ── أسماء الأدوار ── */
+    function getRoleName(role) {
+        const map = {
+            admin: 'مدير النظام',
+            manager: 'مدير',
+            employee: 'موظف',
+            receiving: 'استلام',
+            budget: 'موازنة',
+            payment: 'دفع',
+            invoice: 'فواتير',
+            sector_head: 'رئيس قطاع',
+            division_manager: 'مدير قسم',
+            employee_l1: 'موظف',
+            ceo: 'الرئيس التنفيذي'
+        };
+        return map[role] || role || 'موظف';
+    }
+
+    /* ── رسائل ── */
+    function showMsg(text, type) {
+        const el = document.getElementById('message');
+        const icons = {
+            error: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>`,
+            success: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`,
+            info: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>`
+        };
+        el.innerHTML = (icons[type] || '') + `<span>${text}</span>`;
+        el.className = `message show ${type}`;
+    }
+
+    function hideMsg() {
+        document.getElementById('message').className = 'message';
+    }
+
+    /* ── loading ── */
+    function setLoading(on) {
         const btn = document.getElementById('submitBtn');
         const loader = document.getElementById('btnLoader');
-        const btnText = document.getElementById('btnText');
+        btn.disabled = on;
+        loader.style.display = on ? 'block' : 'none';
+    }
 
+    /* ── المنطق الرئيسي ── */
+    async function handleSubmit() {
+        const empNumber = document.getElementById('employeeNumber').value.trim();
+        const password = document.getElementById('password').value;
         if (!empNumber) {
-            showMessage('الرجاء إدخال الرقم الوظيفي', 'error');
+            showMsg('الرجاء إدخال الرقم الوظيفي', 'error');
             return;
         }
-
-        btn.disabled = true;
-        loader.style.display = 'block';
-
+        setLoading(true);
+        hideMsg();
         try {
             if (step === 'check') {
                 const res = await fetch('api/auth.php?action=check', {
@@ -588,40 +725,35 @@ if (isset($_SESSION['user_id'])) {
                     })
                 });
                 const data = await res.json();
-
                 if (data.success) {
                     document.getElementById('empAvatar').textContent = data.data.name.charAt(0);
                     document.getElementById('empName').textContent = data.data.name;
                     document.getElementById('empRole').textContent = getRoleName(data.data.role);
                     document.getElementById('employeeCard').classList.add('show');
-
                     if (data.data.is_registered == 1) {
                         step = 'login';
                         document.getElementById('passwordGroup').style.display = 'block';
                         document.getElementById('password').focus();
                         document.getElementById('employeeNumber').readOnly = true;
                         document.getElementById('employeeNumber').classList.add('locked');
-                        btnText.textContent = 'تسجيل الدخول';
-                        hideMessage();
+                        document.getElementById('btnText').textContent = 'تسجيل الدخول';
+                        hideMsg();
                     } else {
-                        showMessage('مرحباً ' + data.data.name + '! جاري التوجيه للتسجيل...', 'info');
+                        showMsg('مرحباً ' + data.data.name + '! جاري توجيهك للتسجيل...', 'info');
                         setTimeout(() => {
-                            window.location.href = 'register.php?emp=' + encodeURIComponent(
-                                empNumber);
+                            window.location.href = 'register.php?emp=' + encodeURIComponent(empNumber);
                         }, 1500);
                         return;
                     }
                 } else {
-                    showMessage(data.message || 'الرقم الوظيفي غير موجود', 'error');
+                    showMsg(data.message || 'الرقم الوظيفي غير موجود', 'error');
                 }
             } else if (step === 'login') {
                 if (!password) {
-                    showMessage('الرجاء إدخال كلمة المرور', 'error');
-                    btn.disabled = false;
-                    loader.style.display = 'none';
+                    showMsg('الرجاء إدخال كلمة المرور', 'error');
+                    setLoading(false);
                     return;
                 }
-
                 const res = await fetch('api/auth.php?action=login', {
                     method: 'POST',
                     headers: {
@@ -629,58 +761,29 @@ if (isset($_SESSION['user_id'])) {
                     },
                     body: JSON.stringify({
                         employee_number: empNumber,
-                        password: password
+                        password
                     })
                 });
                 const data = await res.json();
-
                 if (data.success) {
-                    showMessage('تم تسجيل الدخول بنجاح!', 'success');
+                    showMsg('تم تسجيل الدخول بنجاح!', 'success');
                     setTimeout(() => {
                         window.location.href = 'splash.php';
-                    }, 1000);
+                    }, 900);
                     return;
                 } else {
-                    showMessage(data.message || 'كلمة المرور غير صحيحة', 'error');
+                    showMsg(data.message || 'كلمة المرور غير صحيحة', 'error');
                 }
             }
-        } catch (e) {
-            showMessage('حدث خطأ في الاتصال', 'error');
+        } catch (err) {
+            showMsg('حدث خطأ في الاتصال بالخادم', 'error');
         }
+        setLoading(false);
+    }
 
-        btn.disabled = false;
-        loader.style.display = 'none';
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Enter') handleSubmit();
     });
-
-    function showMessage(text, type) {
-        const msg = document.getElementById('message');
-        const icons = {
-            error: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>',
-            success: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
-            info: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>'
-        };
-        msg.innerHTML = icons[type] + '<span>' + text + '</span>';
-        msg.className = 'message show ' + type;
-    }
-
-    function hideMessage() {
-        document.getElementById('message').className = 'message';
-    }
-
-    function togglePassword() {
-        const input = document.getElementById('password');
-        input.type = input.type === 'password' ? 'text' : 'password';
-    }
-
-    function getRoleName(role) {
-        return {
-            'admin': 'مدير النظام',
-            'receiver': 'قسم الاستلام',
-            'budget': 'قسم الموازنة',
-            'payment': 'قسم الدفع',
-            'invoice': 'قسم الفوترة'
-        } [role] || role;
-    }
     </script>
 </body>
 

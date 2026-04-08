@@ -1,9 +1,5 @@
-function openAddEmployeeModal() {
-    DOM.modalTitle.textContent = 'إضافة موظف';
-    DOM.modalBody.innerHTML = _buildEmpForm({});
-    openModal();
-    // فلترة الأقسام حسب القطاع المختار (إن كان)
-    onSectorChange(document.getElementById('empSector'));
+async function openAddEmployeeModal() {
+    await openProfModal(null);
 }
 
 /** بناء نموذج الموظف — يُستخدم في الإضافة والتعديل */
@@ -146,6 +142,7 @@ function _buildEmpForm(emp) {
     </form>`;
 }
 
+
 /**
  * ╔══════════════════════════════════════════════════════════════╗
  * ║      app-settings-employees.js — إدارة الموظفين والصلاحيات  ║
@@ -156,8 +153,8 @@ function _buildEmpForm(emp) {
 // ========== قسم الموظفين ==========
 async function loadSettingsEmployees() {
     try {
-        // الموظفون
-        var res = await fetch('api/?action=employees');
+        // الموظفون — من settings.php لضمان إرجاع permission_level
+        var res = await fetch('api/settings.php?action=get_employees');
         var data = await res.json();
         if (data.success) SettingsData.employees = data.data;
 
@@ -196,33 +193,33 @@ async function loadPermissionLevels() {
         var res = await fetch('api/settings.php?action=get_permission_levels');
         var data = await res.json();
         if (data.success && data.data && data.data.length) {
-            PERM_LEVELS_CACHE = data.data;
+            // normalize: ensure each item has 'value' field (API may return 'code')
+            PERM_LEVELS_CACHE = data.data.map(function (p) {
+                return Object.assign({}, p, { value: p.value || p.code });
+            });
         }
     } catch (e) { /* تُستخدم القيم الثابتة */ }
     if (!PERM_LEVELS_CACHE.length) {
         PERM_LEVELS_CACHE = [
-            { code: 'system_admin', label: 'مدير النظام', description: 'صلاحية كاملة', color: '#ef4444' },
-            { code: 'sector_head', label: 'رئيس القطاع', description: 'يرى قطاعه كاملاً', color: '#8b5cf6' },
-            { code: 'division_manager', label: 'مدير القسم', description: 'يرى قسمه', color: '#3b82f6' },
-            { code: 'employee_l1', label: 'موظف مستوى أول', description: 'وصول موسع', color: '#f59e0b' },
-            { code: 'employee', label: 'موظف', description: 'وصول محدود', color: '#22c55e' },
+            { value: 'system_admin', code: 'system_admin', label: 'مدير النظام', description: 'صلاحية كاملة على كل شيء بما فيها الحذف', color: '#ef4444' },
+            { value: 'CEO', code: 'CEO', label: 'الرئيس التنفيذي', description: 'يعتمد جميع المعاملات النهائية', color: '#8b5cf6' },
+            { value: 'sector_head', code: 'sector_head', label: 'رئيس القطاع', description: 'يرى كل معاملات قطاعه ويعتمد طلباته', color: '#8b5cf6' },
+            { value: 'division_manager', code: 'division_manager', label: 'مدير القسم', description: 'يرى معاملات قسمه ويتابع موظفيه', color: '#3b82f6' },
+            { value: 'employee_l1', code: 'employee_l1', label: 'موظف مستوى أول', description: 'وصول موسع للتقارير والمتابعة', color: '#f59e0b' },
+            { value: 'employee', code: 'employee', label: 'موظف', description: 'وصول محدود لصفحته الوظيفية', color: '#22c55e' },
         ];
     }
 }
 
 
-/* تعريف أدوار النظام الثابتة مع ألوانها ومسمياتها */
+/* الأدوار الستة الرسمية للنظام */
 const SYSTEM_ROLES = [
-    { value: 'admin', label: 'مدير النظام', color: '#ef4444', desc: 'صلاحية كاملة على النظام' },
-    { value: 'CEO', label: 'الرئيس التنفيذي', color: '#8b5cf6', desc: 'اعتماد الطلبات الكبيرة' },
-    { value: 'receiver', label: 'الاستلام', color: '#3b82f6', desc: 'استلام المعاملات وتصنيفها' },
-    { value: 'budget', label: 'الموازنة', color: '#f59e0b', desc: 'مراجعة واعتماد الموازنة' },
-    { value: 'treasury_manager', label: 'مدير الخزينة', color: '#0891b2', desc: 'إدارة الخزينة والسيولة' },
-    { value: 'dispatch', label: 'التوجيه / الخزينة', color: '#10b981', desc: 'توجيه المعاملات وعمليات الخزينة' },
-    { value: 'payment', label: 'المالية — الدفع', color: '#06b6d4', desc: 'تنفيذ المدفوعات اليومية' },
-    { value: 'invoice', label: 'الفوترة', color: '#6366f1', desc: 'إصدار الفواتير والمستحقات' },
-    { value: 'purchasing', label: 'المشتريات', color: '#f97316', desc: 'إصدار أوامر الشراء والتفاوض مع الموردين' },
-    { value: 'employee', label: 'موظف', color: '#94a3b8', desc: 'موظف بدون دور نظامي محدد' },
+    { value: 'admin', label: 'مدير النظام', color: '#ef4444', desc: 'صلاحية كاملة على النظام بما فيها الحذف والإعدادات' },
+    { value: 'CEO', label: 'الرئيس التنفيذي', color: '#8b5cf6', desc: 'يعتمد الطلبات الكبيرة ويرى جميع المعاملات' },
+    { value: 'sector_head', label: 'رئيس القطاع', color: '#3b82f6', desc: 'يرى جميع معاملات قطاعه ويُصعَّد إليه عند تجاوز SLA' },
+    { value: 'division_manager', label: 'مدير القسم', color: '#10b981', desc: 'يرى معاملات قسمه ويعتمد الطلبات المبدئية' },
+    { value: 'employee_l1', label: 'موظف مستوى أول', color: '#f59e0b', desc: 'وصول موسع للتقارير وله دور وظيفي محدد' },
+    { value: 'employee', label: 'موظف', color: '#94a3b8', desc: 'يُنشئ الطلبات ويتابع ما يخصه فقط' },
 ];
 
 /**
@@ -237,35 +234,15 @@ const SYSTEM_ROLES = [
  *   FIN    = القطاع المالي (بديل)
  *   PUR    = المشتريات (بديل)
  */
+/**
+ * الأدوار الخمسة تظهر في كل القطاعات
+ * القطاع يحدد نطاق الرؤية فقط — لا يقيّد الدور
+ */
 const SECTOR_ROLES = {
-    // القطاع المالي
-    finance: {
-        match: (code, name) => code?.startsWith('31') || code === 'FIN'
-            || /مال|finance/i.test(name),
-        roles: ['admin', 'CEO', 'budget', 'treasury_manager', 'dispatch', 'payment', 'invoice', 'receiver', 'employee'],
-        label: 'القطاع المالي',
-    },
-    // سلاسل الإمداد والمشتريات
-    supply: {
-        match: (code, name) => code?.startsWith('41') || code === 'PUR'
-            || /supply|مشتريات|إمداد|لوجستي/i.test(name),
-        roles: ['admin', 'CEO', 'purchasing', 'receiver', 'employee'],
-        label: 'سلاسل الإمداد',
-    },
-    // الخدمات المشتركة (IT، HR، إدارية)
-    shared: {
-        match: (code, name) => code?.startsWith('32')
-            || /shared|مشترك|إدار|human|hr|تقني/i.test(name),
-        roles: ['admin', 'CEO', 'receiver', 'employee'],
-        label: 'الخدمات المشتركة',
-    },
-    // العمليات والإنتاج
-    operations: {
-        match: (code, name) => code?.startsWith('42')
-            || /operat|عمليات|إنتاج|production/i.test(name),
-        roles: ['admin', 'CEO', 'receiver', 'employee'],
-        label: 'العمليات',
-    },
+    finance: { match: (code, name) => code?.startsWith('31') || code === 'FIN' || /مال|finance/i.test(name), roles: ['admin', 'CEO', 'sector_head', 'division_manager', 'employee_l1', 'employee'], label: 'القطاع المالي' },
+    supply: { match: (code, name) => code?.startsWith('41') || code === 'PUR' || /supply|مشتريات|إمداد/i.test(name), roles: ['admin', 'CEO', 'sector_head', 'division_manager', 'employee_l1', 'employee'], label: 'سلاسل الإمداد' },
+    shared: { match: (code, name) => code?.startsWith('32') || /shared|مشترك|إدار|hr|تقني/i.test(name), roles: ['admin', 'CEO', 'sector_head', 'division_manager', 'employee_l1', 'employee'], label: 'الخدمات المشتركة' },
+    operations: { match: (code, name) => code?.startsWith('42') || /operat|عمليات|إنتاج/i.test(name), roles: ['admin', 'CEO', 'sector_head', 'division_manager', 'employee_l1', 'employee'], label: 'العمليات' },
 };
 
 /** جلب الأدوار المتاحة لقطاع معيَّن */
@@ -284,31 +261,43 @@ function getRolesForSector(sectorId) {
             return SYSTEM_ROLES.filter(r => def.roles.includes(r.value));
         }
     }
-    // قطاع غير معروف: أظهر الأدوار العامة فقط
-    return SYSTEM_ROLES.filter(r => ['admin', 'CEO', 'receiver', 'employee'].includes(r.value));
+    // قطاع غير معروف: أظهر الأدوار الخمسة كاملة
+    return SYSTEM_ROLES;
 }
 
 
-/** خريطة: الدور → مستوى الصلاحية التلقائي (5 مستويات) */
+/** خريطة: الدور → مستوى الصلاحية التلقائي */
 const ROLE_PERM_MAP = {
     admin: 'system_admin',
-    CEO: 'sector_head',
-    budget: 'employee_l1',
-    treasury_manager: 'division_manager',
-    dispatch: 'employee_l1',
-    payment: 'employee_l1',
-    purchasing: 'employee_l1',
-    receiver: 'employee_l1',
-    invoice: 'employee',
+    CEO: 'CEO',
+    sector_head: 'sector_head',
+    division_manager: 'division_manager',
+    employee_l1: 'employee_l1',
     employee: 'employee',
 };
 
-/** عند تغيير الدور: ضبط الصلاحية تلقائياً */
+/** عند تغيير الدور: ضبط الصلاحية تلقائياً مع تنبيه */
 function onRoleChange(sel) {
     const role = sel?.value || '';
     const perm = ROLE_PERM_MAP[role] || 'employee';
     const permEl = document.getElementById('empPermLevel');
-    if (permEl) permEl.value = perm;
+
+    // إذا كان هناك صلاحية محددة مسبقاً وتختلف عن الجديدة → اسأل أولاً
+    if (permEl && permEl.value && permEl.value !== perm) {
+        const roleName = (SYSTEM_ROLES.find(r => r.value === role) || {}).label || role;
+        const confirmed = confirm('تغيير الدور إلى "' + roleName + '" سيُعيد ضبط الصلاحيات للافتراضي.\nهل تريد المتابعة؟');
+        if (confirmed) {
+            permEl.value = perm;
+        } else {
+            // أعد الدور للقيمة السابقة
+            sel.value = sel.dataset.prevRole || '';
+        }
+    } else if (permEl) {
+        permEl.value = perm;
+    }
+
+    // احفظ الدور الحالي للرجوع إليه عند الإلغاء
+    if (sel) sel.dataset.prevRole = role;
 
     // hint توضيحي
     const hint = document.getElementById('roleHint');
@@ -359,7 +348,7 @@ function onSectorChange(sel) {
             const code = (sector.code || '').toUpperCase();
             if (def.match(code, sector.name || '')) {
                 const hint = document.getElementById('sectorHint');
-                if (hint) hint.textContent = `أدوار ${def.label}: ${def.roles.length} دور متاح`;
+                if (hint) hint.textContent = 'أدوار ' + def.label + ': ' + def.roles.length + ' دور متاح';
                 break;
             }
         }
@@ -371,15 +360,25 @@ function renderEmployeesSection() {
 
     var filtered = SettingsData.employees || [];
     var cf = SettingsData.currentFilter || 'all';
-    if (cf !== 'all') filtered = filtered.filter(function (e) { return e.role === cf; });
 
+    // الفلتر يعمل على permission_level
+    if (cf !== 'all') filtered = filtered.filter(function (e) {
+        return (e.permission_level || 'employee') === cf;
+    });
+
+    // حساب الأعداد بناءً على permission_level
     var counts = {};
-    (SettingsData.employees || []).forEach(function (e) { counts[e.role] = (counts[e.role] || 0) + 1; });
+    (SettingsData.employees || []).forEach(function (e) {
+        var pl = e.permission_level || 'employee';
+        counts[pl] = (counts[pl] || 0) + 1;
+    });
     var total = (SettingsData.employees || []).length;
 
-    var filters = [{ key: 'all', label: 'الكل' }].concat(
-        (SYSTEM_ROLES || []).map(function (r) { return { key: r.value, label: r.label }; })
-    );
+    // بناء التبويبات من PERM_LEVELS_CACHE
+    var permFilters = (PERM_LEVELS_CACHE || []).map(function (p) {
+        return { key: p.code || p.value, label: p.label };
+    });
+    var filters = [{ key: 'all', label: 'الكل' }].concat(permFilters);
 
     var filterHTML = filters.map(function (f) {
         var cnt = f.key === 'all' ? total : (counts[f.key] || 0);
@@ -547,8 +546,8 @@ function getRoleColor(role) {
     return r ? r.color : '#94a3b8';
 }
 
-function filterEmployees(role, btn) {
-    SettingsData.currentFilter = role;
+function filterEmployees(permLevel, btn) {
+    SettingsData.currentFilter = permLevel;
     document.querySelectorAll('.emp-filter-btn').forEach(function (t) { t.classList.remove('active'); });
     if (btn) btn.classList.add('active');
     renderEmployeesSection();
@@ -568,16 +567,8 @@ function buildRoleOptions(selectedRole, sectorId) {
     }).join('');
 }
 /** فلترة الأقسام عند تغيير القطاع */
-function editEmployee(id) {
-    const emp = SettingsData.employees.find(e => e.id == id);
-    if (!emp) return;
-    DOM.modalTitle.textContent = 'تعديل موظف';
-    DOM.modalBody.innerHTML = _buildEmpForm(emp);
-    openModal();
-    // فلترة أقسام القطاع المختار
-    onSectorChange(document.getElementById('empSector'));
-    // hint الدور
-    onRoleChange(document.getElementById('empRole'));
+async function editEmployee(id) {
+    await openProfModal(id);
 }
 
 async function saveEmployee(e) {
@@ -747,14 +738,32 @@ var PAGES_CONFIG = [
     { key: 'bank-accounts', label: 'الحسابات البنكية', icon: '💳', group: 'الخزينة' },
     { key: 'bank-investments', label: 'الودائع الاستثمارية', icon: '📈', group: 'الخزينة' },
     { key: 'daily-payments', label: 'المدفوعات اليومية', icon: '💵', group: 'الخزينة' },
-    // الأرشيف
-    { key: 'archive', label: 'الأرشيف المالي', icon: '🗂️', group: 'الأرشيف' },
+    // الأرشيف المالي — رئيسي + أقسام فرعية
+    { key: 'archive', label: 'جميع المستندات', icon: '🗂️', group: 'الأرشيف المالي', archiveSub: 'all' },
+    { key: 'archive-operational', label: 'مستندات تشغيلية', icon: '📋', group: 'الأرشيف المالي', archiveSub: 'operational' },
+    { key: 'archive-op-contract', label: '— العقود والاتفاقيات', icon: '📄', group: 'الأرشيف المالي', archiveSub: 'op-contract', indent: true },
+    { key: 'archive-op-mandate', label: '— التعميدات والتفويضات', icon: '📄', group: 'الأرشيف المالي', archiveSub: 'op-mandate', indent: true },
+    { key: 'archive-op-letter', label: '— الخطابات والمراسلات', icon: '📄', group: 'الأرشيف المالي', archiveSub: 'op-letter', indent: true },
+    { key: 'archive-financial', label: 'مستندات مالية', icon: '💰', group: 'الأرشيف المالي', archiveSub: 'financial' },
+    { key: 'archive-fin-invoice-sales', label: '— فواتير مبيعات', icon: '📄', group: 'الأرشيف المالي', archiveSub: 'fin-invoice-sales', indent: true },
+    { key: 'archive-fin-invoice-supplier', label: '— فواتير موردين', icon: '📄', group: 'الأرشيف المالي', archiveSub: 'fin-invoice-supplier', indent: true },
+    { key: 'archive-fin-journal', label: '— قيود يومية', icon: '📄', group: 'الأرشيف المالي', archiveSub: 'fin-journal', indent: true },
+    { key: 'archive-fin-bank', label: '— مستندات بنكية', icon: '📄', group: 'الأرشيف المالي', archiveSub: 'fin-bank', indent: true },
+    { key: 'archive-fin-tax', label: '— ضرائب وزكاة', icon: '📄', group: 'الأرشيف المالي', archiveSub: 'fin-tax', indent: true },
+    { key: 'archive-reports', label: 'تقارير وموازنة', icon: '📊', group: 'الأرشيف المالي', archiveSub: 'reports' },
+    { key: 'archive-rep-report', label: '— تقارير مالية', icon: '📄', group: 'الأرشيف المالي', archiveSub: 'rep-report', indent: true },
+    { key: 'archive-rep-budget', label: '— موازنة وتخطيط', icon: '📄', group: 'الأرشيف المالي', archiveSub: 'rep-budget', indent: true },
+    { key: 'archive-official', label: 'وثائق رسمية', icon: '🏛️', group: 'الأرشيف المالي', archiveSub: 'official' },
+    { key: 'archive-off-gov', label: '— وثائق حكومية', icon: '📄', group: 'الأرشيف المالي', archiveSub: 'off-gov', indent: true },
+    { key: 'archive-off-commercial', label: '— سجلات تجارية', icon: '📄', group: 'الأرشيف المالي', archiveSub: 'off-commercial', indent: true },
+    { key: 'archive-renewals', label: 'التجديد والصلاحيات', icon: '🔄', group: 'الأرشيف المالي', archiveSub: 'renewals' },
     // المتابعة
     { key: 'ceo-approvals', label: 'اعتمادات الرئيس التنفيذي', icon: '✅', group: 'المتابعة' },
     { key: 'sla', label: 'SLA / OLA', icon: '⏱', group: 'المتابعة' },
     { key: 'performance', label: 'متابعة الأداء', icon: '📈', group: 'المتابعة' },
     // نظام
     { key: 'settings', label: 'الإعدادات', icon: '⚙️', group: 'نظام' },
+    { key: 'db-admin', label: 'إدارة قاعدة البيانات', icon: '🗄️', group: 'نظام' },
 ];
 
 // PERMISSION_LEVELS — getter ديناميكي يقرأ من PERM_LEVELS_CACHE دائماً
@@ -763,43 +772,61 @@ Object.defineProperty(window, 'PERMISSION_LEVELS', {
     configurable: true
 });
 
+// مفاتيح أقسام الأرشيف الفرعية — تُستخدم في DEFAULT_PAGES
+var _ARCHIVE_ALL_KEYS = {
+    'archive': 1, 'archive-operational': 1,
+    'archive-op-contract': 1, 'archive-op-mandate': 1, 'archive-op-letter': 1,
+    'archive-financial': 1,
+    'archive-fin-invoice-sales': 1, 'archive-fin-invoice-supplier': 1,
+    'archive-fin-journal': 1, 'archive-fin-bank': 1, 'archive-fin-tax': 1,
+    'archive-reports': 1, 'archive-rep-report': 1, 'archive-rep-budget': 1,
+    'archive-official': 1, 'archive-off-gov': 1, 'archive-off-commercial': 1,
+    'archive-renewals': 1,
+};
+var _ARCHIVE_NONE_KEYS = Object.fromEntries(Object.keys(_ARCHIVE_ALL_KEYS).map(function (k) { return [k, 0]; }));
+
 var DEFAULT_PAGES = {
-    system_admin: {
+    system_admin: Object.assign({
         dashboard: 1, notifications: 1, 'purchase-requests': 1, transactions: 1, correspondence: 1,
         reservations: 1, 'budget-plans': 1, 'bank-overview': 1, 'bank-accounts': 1,
-        'bank-investments': 1, 'daily-payments': 1, archive: 1, 'ceo-approvals': 1,
-        sla: 1, performance: 1, settings: 1,
-    },
-    sector_head: {
-        dashboard: 1, notifications: 1, 'purchase-requests': 1, transactions: 1, correspondence: 1,
-        reservations: 1, 'budget-plans': 1, 'bank-overview': 1, 'bank-accounts': 1,
-        'bank-investments': 1, 'daily-payments': 1, archive: 1, 'ceo-approvals': 1,
-        sla: 1, performance: 1, settings: 0,
-    },
-    division_manager: {
+        'bank-investments': 1, 'daily-payments': 1, 'ceo-approvals': 1,
+        sla: 1, performance: 1, settings: 1, 'db-admin': 1,
+    }, _ARCHIVE_ALL_KEYS),
+    // ② الرئيس التنفيذي — يرى الكل إلا الإعدادات
+    CEO: Object.assign({
         dashboard: 1, notifications: 1, 'purchase-requests': 1, transactions: 1, correspondence: 1,
         reservations: 1, 'budget-plans': 1, 'bank-overview': 1, 'bank-accounts': 0,
-        'bank-investments': 0, 'daily-payments': 1, archive: 1, 'ceo-approvals': 0,
-        sla: 1, performance: 1, settings: 0,
-    },
-    employee_l1: {
-        dashboard: 0, notifications: 1, 'purchase-requests': 1, transactions: 1, correspondence: 1,
-        reservations: 1, 'budget-plans': 0, 'bank-overview': 0, 'bank-accounts': 0,
-        'bank-investments': 0, 'daily-payments': 1, archive: 0, 'ceo-approvals': 0,
-        sla: 0, performance: 1, settings: 0,
-    },
-    manager: {
+        'bank-investments': 0, 'daily-payments': 1, 'ceo-approvals': 1,
+        sla: 1, performance: 1, settings: 0, 'db-admin': 0,
+    }, _ARCHIVE_ALL_KEYS),
+    // ③ رئيس القطاع — يرى قطاعه فقط
+    sector_head: Object.assign({
         dashboard: 1, notifications: 1, 'purchase-requests': 1, transactions: 1, correspondence: 1,
         reservations: 1, 'budget-plans': 1, 'bank-overview': 1, 'bank-accounts': 1,
-        'bank-investments': 1, 'daily-payments': 1, archive: 1, 'ceo-approvals': 1,
-        sla: 1, performance: 1, settings: 0,
-    },
-    employee: {
+        'bank-investments': 1, 'daily-payments': 1, 'ceo-approvals': 1,
+        sla: 1, performance: 1, settings: 0, 'db-admin': 0,
+    }, _ARCHIVE_ALL_KEYS),
+    // ④ مدير القسم — يرى قسمه، البنك: لا
+    division_manager: Object.assign({
+        dashboard: 1, notifications: 1, 'purchase-requests': 1, transactions: 1, correspondence: 1,
+        reservations: 1, 'budget-plans': 1, 'bank-overview': 0, 'bank-accounts': 0,
+        'bank-investments': 0, 'daily-payments': 1, 'ceo-approvals': 0,
+        sla: 1, performance: 1, settings: 0, 'db-admin': 0,
+    }, _ARCHIVE_ALL_KEYS),
+    // ⑤ موظف مستوى أول — وصول موسع للتقارير
+    employee_l1: Object.assign({
         dashboard: 0, notifications: 1, 'purchase-requests': 1, transactions: 1, correspondence: 1,
         reservations: 1, 'budget-plans': 0, 'bank-overview': 0, 'bank-accounts': 0,
-        'bank-investments': 0, 'daily-payments': 0, archive: 0, 'ceo-approvals': 0,
-        sla: 0, performance: 0, settings: 0,
-    },
+        'bank-investments': 0, 'daily-payments': 1, 'ceo-approvals': 0,
+        sla: 0, performance: 1, settings: 0, 'db-admin': 0,
+    }, { 'archive': 1, 'archive-financial': 1, 'archive-fin-invoice-sales': 1, 'archive-fin-invoice-supplier': 1, 'archive-fin-bank': 1 }),
+    // ⑥ موظف — ما أنشأه فقط
+    employee: Object.assign({
+        dashboard: 0, notifications: 1, 'purchase-requests': 1, transactions: 1, correspondence: 1,
+        reservations: 0, 'budget-plans': 0, 'bank-overview': 0, 'bank-accounts': 0,
+        'bank-investments': 0, 'daily-payments': 0, 'ceo-approvals': 0,
+        sla: 0, performance: 0, settings: 0, 'db-admin': 0,
+    }, _ARCHIVE_NONE_KEYS),
 };
 
 /** فتح modal صلاحيات الموظف */
@@ -831,8 +858,8 @@ function renderPermissionsForm(empId, empName, perms) {
     // مستويات الصلاحية
     var levelsHtml = PERMISSION_LEVELS.map(function (l) {
         var checked = (level === l.value) ? 'checked' : '';
-        return '<label class="perm-level-card ' + (level === l.value ? 'selected' : '') + '" data-level="' + l.value + '">' +
-            '<input type="radio" name="permLevel" value="' + l.value + '" ' + checked + ' onchange="onPermLevelChange(this,' + empId + ')" hidden>' +
+        return '<label class="perm-level-card ' + (level === l.value ? 'selected' : '') + '" data-level="' + l.value + '" onclick="onPermLevelChange(this.querySelector(\'input\'),' + empId + ')">' +
+            '<input type="radio" name="permLevel" value="' + l.value + '" ' + checked + ' hidden>' +
             '<div class="perm-level-dot" style="background:' + l.color + '"></div>' +
             '<div>' +
             '<div style="font-weight:700;font-size:.88rem">' + l.label + '</div>' +
@@ -1087,7 +1114,13 @@ function setAllPages(state) {
 
 /** عند تغيير مستوى الصلاحية → تطبيق الافتراضيات */
 function onPermLevelChange(input, empId) {
-    var level = input.value;
+    // input قد يكون العنصر radio أو العنصر label
+    var level = input.value || input.closest?.('[data-level]')?.dataset.level || input.dataset?.level;
+    if (!level) return;
+
+    // تأكيد تحديد الـ radio المناسب
+    var radio = document.querySelector('input[name="permLevel"][value="' + level + '"]');
+    if (radio) radio.checked = true;
 
     // تحديث تصميم الكارد المختار
     document.querySelectorAll('.perm-level-card').forEach(function (c) {
@@ -1190,6 +1223,8 @@ async function savePermissions(empId, empName) {
         if (data.success) {
             showToast('✅ تم حفظ صلاحيات ' + empName, 'success');
             closeModal();
+            await loadSettingsEmployees();
+            renderEmployeesSection();
         } else {
             showToast('❌ ' + (data.error || 'خطأ في الحفظ'), 'error');
         }
@@ -1285,5 +1320,514 @@ function injectPermissionsStyles() {
             .perm-pages-grid { grid-template-columns:1fr 1fr; }
         }
     `;
+    document.head.appendChild(s);
+}
+// ══════════════════════════════════════════════════════
+// النموذج الاحترافي الموحد — two-column layout + tabs
+// ══════════════════════════════════════════════════════
+
+async function openProfModal(id) {
+    var emp = id ? (SettingsData.employees || []).find(function (e) { return e.id == id; }) || {} : {};
+    if (!PERM_LEVELS_CACHE.length) await loadPermissionLevels();
+
+    DOM.modalTitle.textContent = id ? 'تعديل بيانات الموظف والصلاحيات' : 'إضافة موظف';
+    DOM.modalBody.innerHTML = '<div style="text-align:center;padding:3rem"><div class="spinner"></div></div>';
+    openModal('xl');
+
+    var perms = { permission_level: emp.permission_level || 'employee', can_delete: false, pages: {}, action_permissions: {} };
+    if (id) {
+        try {
+            var r = await fetch('api/settings.php?action=get_employee_permissions&employee_id=' + id);
+            var d = await r.json();
+            if (d.success) perms = d.data;
+        } catch (e) { }
+    }
+
+    injectProfStyles();
+    DOM.modalBody.innerHTML = _buildProfModal(emp, perms);
+    document.querySelector('.modal').classList.add('prof-modal');
+    onSectorChange(document.getElementById('profSector'));
+    if (emp.role) onRoleChange({ value: emp.role, id: 'profRole', dataset: { prevRole: emp.role } });
+    profSwitchTab('pages');
+}
+
+function _buildProfModal(emp, perms) {
+    emp = emp || {};
+    perms = perms || {};
+    var id = emp.id || '';
+    var sectors = SettingsData.sectors || [];
+    var divisions = SettingsData.divisions || [];
+    var employees2 = SettingsData.employees || [];
+    var curSector = emp.sector_id || emp.department_id || '';
+    var level = perms.permission_level || 'employee';
+    var pages = perms.pages || {};
+    var actionPerms = perms.action_permissions || {};
+    var isAdmin = (level === 'system_admin');
+    var empPermCode = emp.permission_level_code || level;
+
+    var initials = (emp.name || 'م').split(' ').slice(0, 2).map(function (w) { return w[0] || ''; }).join('');
+
+    var levelFound = (PERM_LEVELS_CACHE || []).find(function (p) { return p.code === empPermCode; });
+    var levelColor = (levelFound || {}).color || '#6b7280';
+    var levelLabel = (levelFound || {}).label || empPermCode;
+    var roleName = getRoleName(emp.role);
+    var roleColor = getRoleColor(emp.role);
+
+    // sector options
+    var secOpts = '<option value="">\u2014 \u0628\u062f\u0648\u0646 \u0642\u0637\u0627\u0639 \u2014</option>'
+        + sectors.map(function (s) {
+            var lbl = s.name + (s.name_en && s.name_en !== s.name ? ' \u2014 ' + s.name_en : '');
+            return '<option value="' + s.id + '"' + (curSector == s.id ? ' selected' : '') + '>' + lbl + '</option>';
+        }).join('');
+
+    var divOpts = '<option value="">\u2014 \u0628\u062f\u0648\u0646 \u0642\u0633\u0645 \u2014</option>'
+        + divisions.map(function (d) {
+            var sid = d.sector_id || d.parent_id || '';
+            var hid = (curSector && String(sid) !== String(curSector)) ? 'hidden' : '';
+            return '<option value="' + d.id + '" data-sector="' + sid + '"' + (emp.division_id == d.id ? ' selected' : '') + ' ' + hid + '>' + d.name + '</option>';
+        }).join('');
+
+    var supOpts = '<option value="">\u2014</option>'
+        + employees2.filter(function (e) { return e.is_active != 0 && e.id != id; })
+            .map(function (e) { return '<option value="' + e.id + '"' + (emp.supervisor_id == e.id ? ' selected' : '') + '>' + e.name + '</option>'; }).join('');
+
+    var roleDesc = (SYSTEM_ROLES.find(function (r) { return r.value === emp.role; }) || {}).desc || '';
+
+    // ── Tab 1: مستوى الصلاحية ──
+    var levelCardsHtml = (PERM_LEVELS_CACHE || []).map(function (l) {
+        var sel = (empPermCode === l.code) ? 'prof-level-selected' : '';
+        return '<div class="prof-level-card ' + sel + '" data-lcode="' + l.code + '" style="--lc:' + l.color + '" onclick="profPickLevel(this)">'
+            + '<span class="prof-level-dot" style="background:' + l.color + '"></span>'
+            + '<div><div class="prof-level-name">' + l.label + '</div>'
+            + '<div class="prof-level-desc">' + (l.description || l.desc || '') + '</div></div>'
+            + '</div>';
+    }).join('');
+
+    // ── Tab 2: صلاحيات الصفحات ──
+    var pGroups = {};
+    PAGES_CONFIG.forEach(function (p) { if (!pGroups[p.group]) pGroups[p.group] = []; pGroups[p.group].push(p); });
+    var pagesTabHtml = '';
+    Object.keys(pGroups).forEach(function (g) {
+        if (g === 'الأرشيف المالي') {
+            // الأرشيف — عرض مفصّل بقسم خاص
+            pagesTabHtml += '<div class="prof-pgroup-title prof-archive-hdr">🗂️ الأرشيف المالي</div>';
+            // تعريف البطاقات الرئيسية للأرشيف
+            var archiveBlocks = [
+                { key: 'archive', label: 'جميع المستندات', icon: '📂', desc: 'عرض موحد', color: '#6b7280', children: [] },
+                {
+                    key: 'archive-operational', label: 'مستندات تشغيلية', icon: '📋', desc: 'عقود · تعميدات · خطابات', color: '#1D9E75',
+                    children: [
+                        { key: 'archive-op-contract', label: 'العقود والاتفاقيات' },
+                        { key: 'archive-op-mandate', label: 'التعميدات والتفويضات' },
+                        { key: 'archive-op-letter', label: 'الخطابات والمراسلات' },
+                    ]
+                },
+                {
+                    key: 'archive-financial', label: 'مستندات مالية', icon: '💰', desc: 'فواتير · قيود · بنكية · ضرائب', color: '#185FA5',
+                    children: [
+                        { key: 'archive-fin-invoice-sales', label: 'فواتير مبيعات' },
+                        { key: 'archive-fin-invoice-supplier', label: 'فواتير موردين' },
+                        { key: 'archive-fin-journal', label: 'قيود يومية' },
+                        { key: 'archive-fin-bank', label: 'مستندات بنكية' },
+                        { key: 'archive-fin-tax', label: 'ضرائب وزكاة' },
+                    ]
+                },
+                {
+                    key: 'archive-reports', label: 'تقارير وموازنة', icon: '📊', desc: 'تقارير مالية · موازنة وتخطيط', color: '#854F0B',
+                    children: [
+                        { key: 'archive-rep-report', label: 'تقارير مالية' },
+                        { key: 'archive-rep-budget', label: 'موازنة وتخطيط' },
+                    ]
+                },
+                {
+                    key: 'archive-official', label: 'وثائق رسمية', icon: '🏛️', desc: 'حكومية · سجلات تجارية', color: '#534AB7',
+                    children: [
+                        { key: 'archive-off-gov', label: 'وثائق حكومية' },
+                        { key: 'archive-off-commercial', label: 'سجلات تجارية' },
+                    ]
+                },
+                { key: 'archive-renewals', label: 'التجديد والصلاحيات', icon: '🔄', desc: 'تتبع انتهاء الوثائق', color: '#993C1D', children: [] },
+            ];
+            archiveBlocks.forEach(function (blk) {
+                var mainOn = isAdmin ? true : !!(pages[blk.key]);
+                var hasChildren = blk.children.length > 0;
+                var blockId = 'arch-blk-' + blk.key;
+                // header البطاقة
+                pagesTabHtml += '<div class="prof-arch-block" style="--abcolor:' + blk.color + '">'
+                    + '<div class="prof-arch-hdr"' + (hasChildren ? ' onclick="profArchToggleBlock(\'' + blockId + '\')"' : '') + '>'
+                    + '<span class="prof-arch-icon">' + blk.icon + '</span>'
+                    + '<div class="prof-arch-meta"><div class="prof-arch-name">' + blk.label + '</div>'
+                    + '<div class="prof-arch-desc">' + blk.desc + '</div></div>'
+                    + (hasChildren ? '<span class="prof-arch-chevron" id="' + blockId + '-chev">▸</span>' : '')
+                    + '<label class="prof-arch-tog-wrap" onclick="event.stopPropagation()">'
+                    + '<span class="prof-toggle' + (mainOn ? ' on' : '') + '" data-page="' + blk.key + '" onclick="profTogglePage(this,\'' + blk.key + '\')"><span class="prof-knob"></span></span>'
+                    + '</label>'
+                    + '</div>';
+                // الأقسام الفرعية
+                if (hasChildren) {
+                    pagesTabHtml += '<div class="prof-arch-children" id="' + blockId + '" style="display:none">';
+                    blk.children.forEach(function (ch) {
+                        var chOn = isAdmin ? true : !!(pages[ch.key]);
+                        pagesTabHtml += '<label class="prof-arch-child" onclick="profTogglePage(this,\'' + ch.key + '\')">'
+                            + '<span class="prof-arch-child-name">' + ch.label + '</span>'
+                            + '<span class="prof-toggle' + (chOn ? ' on' : '') + '" data-page="' + ch.key + '"><span class="prof-knob"></span></span>'
+                            + '</label>';
+                    });
+                    pagesTabHtml += '</div>';
+                }
+                pagesTabHtml += '</div>';
+            });
+        } else {
+            pagesTabHtml += '<div class="prof-pgroup-title">' + g + '</div>';
+            pGroups[g].forEach(function (pg) {
+                var isOn = isAdmin ? true : !!(pages[pg.key]);
+                pagesTabHtml += '<label class="prof-prow" onclick="profTogglePage(this,\'' + pg.key + '\')">'
+                    + '<span class="prof-prow-icon">' + pg.icon + '</span>'
+                    + '<span class="prof-prow-label">' + pg.label + '</span>'
+                    + '<span class="prof-toggle' + (isOn ? ' on' : '') + '" data-page="' + pg.key + '"><span class="prof-knob"></span></span>'
+                    + '</label>';
+            });
+        }
+    });
+
+    // ── Tab 3: صلاحيات الإجراءات ──
+    var aGroups = {};
+    ACTIONS_CONFIG.forEach(function (a) { if (!aGroups[a.group]) aGroups[a.group] = []; aGroups[a.group].push(a); });
+    var actionDefaults = {
+        manager: { 'bank.edit_balance': 1, 'bank.view_history': 1, 'bank.record_balance': 1, 'bank.add_deposit': 1, 'bank.confirm_deposit': 1, 'transaction.add': 1, 'transaction.edit': 1, 'transaction.export': 1, 'correspondence.add': 1, 'correspondence.edit': 1, 'correspondence.send': 1, 'correspondence.view_all': 1, 'correspondence.stage_approve': 1, 'correspondence.stage_reject': 1, 'correspondence.stage_return': 1 },
+        employee: { 'bank.record_balance': 1, 'bank.view_history': 1, 'bank.add_deposit': 1, 'transaction.add': 1, 'correspondence.add': 1, 'correspondence.send': 1, 'correspondence.stage_approve': 1, 'correspondence.stage_reject': 1, 'correspondence.stage_return': 1 }
+    };
+    var aDef = actionDefaults[level] || {};
+    var actTabHtml = '';
+    Object.keys(aGroups).forEach(function (g) {
+        actTabHtml += '<div class="prof-pgroup-title">' + g + '</div>';
+        aGroups[g].forEach(function (act) {
+            var isOn = actionPerms.hasOwnProperty(act.key) ? !!actionPerms[act.key] : !!(aDef[act.key]);
+            actTabHtml += '<label class="prof-prow" onclick="profToggleAction(this,\'' + act.key + '\')">'
+                + '<span class="prof-prow-icon">' + act.icon + '</span>'
+                + '<span class="prof-prow-label">' + act.label + '</span>'
+                + '<span class="prof-toggle' + (isOn ? ' on' : '') + '" data-action="' + act.key + '"><span class="prof-knob"></span></span>'
+                + '</label>';
+        });
+    });
+
+    // ── Tab 4: مراحل الخطابات ──
+    var stagesTabHtml = '<p class="prof-tab-note">\u062d\u062f\u062f \u0627\u0644\u0645\u0631\u0627\u062d\u0644 \u0627\u0644\u062a\u064a \u064a\u0633\u0645\u062d \u0644\u0647\u0630\u0627 \u0627\u0644\u0645\u0648\u0638\u0641 \u0628\u0627\u0644\u062a\u0635\u0631\u0641 \u0641\u064a\u0647\u0627</p>';
+    CORRESPONDENCE_STAGES.forEach(function (s) {
+        var sk = 'correspondence.stage.' + s.key;
+        var isOn = actionPerms.hasOwnProperty(sk) ? !!actionPerms[sk] : false;
+        stagesTabHtml += '<label class="prof-prow" onclick="profToggleAction(this,\'' + sk + '\')">'
+            + '<span class="prof-prow-icon">\ud83d\udccb</span>'
+            + '<span class="prof-prow-label">' + s.label + ' <span class="prof-prow-types">' + s.types.join(' \u00b7 ') + '</span></span>'
+            + '<span class="prof-toggle' + (isOn ? ' on' : '') + '" data-action="' + sk + '"><span class="prof-knob"></span></span>'
+            + '</label>';
+    });
+
+    var adminBanner = '<div class="prof-admin-banner">\ud83d\udd13 \u0645\u062f\u064a\u0631 \u0627\u0644\u0646\u0638\u0627\u0645 \u064a\u0645\u0644\u0643 \u0635\u0644\u0627\u062d\u064a\u0629 \u0643\u0627\u0645\u0644\u0629</div>';
+
+    return '<input type="hidden" id="profId" value="' + id + '">'
+        + '<input type="hidden" id="profPermLevel" value="' + empPermCode + '">'
+        + '<div class="prof-body">'
+
+        // ── الشريط الجانبي ──
+        + '<div class="prof-sidebar">'
+        + '<div class="prof-avatar">' + initials + '</div>'
+        + '<div class="prof-emp-name">' + (emp.name || '\u0645\u0648\u0638\u0641 \u062c\u062f\u064a\u062f') + '</div>'
+        + '<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:12px">'
+        + (emp.role ? '<span class="prof-badge" style="background:' + roleColor + '18;color:' + roleColor + '">' + roleName + '</span>' : '')
+        + '<span class="prof-badge" style="background:' + levelColor + '18;color:' + levelColor + '">' + levelLabel + '</span>'
+        + '</div>'
+        + '<div class="prof-sep"></div>'
+        + '<div class="prof-field"><label>\u0631\u0642\u0645 \u0627\u0644\u0645\u0648\u0638\u0641</label><input id="profNumber" class="prof-input" value="' + (emp.employee_number || '') + '" placeholder="EMP-001"></div>'
+        + '<div class="prof-field"><label>\u0627\u0644\u0627\u0633\u0645 \u0627\u0644\u0643\u0627\u0645\u0644</label><input id="profName" class="prof-input" value="' + (emp.name || '') + '" placeholder="\u0627\u0644\u0627\u0633\u0645" oninput="profUpdateAvatar(this.value)"></div>'
+        + '<div class="prof-grid2">'
+        + '<div class="prof-field"><label>\u0627\u0644\u0628\u0631\u064a\u062f</label><input id="profEmail" type="email" class="prof-input" value="' + (emp.email || '') + '" placeholder="email@co.com"></div>'
+        + '<div class="prof-field"><label>\u0627\u0644\u0647\u0627\u062a\u0641</label><input id="profPhone" class="prof-input" value="' + (emp.phone || '') + '" placeholder="05xxxxxxxx"></div>'
+        + '</div>'
+        + '<div class="prof-sep"></div>'
+        + '<div class="prof-field"><label>\u0627\u0644\u0642\u0637\u0627\u0639</label><select id="profSector" class="prof-select" onchange="onSectorChange(this);profSyncDivisions()"><option value="">\u2014</option>' + secOpts + '</select></div>'
+        + '<div class="prof-field"><label>\u0627\u0644\u0642\u0633\u0645</label><select id="profDivision" class="prof-select"><option value="">\u2014</option>' + divOpts + '</select></div>'
+        + '<div class="prof-field"><label>\u0627\u0644\u062f\u0648\u0631</label>'
+        + '<select id="profRole" class="prof-select" data-prev-role="' + (emp.role || '') + '" onchange="onRoleChange(this)">'
+        + '<option value="">\u2014 \u0627\u062e\u062a\u0631 \u2014</option>' + buildRoleOptions(emp.role || '', curSector) + '</select>'
+        + '<div id="roleHint" class="prof-hint">' + roleDesc + '</div></div>'
+        + '<div class="prof-field"><label>\u0627\u0644\u0645\u0634\u0631\u0641</label><select id="profSupervisor" class="prof-select"><option value="">\u2014</option>' + supOpts + '</select></div>'
+        + '</div>'
+
+        // ── المنطقة الرئيسية ──
+        + '<div class="prof-main">'
+        + '<div class="prof-tabs">'
+        + '<button class="prof-tab" data-tab="level" onclick="profSwitchTab(\'level\')">\ud83c\udfc5 \u0645\u0633\u062a\u0648\u0649 \u0627\u0644\u0635\u0644\u0627\u062d\u064a\u0629</button>'
+        + '<button class="prof-tab prof-tab-active" data-tab="pages" onclick="profSwitchTab(\'pages\')">\ud83d\udcd1 \u0635\u0644\u0627\u062d\u064a\u0627\u062a \u0627\u0644\u0635\u0641\u062d\u0627\u062a</button>'
+        + '<button class="prof-tab" data-tab="actions" onclick="profSwitchTab(\'actions\')">\ud83c\udf9b\ufe0f \u0635\u0644\u0627\u062d\u064a\u0627\u062a \u0627\u0644\u0625\u062c\u0631\u0627\u0621\u0627\u062a</button>'
+        + '<button class="prof-tab" data-tab="stages" onclick="profSwitchTab(\'stages\')">\ud83d\udce8 \u0645\u0631\u0627\u062d\u0644 \u0627\u0644\u062e\u0637\u0627\u0628\u0627\u062a</button>'
+        + '</div>'
+
+        // محتوى التبويبات
+        + '<div class="prof-tab-content" id="prof-tab-level" style="display:none">'
+        + '<div class="prof-tc-header"><span>\u0627\u062e\u062a\u0631 \u0645\u0633\u062a\u0648\u0649 \u0627\u0644\u0635\u0644\u0627\u062d\u064a\u0629</span></div>'
+        + '<div class="prof-level-grid">' + levelCardsHtml + '</div>'
+        + '</div>'
+
+        + '<div class="prof-tab-content" id="prof-tab-pages" style="display:block">'
+        + '<div class="prof-tc-header"><span>صلاحيات الصفحات</span>'
+        + (!isAdmin ? '<div class="prof-tc-actions"><button class="prof-sm-btn" onclick="profSetAllPages(true)">تفعيل الكل</button><button class="prof-sm-btn" onclick="profSetAllPages(false)">إيقاف الكل</button></div>' : '')
+        + '</div>'
+        + (isAdmin ? adminBanner : '<div class="prof-prows-wrap">' + pagesTabHtml + '</div>')
+        + '</div>'
+
+        + '<div class="prof-tab-content" id="prof-tab-actions" style="display:none">'
+        + '<div class="prof-tc-header"><span>\u0635\u0644\u0627\u062d\u064a\u0627\u062a \u0627\u0644\u0625\u062c\u0631\u0627\u0621\u0627\u062a</span>'
+        + (!isAdmin ? '<div class="prof-tc-actions"><button class="prof-sm-btn" onclick="profSetAllToggles(\'.prof-toggle[data-action]\',true)">\u062a\u0641\u0639\u064a\u0644 \u0627\u0644\u0643\u0644</button><button class="prof-sm-btn" onclick="profSetAllToggles(\'.prof-toggle[data-action]\',false)">\u0625\u064a\u0642\u0627\u0641 \u0627\u0644\u0643\u0644</button></div>' : '')
+        + '</div>'
+        + (isAdmin ? adminBanner : '<div class="prof-prows-wrap">' + actTabHtml + '</div>')
+        + '</div>'
+
+        + '<div class="prof-tab-content" id="prof-tab-stages" style="display:none">'
+        + '<div class="prof-tc-header"><span>\u0645\u0631\u0627\u062d\u0644 \u0627\u0644\u062e\u0637\u0627\u0628\u0627\u062a</span>'
+        + (!isAdmin ? '<div class="prof-tc-actions"><button class="prof-sm-btn" onclick="profSetAllToggles(\'.prof-toggle[data-action*=\\\"correspondence.stage\\\"]\',true)">\u062a\u0641\u0639\u064a\u0644 \u0627\u0644\u0643\u0644</button><button class="prof-sm-btn" onclick="profSetAllToggles(\'.prof-toggle[data-action*=\\\"correspondence.stage\\\"]\',false)">\u0625\u064a\u0642\u0627\u0641 \u0627\u0644\u0643\u0644</button></div>' : '')
+        + '</div>'
+        + (isAdmin ? adminBanner : '<div class="prof-prows-wrap">' + stagesTabHtml + '</div>')
+        + '</div>'
+
+        + '</div>'
+        + '</div>'
+
+        // ── footer ──
+        + '<div class="prof-footer">'
+        + '<label class="prof-del-row">'
+        + '<span class="prof-toggle-mini' + (perms.can_delete ? ' on' : '') + '" id="profCanDelete" onclick="event.stopPropagation();this.classList.toggle(\'on\')"><span class="prof-knob"></span></span>'
+        + '<span style="font-size:13px;color:var(--text-secondary)">\ud83d\uddd1\ufe0f \u0635\u0644\u0627\u062d\u064a\u0629 \u0627\u0644\u062d\u0630\u0641</span>'
+        + '<span style="font-size:11.5px;color:var(--text-muted)">\u062d\u0630\u0641 \u0627\u0644\u0645\u0639\u0627\u0645\u0644\u0627\u062a \u0648\u0627\u0644\u0645\u0648\u0638\u0641\u064a\u0646 \u0648\u0627\u0644\u0648\u062f\u0627\u0626\u0639</span>'
+        + '</label>'
+        + '<div style="display:flex;gap:8px">'
+        + '<button class="prof-btn ghost" onclick="closeModal()">\u0625\u0644\u063a\u0627\u0621</button>'
+        + '<button class="prof-btn primary" onclick="saveProfEmployee()">'
+        + '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>'
+        + (id ? ' \u062d\u0641\u0638 \u0627\u0644\u062a\u0639\u062f\u064a\u0644\u0627\u062a' : ' \u0625\u0636\u0627\u0641\u0629 \u0645\u0648\u0638\u0641')
+        + '</button></div>'
+        + '</div>';
+}
+
+function profSwitchTab(name) {
+    document.querySelectorAll('.prof-tab').forEach(function (t) { t.classList.toggle('prof-tab-active', t.dataset.tab === name); });
+    document.querySelectorAll('.prof-tab-content').forEach(function (c) { c.style.display = 'none'; });
+    var el = document.getElementById('prof-tab-' + name);
+    if (el) el.style.display = 'block';
+}
+
+function profPickLevel(card) {
+    document.querySelectorAll('.prof-level-card').forEach(function (c) { c.classList.remove('prof-level-selected'); });
+    card.classList.add('prof-level-selected');
+    var code = card.dataset.lcode;
+    document.getElementById('profPermLevel').value = code;
+    var defs = DEFAULT_PAGES[code] || DEFAULT_PAGES['employee'] || {};
+    document.querySelectorAll('.prof-toggle[data-page]').forEach(function (t) {
+        t.classList.toggle('on', !!(defs[t.dataset.page]));
+    });
+}
+
+function profTogglePage(el, key) {
+    var t = el.classList && el.classList.contains('prof-toggle')
+        ? el
+        : (el.querySelector ? el.querySelector('.prof-toggle[data-page="' + key + '"]') : null);
+    if (t) t.classList.toggle('on');
+}
+
+function profArchToggleBlock(id) {
+    var body = document.getElementById(id);
+    var chev = document.getElementById(id + '-chev');
+    if (!body) return;
+    var open = body.style.display !== 'none';
+    body.style.display = open ? 'none' : 'block';
+    if (chev) chev.textContent = open ? '▸' : '▾';
+}
+
+function profToggleAction(label, key) {
+    var t = label.querySelector('.prof-toggle[data-action="' + key + '"]');
+    if (t) t.classList.toggle('on');
+}
+function profSetAllToggles(sel, state) {
+    document.querySelectorAll(sel).forEach(function (t) { t.classList.toggle('on', state); });
+}
+
+function profSetAllPages(state) {
+    // تفعيل/إيقاف جميع صفحات بما فيها أقسام الأرشيف الفرعية
+    document.querySelectorAll('.prof-toggle[data-page]').forEach(function (t) { t.classList.toggle('on', state); });
+    // فتح جميع بطاقات الأرشيف عند التفعيل
+    if (state) {
+        document.querySelectorAll('.prof-arch-children').forEach(function (b) {
+            b.style.display = 'block';
+            var chev = document.getElementById(b.id + '-chev');
+            if (chev) chev.textContent = '▾';
+        });
+    }
+}
+function profUpdateAvatar(val) {
+    var av = document.querySelector('.prof-avatar');
+    if (!av) return;
+    av.textContent = (val || 'م').split(' ').slice(0, 2).map(function (w) { return w[0] || ''; }).join('');
+    document.querySelector('.prof-emp-name') && (document.querySelector('.prof-emp-name').textContent = val || '\u0645\u0648\u0638\u0641 \u062c\u062f\u064a\u062f');
+}
+function profSyncDivisions() {
+    var sec = document.getElementById('profSector');
+    var div = document.getElementById('profDivision');
+    if (!sec || !div) return;
+    var sid = sec.value;
+    div.querySelectorAll('option[data-sector]').forEach(function (o) {
+        o.hidden = sid ? (o.dataset.sector !== sid) : false;
+    });
+    div.value = '';
+}
+
+async function saveProfEmployee() {
+    var id = document.getElementById('profId').value;
+    var level = document.getElementById('profPermLevel').value || 'employee';
+    var canDel = !!(document.getElementById('profCanDelete') && document.getElementById('profCanDelete').classList.contains('on'));
+
+    var empData = {
+        id: id || undefined,
+        name: document.getElementById('profName') && document.getElementById('profName').value,
+        email: document.getElementById('profEmail') && document.getElementById('profEmail').value,
+        phone: document.getElementById('profPhone') && document.getElementById('profPhone').value,
+        role: document.getElementById('profRole') && document.getElementById('profRole').value,
+        employee_number: document.getElementById('profNumber') && document.getElementById('profNumber').value,
+        supervisor_id: document.getElementById('profSupervisor') && document.getElementById('profSupervisor').value || null,
+        sector_id: document.getElementById('profSector') && document.getElementById('profSector').value || null,
+        division_id: document.getElementById('profDivision') && document.getElementById('profDivision').value || null,
+        department_id: document.getElementById('profSector') && document.getElementById('profSector').value || null,
+        permission_level_code: level,
+    };
+    if (!empData.name) { showToast('\u0627\u0633\u0645 \u0627\u0644\u0645\u0648\u0638\u0641 \u0645\u0637\u0644\u0648\u0628', 'error'); return; }
+
+    var pages = {};
+    document.querySelectorAll('.prof-toggle[data-page]').forEach(function (t) { pages[t.dataset.page] = t.classList.contains('on'); });
+    var actionPerms = {};
+    document.querySelectorAll('.prof-toggle[data-action]').forEach(function (t) { actionPerms[t.dataset.action] = t.classList.contains('on'); });
+
+    try {
+        var a = id ? 'update_employee' : 'add_employee';
+        var r1 = await fetch('api/settings.php?action=' + a, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(empData) });
+        var d1 = await r1.json();
+        if (!d1.success) { showToast('\u274c ' + (d1.message || '\u062e\u0637\u0623'), 'error'); return; }
+        var empId = id || d1.id;
+        var r2 = await fetch('api/settings.php?action=save_employee_permissions', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ employee_id: empId, permission_level: level, can_delete: canDel, pages: pages, action_permissions: actionPerms })
+        });
+        var d2 = await r2.json();
+        showToast('\u2705 \u062a\u0645 \u0627\u0644\u062d\u0641\u0638 \u0628\u0646\u062c\u0627\u062d', 'success');
+        closeModal();
+        await loadSettingsEmployees();
+        renderEmployeesSection();
+    } catch (e) { showToast('\u274c \u062e\u0637\u0623 \u0641\u064a \u0627\u0644\u0627\u062a\u0635\u0627\u0644', 'error'); }
+}
+
+function injectProfStyles() {
+    if (document.getElementById('prof-css')) return;
+    var s = document.createElement('style'); s.id = 'prof-css';
+    s.textContent = [
+        // modal sizing - use system variables
+        '.prof-modal .modal{max-width:960px!important;width:94vw!important;max-height:92vh!important;overflow:hidden!important;border-radius:20px!important;display:flex!important;flex-direction:column!important}',
+        '.prof-modal .modal-body,.prof-modal #modal-body{padding:0!important;overflow-y:auto!important;max-height:calc(90vh - 70px)!important;display:flex!important;flex-direction:column!important}',
+
+        // layout
+        '.prof-body{display:grid;grid-template-columns:270px 1fr;flex:1;overflow:hidden;min-height:460px}',
+
+        // sidebar - uses system bg-surface
+        '.prof-sidebar{background:var(--bg-surface);border-left:1px solid var(--border-color);padding:16px 14px;overflow-y:auto;min-height:460px;max-height:calc(90vh - 130px);display:flex;flex-direction:column;gap:0}',
+        '.prof-avatar{width:46px;height:46px;border-radius:50%;background:var(--btn-primary-bg);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:var(--btn-primary-text);margin-bottom:8px;flex-shrink:0}',
+        '.prof-emp-name{font-size:13px;font-weight:700;color:var(--text-primary);margin-bottom:6px;line-height:1.3}',
+        '.prof-badge{display:inline-flex;align-items:center;font-size:11px;padding:2px 8px;border-radius:8px;font-weight:500;border:1px solid currentColor}',
+        '.prof-sep{height:1px;background:var(--border-color);margin:10px 0;flex-shrink:0}',
+        '.prof-field{margin-bottom:8px}',
+        '.prof-field label{display:block;font-size:11px;font-weight:600;color:var(--text-muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:.04em}',
+        '.prof-hint{font-size:11px;color:var(--text-muted);margin-top:3px;font-style:italic;line-height:1.3}',
+        // inputs/selects match system form-input exactly
+        '.prof-input,.prof-select{width:100%;padding:.5rem .75rem;border-radius:10px;border:1px solid var(--border-color);background:var(--bg-card);color:var(--text-primary);font-family:inherit;font-size:.82rem;transition:all .2s;outline:none}',
+        '.prof-input:focus,.prof-select:focus{border-color:var(--btn-primary-bg);box-shadow:0 0 0 3px rgba(148,137,121,.2)}',
+        '.prof-input::placeholder{color:var(--text-muted)}',
+        '.prof-grid2{display:grid;grid-template-columns:1fr 1fr;gap:7px}',
+
+        // main area
+        '.prof-main{display:flex;flex-direction:column;overflow:hidden;height:100%;background:var(--bg-primary)}',
+
+        // tabs bar
+        '.prof-tabs{display:flex;border-bottom:1px solid var(--border-color);background:var(--bg-card);flex-shrink:0;overflow-x:auto;padding:0 4px}',
+        '.prof-tab{padding:11px 14px;font-size:12.5px;color:var(--text-muted);border:none;background:transparent;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;transition:all .2s;font-family:inherit;font-weight:500}',
+        '.prof-tab:hover{color:var(--text-primary);background:rgba(148,137,121,.08)}',
+        '.prof-tab-active{color:var(--text-primary)!important;border-bottom-color:var(--btn-primary-bg)!important}',
+        '.prof-tab-content{flex:1;overflow-y:auto;height:0;min-height:0;background:var(--bg-primary)}',
+
+        // tab inner
+        '.prof-tc-header{display:flex;align-items:center;justify-content:space-between;padding:11px 14px;border-bottom:1px solid var(--border-color);font-size:12px;font-weight:600;color:var(--text-secondary);position:sticky;top:0;background:var(--bg-card);z-index:1;text-transform:uppercase;letter-spacing:.04em}',
+        '.prof-tc-actions{display:flex;gap:5px}',
+        '.prof-sm-btn{padding:4px 11px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-surface);color:var(--text-secondary);font-size:11.5px;cursor:pointer;font-family:inherit;transition:all .2s}',
+        '.prof-sm-btn:hover{background:var(--bg-card);color:var(--text-primary)}',
+        '.prof-tab-note{font-size:12px;color:var(--text-muted);padding:10px 14px;font-style:italic}',
+        '.prof-admin-banner{margin:12px 14px;padding:10px 14px;background:rgba(250,82,82,.1);border:1px solid rgba(250,82,82,.3);border-radius:10px;font-size:12.5px;color:var(--accent-red)}',
+
+        // perm rows - 2-col grid
+        '.prof-prows-wrap{padding:8px 10px 16px;display:grid;grid-template-columns:1fr 1fr;gap:0 6px}',
+        '.prof-pgroup-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);padding:9px 8px 5px;border-bottom:1px solid var(--border-color);margin-bottom:2px;grid-column:1/-1}',
+        '.prof-prow{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:8px;cursor:pointer;transition:background .15s;user-select:none}',
+        '.prof-prow:hover{background:var(--bg-surface)}',
+        '.prof-prow-icon{font-size:13px;width:18px;text-align:center;flex-shrink:0}',
+        '.prof-prow-label{flex:1;font-size:12.5px;color:var(--text-primary);line-height:1.2}',
+        '.prof-prow-types{font-size:10.5px;color:var(--text-muted);display:block;margin-top:1px}',
+
+        // level grid - 3 cols
+        '.prof-level-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;padding:14px}',
+        '.prof-level-card{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;border:1px solid var(--border-color);cursor:pointer;transition:all .2s;background:var(--bg-card)}',
+        '.prof-level-card:hover{border-color:var(--lc,#948979);background:var(--bg-surface)}',
+        '.prof-level-selected{border-color:var(--lc,#948979)!important;background:var(--bg-surface)!important;box-shadow:0 0 0 3px color-mix(in srgb,var(--lc,#948979) 20%,transparent)}',
+        '.prof-level-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}',
+        '.prof-level-name{font-size:12.5px;font-weight:600;color:var(--text-primary)}',
+        '.prof-level-desc{font-size:11px;color:var(--text-muted);margin-top:1px}',
+
+        // toggles
+        '.prof-toggle{position:relative;width:38px;height:21px;border-radius:11px;background:var(--bg-surface);border:1px solid var(--border-color);flex-shrink:0;cursor:pointer;display:inline-block;transition:background .2s,border-color .2s;vertical-align:middle}',
+        '.prof-toggle.on{background:var(--accent-green);border-color:var(--accent-green)}',
+        '.prof-knob{position:absolute;top:2px;left:2px;width:15px;height:15px;border-radius:50%;background:var(--bg-card);transition:transform .18s;pointer-events:none;box-shadow:0 1px 3px rgba(0,0,0,.25)}',
+        '.prof-toggle.on .prof-knob{transform:translateX(17px);background:#fff}',
+
+        // footer
+        '.prof-footer{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-top:1px solid var(--border-color);background:var(--bg-card);flex-shrink:0;position:sticky;bottom:0;z-index:10}',
+        '.prof-del-row{display:flex;align-items:center;gap:8px;cursor:pointer}',
+        '.prof-toggle-mini{position:relative;width:32px;height:18px;border-radius:9px;background:var(--bg-surface);border:1px solid var(--border-color);flex-shrink:0;cursor:pointer;display:inline-block;transition:background .2s}',
+        '.prof-toggle-mini.on{background:var(--accent-red);border-color:var(--accent-red)}',
+        '.prof-toggle-mini .prof-knob{position:absolute;top:1.5px;left:1.5px;width:13px;height:13px;border-radius:50%;background:var(--bg-card);transition:transform .18s;box-shadow:0 1px 2px rgba(0,0,0,.2)}',
+        '.prof-toggle-mini.on .prof-knob{transform:translateX(14px);background:#fff}',
+
+        // buttons match system .btn style
+        '.prof-btn{display:inline-flex;align-items:center;gap:.4rem;padding:.6rem 1.1rem;border-radius:12px;font-size:.88rem;font-weight:500;cursor:pointer;transition:all .2s;font-family:inherit;border:none}',
+        '.prof-btn.ghost{background:var(--bg-surface);color:var(--text-secondary);border:1px solid var(--border-color)}',
+        '.prof-btn.ghost:hover{background:var(--bg-card);color:var(--text-primary)}',
+        '.prof-btn.primary{background:var(--btn-primary-bg);color:var(--btn-primary-text)}',
+        '.prof-btn.primary:hover{opacity:.88;transform:translateY(-1px)}',
+
+        // scrollbar match system
+        '.prof-sidebar::-webkit-scrollbar,.prof-tab-content::-webkit-scrollbar{width:4px}',
+        '.prof-sidebar::-webkit-scrollbar-track,.prof-tab-content::-webkit-scrollbar-track{background:transparent}',
+        '.prof-sidebar::-webkit-scrollbar-thumb,.prof-tab-content::-webkit-scrollbar-thumb{background:var(--border-color);border-radius:2px}',
+
+        '@media(max-width:680px){.prof-body{grid-template-columns:1fr;height:auto}.prof-sidebar{border-left:none;border-bottom:1px solid var(--border-color);height:auto;max-height:260px}.prof-level-grid{grid-template-columns:1fr 1fr}.prof-prows-wrap{grid-template-columns:1fr}}',
+
+        // ── الأرشيف المالي — بطاقات قابلة للطي ──
+        '.prof-archive-hdr{color:#1D9E75;border-bottom-color:#5DCAA5}',
+        '.prof-arch-block{border:.5px solid var(--border-color);border-radius:10px;margin-bottom:8px;overflow:hidden;border-right:3px solid var(--abcolor,#6b7280)}',
+        '.prof-arch-hdr{display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--bg-surface);cursor:pointer;user-select:none}',
+        '.prof-arch-hdr:hover{background:var(--bg-card)}',
+        '.prof-arch-icon{font-size:15px;width:22px;text-align:center;flex-shrink:0}',
+        '.prof-arch-meta{flex:1}',
+        '.prof-arch-name{font-size:12.5px;font-weight:600;color:var(--text-primary)}',
+        '.prof-arch-desc{font-size:10.5px;color:var(--text-muted)}',
+        '.prof-arch-chevron{font-size:11px;color:var(--text-muted);flex-shrink:0;transition:transform .15s}',
+        '.prof-arch-tog-wrap{flex-shrink:0;margin-right:4px}',
+        '.prof-arch-children{border-top:.5px solid var(--border-color);padding:6px 10px 8px}',
+        '.prof-arch-child{display:flex;align-items:center;justify-content:space-between;padding:5px 8px;border-radius:7px;cursor:pointer;transition:background .12s}',
+        '.prof-arch-child:hover{background:var(--bg-surface)}',
+        '.prof-arch-child-name{font-size:12px;color:var(--text-secondary);flex:1}',
+    ].join('');
     document.head.appendChild(s);
 }

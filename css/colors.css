@@ -1,175 +1,199 @@
 /* =============================================
-   نظام الألوان المركزي
-   Centralized Color System
+   نظام الألوان المركزي — مسار MASAR
+   Centralized Color System — MASAR Brand
    =============================================
-   هذا الملف يحتوي على جميع ألوان الموقع
-   لتسهيل التعديل والصيانة
+   الألوان الرسمية لهوية مسار MASAR
+   Primary: #3F5950 | Accent: #F26F63 | Dark: #402B29
    ============================================= */
 
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&family=Tajawal:wght@300;400;500;700;800&display=swap');
 
 /* =============================================
-   الوضع الليلي (Dark Mode) - الافتراضي
+   الوضع الليلي (Dark Mode) - Dark Variant of MASAR
    ============================================= */
 :root {
     /* ── الخلفيات ── */
-    --bg-primary: #222831;
-    --bg-secondary: #393E46;
-    --bg-surface: #1B2026;
-    --bg-card: #2d343c;
-    --bg-hover: rgba(255, 255, 255, 0.05);
-    --bg-tertiary: rgba(30, 41, 59, 0.5);
+    --bg-primary:    #1e2c28;
+    --bg-secondary:  #253029;
+    --bg-surface:    #18231f;
+    --bg-card:       #2a3830;
+    --bg-hover:      rgba(255, 255, 255, 0.05);
+    --bg-tertiary:   rgba(63, 89, 80, 0.15);
 
     /* ── النصوص ── */
-    --text-primary: #DFD0B8;
-    --text-secondary: #948979;
-    --text-muted: #7A6F63;
+    --text-primary:   #ECE8E3;
+    --text-secondary: #b5b0aa;
+    --text-muted:     #7a7570;
 
     /* ── الأيقونات ── */
-    --icon-primary: #DFD0B8;
-    --icon-secondary: #948979;
+    --icon-primary:   #ECE8E3;
+    --icon-secondary: #b5b0aa;
 
     /* ── الحدود والفواصل ── */
-    --border-color: #4A4F57;
+    --border-color: #3a4f47;
 
     /* ── الأزرار ── */
-    --btn-primary-bg: #948979;
-    --btn-primary-text: #222831;
-    --btn-secondary-bg: transparent;
-    --btn-secondary-text: #DFD0B8;
-    --btn-secondary-border: #948979;
+    --btn-primary-bg:      #3F5950;
+    --btn-primary-text:    #FFFFFF;
+    --btn-primary-hover:   #2e4139;
+    --btn-secondary-bg:    transparent;
+    --btn-secondary-text:  #ECE8E3;
+    --btn-secondary-border:#3F5950;
+
+    /* ── MASAR Brand Colors ── */
+    --primary:         #3F5950;
+    --primary-dark:    #2e4139;
+    --primary-light:   #4e6e61;
+    --primary-subtle:  rgba(63, 89, 80, 0.15);
+    --secondary-bg:    #ECE8E3;
+    --secondary-bg2:   #F2EEEB;
+    --accent:          #F26F63;
+    --accent-dark:     #d4574b;
+    --accent-subtle:   rgba(242, 111, 99, 0.15);
+    --brand-dark:      #402B29;
 
     /* ── الألوان المميزة (Accent) ── */
-    --accent-blue: #4dabf7;
-    --accent-cyan: #3bc9db;
-    --accent-green: #69db7c;
+    --accent-blue:   #4dabf7;
+    --accent-cyan:   #3bc9db;
+    --accent-green:  #69db7c;
     --accent-orange: #ffa94d;
     --accent-purple: #b197fc;
-    --accent-red: #ff6b6b;
-    --accent-amber: #ffe066;
+    --accent-red:    #F26F63;
+    --accent-amber:  #ffe066;
     --accent-indigo: #818cf8;
 
     /* ── الظلال ── */
-    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.15);
-    --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.25);
+    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.2);
+    --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.3);
     --shadow-lg: 0 20px 40px -15px rgba(0, 0, 0, 0.5);
 
     /* ── ألوان الحالات ── */
     --color-success: #69db7c;
     --color-warning: #ffa94d;
-    --color-danger: #ff6b6b;
-    --color-info: #4dabf7;
+    --color-danger:  #F26F63;
+    --color-info:    #4dabf7;
 
     /* ── ألوان المراحل (Stages) ── */
     --stage-receiving: #69db7c;
-    --stage-budget: #3bc9db;
-    --stage-payment: #ffa94d;
-    --stage-invoice: #b197fc;
-    --stage-dispatch: #818cf8;
+    --stage-budget:    #3bc9db;
+    --stage-payment:   #ffa94d;
+    --stage-invoice:   #b197fc;
+    --stage-dispatch:  #818cf8;
 
     /* ── ألوان الشارات (Badges) - Dark ── */
-    --badge-green-bg: rgba(16, 185, 129, 0.2);
-    --badge-green-text: #34d399;
-    --badge-amber-bg: rgba(245, 158, 11, 0.2);
+    --badge-green-bg:   rgba(63, 89, 80, 0.25);
+    --badge-green-text: #7dc4a8;
+    --badge-amber-bg:   rgba(245, 158, 11, 0.2);
     --badge-amber-text: #fbbf24;
-    --badge-red-bg: rgba(239, 68, 68, 0.2);
-    --badge-red-text: #f87171;
-    --badge-blue-bg: rgba(14, 165, 233, 0.2);
-    --badge-blue-text: #38bdf8;
-    --badge-slate-bg: rgba(100, 116, 139, 0.2);
+    --badge-red-bg:     rgba(242, 111, 99, 0.2);
+    --badge-red-text:   #f9a79f;
+    --badge-blue-bg:    rgba(77, 171, 247, 0.2);
+    --badge-blue-text:  #74c0fc;
+    --badge-slate-bg:   rgba(100, 116, 139, 0.2);
     --badge-slate-text: #94a3b8;
 
     /* ── ألوان التنبيهات ── */
-    --alert-danger-bg: rgba(239, 68, 68, 0.15);
-    --alert-danger-text: #f87171;
-    --alert-danger-border: rgba(239, 68, 68, 0.3);
-    --alert-warning-bg: rgba(249, 115, 22, 0.15);
-    --alert-warning-text: #fb923c;
-    --alert-warning-border: rgba(249, 115, 22, 0.3);
-    --alert-info-bg: rgba(14, 165, 233, 0.15);
-    --alert-info-text: #38bdf8;
-    --alert-info-border: rgba(14, 165, 233, 0.3);
+    --alert-danger-bg:     rgba(242, 111, 99, 0.15);
+    --alert-danger-text:   #f9a79f;
+    --alert-danger-border: rgba(242, 111, 99, 0.3);
+    --alert-warning-bg:    rgba(249, 115, 22, 0.15);
+    --alert-warning-text:  #fb923c;
+    --alert-warning-border:rgba(249, 115, 22, 0.3);
+    --alert-info-bg:       rgba(77, 171, 247, 0.15);
+    --alert-info-text:     #74c0fc;
+    --alert-info-border:   rgba(77, 171, 247, 0.3);
 }
 
 /* =============================================
-   الوضع النهاري (Light Mode)
+   الوضع النهاري (Light Mode) — MASAR الهوية الرئيسية
    ============================================= */
 [data-theme="light"] {
     /* ── الخلفيات ── */
-    --bg-primary: #F5F1EB;
-    --bg-secondary: #DFD0B8;
-    --bg-surface: #E6DED3;
-    --bg-card: #FFFFFF;
-    --bg-hover: rgba(0, 0, 0, 0.04);
-    --bg-tertiary: rgba(0, 0, 0, 0.06);
+    --bg-primary:  #ECE8E3;
+    --bg-secondary:#dedad4;
+    --bg-surface:  #E5E0DA;
+    --bg-card:     #F2EEEB;
+    --bg-hover:    rgba(63, 89, 80, 0.06);
+    --bg-tertiary: rgba(63, 89, 80, 0.08);
 
     /* ── النصوص ── */
-    --text-primary: #222831;
-    --text-secondary: #393E46;
-    --text-muted: #948979;
+    --text-primary:   #402B29;
+    --text-secondary: #5a4240;
+    --text-muted:     #9a8f8c;
 
     /* ── الأيقونات ── */
-    --icon-primary: #393E46;
-    --icon-secondary: #948979;
+    --icon-primary:   #402B29;
+    --icon-secondary: #7a6f6c;
 
     /* ── الحدود والفواصل ── */
-    --border-color: #CFC6B8;
+    --border-color: #cdc8c2;
 
     /* ── الأزرار ── */
-    --btn-primary-bg: #222831;
-    --btn-primary-text: #DFD0B8;
-    --btn-secondary-bg: #393E46;
-    --btn-secondary-text: #DFD0B8;
-    --btn-secondary-border: transparent;
+    --btn-primary-bg:      #3F5950;
+    --btn-primary-text:    #FFFFFF;
+    --btn-primary-hover:   #2e4139;
+    --btn-secondary-bg:    transparent;
+    --btn-secondary-text:  #3F5950;
+    --btn-secondary-border:#3F5950;
+
+    /* ── MASAR Brand Colors (same in light) ── */
+    --primary:         #3F5950;
+    --primary-dark:    #2e4139;
+    --primary-light:   #4e6e61;
+    --primary-subtle:  rgba(63, 89, 80, 0.1);
+    --accent:          #F26F63;
+    --accent-dark:     #d4574b;
+    --accent-subtle:   rgba(242, 111, 99, 0.1);
+    --brand-dark:      #402B29;
 
     /* ── الألوان المميزة (Accent) ── */
-    --accent-blue: #228be6;
-    --accent-cyan: #15aabf;
-    --accent-green: #40c057;
-    --accent-orange: #fd7e14;
+    --accent-blue:   #228be6;
+    --accent-cyan:   #15aabf;
+    --accent-green:  #2f7d52;
+    --accent-orange: #e8590c;
     --accent-purple: #7950f2;
-    --accent-red: #fa5252;
-    --accent-amber: #fab005;
-    --accent-indigo: #5c6bc0;
+    --accent-red:    #F26F63;
+    --accent-amber:  #e67700;
+    --accent-indigo: #4263eb;
 
     /* ── الظلال ── */
-    --shadow-sm: 0 1px 4px rgba(0, 0, 0, 0.06);
-    --shadow-md: 0 2px 10px rgba(0, 0, 0, 0.08);
-    --shadow-lg: 0 10px 30px -10px rgba(0, 0, 0, 0.15);
+    --shadow-sm: 0 1px 4px rgba(64, 43, 41, 0.08);
+    --shadow-md: 0 2px 12px rgba(64, 43, 41, 0.1);
+    --shadow-lg: 0 10px 30px -10px rgba(64, 43, 41, 0.15);
 
     /* ── ألوان الحالات ── */
-    --color-success: #40c057;
-    --color-warning: #fd7e14;
-    --color-danger: #fa5252;
-    --color-info: #228be6;
+    --color-success: #2f7d52;
+    --color-warning: #e8590c;
+    --color-danger:  #F26F63;
+    --color-info:    #228be6;
 
     /* ── ألوان المراحل (Stages) ── */
-    --stage-receiving: #40c057;
-    --stage-budget: #15aabf;
-    --stage-payment: #fd7e14;
-    --stage-invoice: #7950f2;
-    --stage-dispatch: #5c6bc0;
+    --stage-receiving: #2f7d52;
+    --stage-budget:    #15aabf;
+    --stage-payment:   #e8590c;
+    --stage-invoice:   #7950f2;
+    --stage-dispatch:  #4263eb;
 
     /* ── ألوان الشارات (Badges) - Light ── */
-    --badge-green-bg: rgba(64, 192, 87, 0.1);
-    --badge-green-text: #2b8a3e;
-    --badge-amber-bg: rgba(250, 176, 5, 0.1);
-    --badge-amber-text: #e67700;
-    --badge-red-bg: rgba(250, 82, 82, 0.1);
-    --badge-red-text: #c92a2a;
-    --badge-blue-bg: rgba(34, 139, 230, 0.1);
-    --badge-blue-text: #1864ab;
-    --badge-slate-bg: rgba(148, 137, 121, 0.1);
-    --badge-slate-text: #948979;
+    --badge-green-bg:   rgba(63, 89, 80, 0.12);
+    --badge-green-text: #2e5046;
+    --badge-amber-bg:   rgba(230, 119, 0, 0.1);
+    --badge-amber-text: #c05c00;
+    --badge-red-bg:     rgba(242, 111, 99, 0.12);
+    --badge-red-text:   #c9423a;
+    --badge-blue-bg:    rgba(34, 139, 230, 0.1);
+    --badge-blue-text:  #1864ab;
+    --badge-slate-bg:   rgba(64, 43, 41, 0.08);
+    --badge-slate-text: #7a6f6c;
 
     /* ── ألوان التنبيهات ── */
-    --alert-danger-bg: rgba(250, 82, 82, 0.1);
-    --alert-danger-text: #c92a2a;
-    --alert-danger-border: rgba(250, 82, 82, 0.3);
-    --alert-warning-bg: rgba(253, 126, 20, 0.1);
-    --alert-warning-text: #d9480f;
-    --alert-warning-border: rgba(253, 126, 20, 0.3);
-    --alert-info-bg: rgba(34, 139, 230, 0.1);
-    --alert-info-text: #1864ab;
-    --alert-info-border: rgba(34, 139, 230, 0.3);
+    --alert-danger-bg:     rgba(242, 111, 99, 0.1);
+    --alert-danger-text:   #c9423a;
+    --alert-danger-border: rgba(242, 111, 99, 0.3);
+    --alert-warning-bg:    rgba(232, 89, 12, 0.1);
+    --alert-warning-text:  #c05c00;
+    --alert-warning-border:rgba(232, 89, 12, 0.3);
+    --alert-info-bg:       rgba(34, 139, 230, 0.1);
+    --alert-info-text:     #1864ab;
+    --alert-info-border:   rgba(34, 139, 230, 0.3);
 }

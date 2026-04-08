@@ -101,7 +101,7 @@
 .pr-search-input {
     width: 100%;
     padding-left: 2.25rem;
-    direction: rtl;
+    /* direction: rtl; */
 }
 
 .pr-select,
@@ -130,7 +130,7 @@
     width: 100%;
     border-collapse: collapse;
     font-size: .875rem;
-    direction: rtl;
+    /* direction: rtl; */
 }
 
 .pr-table th {
@@ -1577,16 +1577,7 @@
 
 /* ── Body ───────────────────────────────────────────────────── */
 .d3-body {
-    display: grid;
-    grid-template-columns: 1fr 280px;
-    gap: .8rem;
-    align-items: start;
-}
-
-@media (max-width:960px) {
-    .d3-body {
-        grid-template-columns: 1fr;
-    }
+    width: 100%;
 }
 
 /* ── Card مشترك ─────────────────────────────────────────────── */
@@ -1615,10 +1606,10 @@
 .d3-events {
     display: flex;
     flex-direction: column;
-    gap: .42rem;
-    max-height: calc(100vh - 330px);
+    gap: 0;
+    max-height: 520px;
     overflow-y: auto;
-    padding-right: .2rem;
+    padding: .4rem .2rem .2rem;
 }
 
 .d3-events::-webkit-scrollbar {
@@ -1632,9 +1623,8 @@
 
 /* ── Info col ───────────────────────────────────────────────── */
 .d3-info-col {
-    display: flex;
-    flex-direction: column;
-    gap: .65rem;
+    width: 100%;
+    margin-bottom: .8rem;
 }
 
 .d3-amount-hero {
@@ -2814,4 +2804,566 @@
     font-size: .75rem;
     color: var(--text-muted);
     flex-shrink: 0;
+}
+
+/* ══ SLA Strip ══════════════════════════════════════════════ */
+.d3-sla-strip {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 16px;
+    border-radius: 10px;
+    border: 1px solid;
+    margin: 0 0 6px;
+    flex-wrap: wrap;
+}
+
+.d3-sla-strip-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.d3-sla-strip-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-secondary);
+}
+
+.d3-sla-strip-status {
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.d3-sla-strip-pause {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.d3-sla-strip-bar-wrap {
+    flex: 1;
+    min-width: 80px;
+    height: 5px;
+    background: var(--bg-surface);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.d3-sla-strip-bar {
+    height: 100%;
+    border-radius: 3px;
+    transition: width .5s;
+}
+
+.d3-sla-strip-stats {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.d3-sla-strip-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+}
+
+.d3-sla-strip-val {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.d3-sla-strip-key {
+    font-size: 10px;
+    color: var(--text-muted);
+}
+
+.d3-sla-strip-sep {
+    width: 1px;
+    height: 20px;
+    background: var(--border-color);
+}
+
+/* ══ بطاقة المعلومات الموحدة ══════════════════════════════ */
+.d3-info-card {
+    padding: 0 !important;
+    overflow: hidden;
+}
+
+.d3-amount-hero2 {
+    display: flex;
+    gap: 0;
+    padding: 14px 16px;
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.d3-amount-divider {
+    width: 1px;
+    background: var(--border-color);
+    margin: 0 16px;
+}
+
+.d3-info-section {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.d3-info-section:last-child {
+    border-bottom: none;
+}
+
+.d3-info-section-title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--text-muted);
+    margin-bottom: 10px;
+}
+
+.d3-kv-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 12px;
+}
+
+.d3-kv2 {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.d3-k2 {
+    font-size: 10.5px;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.d3-v2 {
+    font-size: 12.5px;
+    color: var(--text-primary);
+    font-weight: 500;
+    line-height: 1.3;
+}
+
+.d3-attach-btn2 {
+    font-size: 11.5px;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 3px 9px;
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-card);
+    transition: all .15s;
+}
+
+.d3-attach-btn2:hover {
+    color: var(--text-primary);
+    background: var(--bg-surface);
+}
+
+/* ══ سجل النشاط الجديد ═══════════════════════════════════ */
+.pr-ev-item {
+    display: flex;
+    gap: 12px;
+    padding: 10px 6px 10px 0;
+    border-bottom: 1px solid var(--border-color, #e2e8f0);
+    transition: background .15s;
+    border-radius: 6px;
+}
+
+.pr-ev-item:last-child {
+    padding-bottom: 6px;
+    border-bottom: none;
+}
+
+.pr-ev-item:hover {
+    background: var(--bg-surface, #f8fafc);
+}
+
+.pr-ev-dot-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex-shrink: 0;
+    padding-top: 2px;
+}
+
+.pr-ev-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-top: 4px;
+    box-shadow: 0 0 0 3px var(--bg-card, #fff);
+}
+
+.pr-ev-line {
+    flex: 1;
+    width: 2px;
+    background: var(--border-color, #e2e8f0);
+    margin-top: 6px;
+    min-height: 16px;
+}
+
+.pr-ev-item:last-child .pr-ev-line {
+    display: none;
+}
+
+.pr-ev-content {
+    flex: 1;
+    padding-bottom: 2px;
+}
+
+.pr-ev-top {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-bottom: 5px;
+}
+
+.pr-ev-type-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 12px;
+}
+
+.pr-ev-stage-chip {
+    font-size: 10.5px;
+    color: var(--text-muted);
+    padding: 1px 7px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-surface);
+}
+
+.pr-ev-time {
+    font-size: 10.5px;
+    color: var(--text-muted);
+    margin-right: auto;
+}
+
+.pr-ev-actor {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 3px;
+}
+
+.pr-ev-detail {
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+
+.pr-ev-refer-box {
+    margin-top: 6px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.pr-ev-refer-row {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+}
+
+.pr-ev-refer-lbl {
+    font-size: 10.5px;
+    color: var(--text-muted);
+    font-weight: 600;
+    min-width: 40px;
+    text-align: left;
+}
+
+.pr-ev-refer-val {
+    font-size: 12px;
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+/* ══ d3-info-col full-width layout ══════════════════════════ */
+.d3-info-card {
+    overflow: hidden;
+}
+
+.d3-info-sections-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    border-top: 1px solid var(--border-color);
+}
+
+.d3-info-sections-grid .d3-info-section {
+    border-bottom: none;
+    border-left: 1px solid var(--border-color);
+}
+
+.d3-info-sections-grid .d3-info-section:last-child {
+    border-left: none;
+}
+
+.d3-events-col-full {
+    width: 100%;
+}
+
+.d3-events-col-full .d3-card {
+    width: 100%;
+}
+
+/* ══ المرفقات — التصميم الجديد ══════════════════════════════ */
+.pr-attach-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 4px;
+}
+
+.pr-att-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 12px;
+    border-radius: 9px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-card);
+    transition: background .15s;
+}
+
+.pr-att-card:hover {
+    background: var(--bg-surface);
+}
+
+.pr-att-ext {
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    border: 1px solid;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+    flex-shrink: 0;
+    letter-spacing: .03em;
+}
+
+.pr-att-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.pr-att-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 3px;
+}
+
+.pr-att-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.pr-att-orig {
+    font-size: 11px;
+    color: var(--text-muted);
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pr-att-stage {
+    font-size: 10.5px;
+    color: var(--text-muted);
+    background: var(--bg-surface);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 1px 6px;
+}
+
+.pr-att-who {
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+
+.pr-att-size {
+    font-size: 10.5px;
+    color: var(--text-muted);
+    margin-right: auto;
+}
+
+.pr-att-dl {
+    width: 30px;
+    height: 30px;
+    border-radius: 7px;
+    border: 1px solid var(--border-color);
+    background: transparent;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: all .15s;
+    text-decoration: none;
+}
+
+.pr-att-dl:hover {
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    border-color: var(--text-muted);
+}
+
+.pr-no-attach {
+    font-size: 12.5px;
+    color: var(--text-muted);
+    padding: 8px 0;
+    font-style: italic;
+}
+
+/* سهم الانتقال بين مرحلتين في سجل النشاط */
+.pr-ev-arrow {
+    font-size: 10px;
+    color: var(--color-text-tertiary);
+    margin: 0 2px;
+    opacity: .6;
+}
+
+/* رابط إيصال الدفع */
+.d3-receipt-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    background: var(--color-background-secondary);
+    border: 1px solid var(--color-border-secondary);
+    border-radius: var(--border-radius-md);
+    font-size: .82rem;
+    font-weight: 500;
+    color: var(--color-text-primary);
+    text-decoration: none;
+    transition: background .15s;
+}
+
+.d3-receipt-link:hover {
+    background: var(--color-background-tertiary);
+}
+
+/* ── قسم إيصالات الدفع في صفحة الطلب ── */
+.d3-payment-receipts {
+    border-top: 1px solid var(--color-border-tertiary);
+    padding: .75rem 1rem 1rem;
+}
+
+.d3-payment-receipts-title {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    font-size: .78rem;
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    text-transform: uppercase;
+    letter-spacing: .03em;
+    margin-bottom: .6rem;
+}
+
+.d3-payment-receipts-empty {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    font-size: .8rem;
+    color: var(--color-text-tertiary);
+    padding: .6rem 1rem 1rem;
+    font-style: italic;
+}
+
+.d3-payment-receipt-item {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    padding: .5rem .65rem;
+    border-radius: 8px;
+    border: 1px solid var(--color-border-tertiary);
+    background: var(--color-background-secondary);
+    margin-bottom: .4rem;
+    transition: background .12s;
+}
+
+.d3-payment-receipt-item:hover {
+    background: var(--color-background-tertiary);
+}
+
+.d3-payment-receipt-item:last-child {
+    margin-bottom: 0;
+}
+
+.d3-prc-icon {
+    font-size: 1.1rem;
+    flex-shrink: 0;
+}
+
+.d3-prc-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.d3-prc-name {
+    font-size: .83rem;
+    font-weight: 600;
+    color: var(--color-text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.d3-prc-meta {
+    font-size: .72rem;
+    color: var(--color-text-secondary);
+    margin-top: 1px;
+}
+
+.d3-prc-open {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    font-size: .76rem;
+    font-weight: 500;
+    color: var(--color-text-link, #2563eb);
+    text-decoration: none;
+    padding: .25rem .65rem;
+    border-radius: 6px;
+    border: 1px solid rgba(37, 99, 235, .2);
+    background: rgba(37, 99, 235, .05);
+    flex-shrink: 0;
+    transition: all .12s;
+}
+
+.d3-prc-open:hover {
+    background: rgba(37, 99, 235, .12);
+    border-color: rgba(37, 99, 235, .4);
+}
+
+[data-theme="dark"] .d3-prc-open {
+    color: #93c5fd;
+    border-color: rgba(147, 197, 253, .2);
+    background: rgba(147, 197, 253, .06);
 }

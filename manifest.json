@@ -1,9 +1,9 @@
 {
-  "bundle": "app.bundle.vb5563fb4.min.js",
-  "hash": "b5563fb4",
-  "built_at": "2026-03-20 09:18:41",
-  "files_count": 21,
-  "original_size": 1552217,
-  "bundle_size": 1324030,
-  "saving_percent": 14.7
+  "bundle": "app.bundle.v1f216ceb.min.js",
+  "hash": "1f216ceb",
+  "built_at": "2026-05-11 21:27:40",
+  "files_count": 25,
+  "original_size": 1673855,
+  "bundle_size": 1490087,
+  "saving_percent": 11
 }

@@ -47,11 +47,23 @@ _ensureWorkflowSchema($conn);
 // ══════════════════════════════════════════════════════════════
 //  مساعدات الصلاحية
 // ══════════════════════════════════════════════════════════════
-$isBudgetOfficer = in_array($userRole, ['admin', 'budget'])
-                || $permLevel === 'system_admin';
+// ✅ الطبقة الجديدة: بناءً على القطاع والقسم بدلاً من role
+$_empSectorR = $conn->query("
+    SELECT e.department_id,
+           COALESCE(d.sector_id, IF(d.dept_type='sector', d.id, d.parent_id)) AS sector_id
+    FROM employees e
+    LEFT JOIN departments d ON d.id = e.department_id
+    WHERE e.id = $userId LIMIT 1
+");
+$_empSector = $_empSectorR ? $_empSectorR->fetch_assoc() : [];
+$_sectorId  = (int)($_empSector['sector_id'] ?? 0);
+$_deptId    = (int)($_empSector['department_id'] ?? 0);
+
+$isBudgetOfficer = $permLevel === 'system_admin'
+    || ($_sectorId === 4 && in_array($_deptId, [33, 34]));
 
 $isCEO = $permLevel === 'system_admin'
-      || in_array($userRole, ['ceo', 'CEO', 'الرئيس التنفيذي', 'admin']);
+      || in_array($permLevel, ['CEO']);
 
 // ══════════════════════════════════════════════════════════════
 //  Router
@@ -748,6 +760,7 @@ try {
                        ec.name AS ceo_approver_name,
                        t.transaction_number,
                        t.status AS transaction_status,
+                       pr.request_number AS pr_request_number,
                        (SELECT COUNT(*) FROM budget_workflow_log wl WHERE wl.reservation_id = br.id) AS events_count,
                        (SELECT MAX(wl2.created_at) FROM budget_workflow_log wl2 WHERE wl2.reservation_id = br.id) AS last_event_at,
                        bst.stage_name AS current_sla_stage,
@@ -759,6 +772,7 @@ try {
                 LEFT JOIN employees   eb  ON br.pre_approved_by = eb.id
                 LEFT JOIN employees   ec  ON br.ceo_approved_by = ec.id
                 LEFT JOIN transactions t  ON br.transaction_id  = t.id
+                LEFT JOIN purchase_requests pr ON br.purchase_request_id = pr.id
                 LEFT JOIN budget_sla_tracking bst
                     ON bst.reservation_id = br.id
                     AND bst.ended_at IS NULL
@@ -910,7 +924,8 @@ function _ensureWorkflowSchema(\mysqli $conn): void {
         'budget_plan_item_id'=> 'INT DEFAULT NULL',
         'exchange_rate_sar' => 'DECIMAL(10,4) DEFAULT 1.0000',
         'total_amount'      => 'DECIMAL(15,2) DEFAULT 0',
-        'vat_amount'        => 'DECIMAL(15,2) DEFAULT 0',
+        'vat_amount'          => 'DECIMAL(15,2) DEFAULT 0',
+        'purchase_request_id' => 'INT DEFAULT NULL COMMENT "ربط طلب الشراء — بديل transaction_id"',
     ];
 
     // تحديث ENUM للحالة ليدعم القيم الجديدة

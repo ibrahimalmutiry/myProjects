@@ -43,6 +43,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initEventListeners();
     initSearchableSelects();
     injectSARSymbol(); // حقن خط رمز الريال السعودي الجديد
+    initLanguage();    // تطبيق اللغة المحفوظة
     const tab = (typeof window._firstAllowedTab === 'function')
         ? (window._firstAllowedTab() || 'dashboard')
         : 'dashboard';
@@ -210,8 +211,6 @@ function showIf(action) {
 function hiddenIf(action) {
     return canDo(action) ? 'display:none' : '';
 }
-
-// تهيئة عناصر DOM
 function initDOM() {
     DOM.mainContent = document.getElementById('main-content');
     DOM.navTabs = document.querySelectorAll('.nav-tab');
@@ -219,6 +218,7 @@ function initDOM() {
     DOM.modal = document.getElementById('modal');
     DOM.modalTitle = document.getElementById('modal-title');
     DOM.modalBody = document.getElementById('modal-body');
+    DOM.modalFooter = document.getElementById('modal-footer'); // ✅ أضف هذا
     DOM.toast = document.getElementById('toast');
 }
 
@@ -381,7 +381,146 @@ const translations = {
         minutes: "دقيقة",
         hours: "ساعة",
         days: "يوم",
-        avg: "متوسط"
+        avg: "متوسط",
+
+        // التنقل الجانبي
+        nav_main: "الرئيسية",
+        nav_transactions: "المعاملات",
+        nav_financial: "التخطيط المالي",
+        nav_admin: "الإدارة",
+        nav_bank_deposits: "الإيداعات البنكية",
+        nav_correspondence: "الخطابات",
+        nav_purchase_requests: "طلبات الشراء",
+        nav_sla: "مستوى الخدمة",
+        nav_performance: "الأداء",
+        nav_archive: "الأرشيف",
+        nav_ceo_approvals: "موافقات الرئيس",
+        nav_budget: "الموازنة",
+        nav_budget_plan: "خطة الموازنة",
+        nav_budget_workflow: "سير عمل الموازنة",
+
+        // لوحة التحكم — نصوص ديناميكية
+        refresh: "تحديث",
+        total_transactions_label: "إجمالي المعاملات",
+        completed_transactions: "معاملات مكتملة",
+        needs_followup_label: "تحتاج متابعة",
+        total_amounts: "إجمالي المبالغ",
+        urgent_transactions_title: "المعاملات العاجلة",
+        system_overview_title: "نظرة عامة على النظام",
+        bank_balance_today: "الرصيد البنكي — اليوم",
+        completion_rate: "معدل ساعات إنجاز المعاملات",
+        investments_this_month: "الودائع الاستثمارية — هذا الشهر",
+        last_events: "آخر الأحداث",
+        last_reservations: "آخر الحجوزات",
+        view_all: "عرض الكل",
+        no_urgent: "لا توجد معاملات عاجلة",
+        all_normal: "جميع المعاملات تسير بشكل طبيعي",
+        no_bank_accounts: "لا توجد حسابات بنكية",
+        no_performance_data: "لا توجد بيانات أداء بعد",
+        no_reservations: "لا توجد حجوزات حديثة",
+        no_events: "لا توجد أحداث",
+        no_investments_month: "لا توجد ودائع تستحق هذا الشهر",
+        loading_row: "جاري التحميل...",
+        error_load: "خطأ في التحميل",
+        error_data: "خطأ في تحميل البيانات",
+        total_balances: "إجمالي الأرصدة",
+        total_reservations: "إجمالي الحجوزات",
+        avg_completion: "متوسط إنجاز المعاملة",
+        analyzed_transactions: "معاملة محللة",
+        more_transactions: "معاملات أخرى — عرض الكل",
+        click_to_view: "اضغط للعرض",
+        // فلاتر العاجلة
+        filter_all: "الكل",
+        filter_urgent: "🔴 عاجل",
+        filter_important: "🟠 مهم",
+        filter_followup: "⚠️ متابعة",
+        // نظرة عامة صفوف
+        row_transactions: "المعاملات المالية",
+        row_receiving: "قسم الاستلام",
+        row_budget_dept: "قسم الموازنة",
+        row_payment_dept: "قسم الدفع",
+        row_invoice_dept: "قسم الفوترة",
+        row_correspondence: "الخطابات والمراسلات",
+        row_bank_accounts: "الحسابات البنكية",
+        row_reservations_dept: "الحجوزات",
+        row_sla: "نظام SLA",
+        // أعمدة الإحصاء
+        col_all: "الكل",
+        col_completed: "مكتملة",
+        col_pending: "معلقة",
+        col_urgent_col: "عاجلة",
+        col_received: "مستلمة",
+        col_waiting: "انتظار",
+        col_total: "إجمالي",
+        col_amounts: "المبالغ",
+        col_paid: "مدفوع",
+        col_payments: "المدفوعات",
+        col_invoiced: "مفوترة",
+        col_in_progress: "قيد الإجراء",
+        col_account: "حساب",
+        col_approved: "معتمد",
+        col_processing: "معالجة",
+        col_urgent_count: "عاجلة",
+        // مراحل الأداء
+        stage_creation: "الإنشاء",
+        stage_receiving: "الاستلام",
+        stage_budget: "الموازنة",
+        stage_payment: "الدفع",
+        stage_invoice: "الفوترة",
+        // وحدات الوقت
+        unit_minute: "دقيقة",
+        unit_hour: "ساعة",
+        unit_day: "يوم",
+        unit_now: "الآن",
+        unit_days_short: "ي",
+        unit_hours_short: "س",
+        unit_mins_short: "د",
+        // الودائع
+        active_deposits: "وديعة نشطة",
+        overdue_close: "مستحقة الإغلاق",
+        matures_this_month: "تستحق هذا الشهر",
+        expected_profit: "ربح متوقع",
+        closed_count: "تم إغلاقها",
+        annual_rate: "سنوياً",
+        closed_ok: "تم الإغلاق ✅",
+        due_now: "مستحقة الآن 🔴",
+        within_days: "خلال",
+        days_alarm: "أيام ⏰",
+        // حالات الحجوزات
+        status_draft: "مسودة",
+        status_reviewing: "قيد المراجعة",
+        status_approved: "معتمد",
+        status_rejected: "مرفوض",
+        status_done: "مكتمل",
+        // التحية
+        greeting_morning: "صباح الخير",
+        greeting_afternoon: "مساء الخير",
+        greeting_evening: "مساء النور",
+        // صفحة الأداء
+        perf_title: "متابعة الأداء",
+        perf_subtitle: "سجل أحداث وتغييرات المعاملات في النظام",
+        perf_events_today: "أحداث اليوم",
+        perf_avg_time: "متوسط الوقت",
+        perf_stage_filter: "المرحلة",
+        perf_all_stages: "جميع المراحل",
+        perf_date_from: "من تاريخ",
+        perf_date_to: "إلى تاريخ",
+        perf_reset: "إعادة تعيين",
+        perf_all_events: "سجل جميع الأحداث والتغييرات",
+        // الأولوية
+        priority_modal_title: "تحديد أولوية",
+        priority_choose: "اختر مستوى الأولوية لهذه المعاملة",
+        priority_urgent: "عاجل جداً",
+        priority_urgent_desc: "يتطلب اهتماماً فورياً",
+        priority_high: "مهم",
+        priority_high_desc: "أولوية عالية تحتاج متابعة",
+        priority_normal: "عادي",
+        priority_normal_desc: "إزالة من قائمة العاجلة",
+        priority_note: "ملاحظة (اختياري)",
+        priority_note_ph: "سبب تحديد الأولوية...",
+        priority_saved: "تم تحديث الأولوية",
+        priority_failed: "فشل التحديث",
+        error_connection: "خطأ في الاتصال"
     },
 
     en: {
@@ -510,7 +649,146 @@ const translations = {
         minutes: "min",
         hours: "hr",
         days: "day",
-        avg: "avg"
+        avg: "avg",
+
+        // Sidebar navigation
+        nav_main: "Main",
+        nav_transactions: "Transactions",
+        nav_financial: "Financial Planning",
+        nav_admin: "Administration",
+        nav_bank_deposits: "Bank Deposits",
+        nav_correspondence: "Correspondence",
+        nav_purchase_requests: "Purchase Requests",
+        nav_sla: "Service Level",
+        nav_performance: "Performance",
+        nav_archive: "Archive",
+        nav_ceo_approvals: "CEO Approvals",
+        nav_budget: "Budget",
+        nav_budget_plan: "Budget Plan",
+        nav_budget_workflow: "Budget Workflow",
+
+        // Dashboard — dynamic text
+        refresh: "Refresh",
+        total_transactions_label: "Total Transactions",
+        completed_transactions: "Completed Transactions",
+        needs_followup_label: "Needs Follow-up",
+        total_amounts: "Total Amount",
+        urgent_transactions_title: "Urgent Transactions",
+        system_overview_title: "System Overview",
+        bank_balance_today: "Bank Balance — Today",
+        completion_rate: "Average Transaction Completion Time",
+        investments_this_month: "Investment Deposits — This Month",
+        last_events: "Recent Events",
+        last_reservations: "Recent Reservations",
+        view_all: "View All",
+        no_urgent: "No Urgent Transactions",
+        all_normal: "All transactions are proceeding normally",
+        no_bank_accounts: "No bank accounts found",
+        no_performance_data: "No performance data yet",
+        no_reservations: "No recent reservations",
+        no_events: "No events found",
+        no_investments_month: "No deposits maturing this month",
+        loading_row: "Loading...",
+        error_load: "Error loading",
+        error_data: "Error loading data",
+        total_balances: "Total Balances",
+        total_reservations: "Total Reservations",
+        avg_completion: "Average Transaction Completion",
+        analyzed_transactions: "transactions analyzed",
+        more_transactions: "more transactions — View All",
+        click_to_view: "Click to view",
+        // Urgent filters
+        filter_all: "All",
+        filter_urgent: "🔴 Urgent",
+        filter_important: "🟠 Important",
+        filter_followup: "⚠️ Follow-up",
+        // System overview rows
+        row_transactions: "Financial Transactions",
+        row_receiving: "Receiving Dept.",
+        row_budget_dept: "Budget Dept.",
+        row_payment_dept: "Payment Dept.",
+        row_invoice_dept: "Invoice Dept.",
+        row_correspondence: "Correspondence",
+        row_bank_accounts: "Bank Accounts",
+        row_reservations_dept: "Reservations",
+        row_sla: "SLA System",
+        // Stat columns
+        col_all: "All",
+        col_completed: "Completed",
+        col_pending: "Pending",
+        col_urgent_col: "Urgent",
+        col_received: "Received",
+        col_waiting: "Waiting",
+        col_total: "Total",
+        col_amounts: "Amounts",
+        col_paid: "Paid",
+        col_payments: "Payments",
+        col_invoiced: "Invoiced",
+        col_in_progress: "In Progress",
+        col_account: "Account",
+        col_approved: "Approved",
+        col_processing: "Processing",
+        col_urgent_count: "Urgent",
+        // Performance stages
+        stage_creation: "Creation",
+        stage_receiving: "Receiving",
+        stage_budget: "Budget",
+        stage_payment: "Payment",
+        stage_invoice: "Invoice",
+        // Time units
+        unit_minute: "minute",
+        unit_hour: "hour",
+        unit_day: "day",
+        unit_now: "Now",
+        unit_days_short: "d",
+        unit_hours_short: "h",
+        unit_mins_short: "m",
+        // Investments
+        active_deposits: "active deposits",
+        overdue_close: "overdue closure",
+        matures_this_month: "maturing this month",
+        expected_profit: "Expected Profit",
+        closed_count: "closed",
+        annual_rate: "annually",
+        closed_ok: "Closed ✅",
+        due_now: "Due Now 🔴",
+        within_days: "within",
+        days_alarm: "days ⏰",
+        // Reservation statuses
+        status_draft: "Draft",
+        status_reviewing: "Under Review",
+        status_approved: "Approved",
+        status_rejected: "Rejected",
+        status_done: "Completed",
+        // Greeting
+        greeting_morning: "Good Morning",
+        greeting_afternoon: "Good Afternoon",
+        greeting_evening: "Good Evening",
+        // Performance page
+        perf_title: "Performance Tracking",
+        perf_subtitle: "Event log and transaction changes in the system",
+        perf_events_today: "Events Today",
+        perf_avg_time: "Average Time",
+        perf_stage_filter: "Stage",
+        perf_all_stages: "All Stages",
+        perf_date_from: "From Date",
+        perf_date_to: "To Date",
+        perf_reset: "Reset",
+        perf_all_events: "All Events & Changes Log",
+        // Priority modal
+        priority_modal_title: "Set Priority",
+        priority_choose: "Choose the priority level for this transaction",
+        priority_urgent: "Very Urgent",
+        priority_urgent_desc: "Requires immediate attention",
+        priority_high: "Important",
+        priority_high_desc: "High priority, needs follow-up",
+        priority_normal: "Normal",
+        priority_normal_desc: "Remove from urgent list",
+        priority_note: "Note (optional)",
+        priority_note_ph: "Reason for setting priority...",
+        priority_saved: "Priority updated successfully",
+        priority_failed: "Update failed",
+        error_connection: "Connection error"
     }
 };
 
@@ -522,110 +800,169 @@ function t(key) {
     return translations[currentLang][key] || translations['ar'][key] || key;
 }
 
-// دالة تبديل اللغة
+// دالة تبديل اللغة — مع انيميشن
 function toggleLanguage() {
+    // انيميشن على الزر
+    const btn = document.getElementById('langToggleBtn');
+    if (btn) {
+        btn.classList.add('switching');
+        setTimeout(() => btn.classList.remove('switching'), 350);
+    }
     currentLang = currentLang === 'ar' ? 'en' : 'ar';
     localStorage.setItem('app_language', currentLang);
+    // حفظ في Cookie أيضاً حتى يقرأها PHP عند التحديث
+    document.cookie = `app_language=${currentLang};path=/;max-age=31536000`;
     applyLanguage();
+    // toast إشعار
+    const msg = currentLang === 'ar' ? '🇸🇦 تم التحويل إلى العربية' : '🇬🇧 Switched to English';
+    if (typeof showToast === 'function') showToast(msg, 'success');
 }
 
-// دالة تطبيق اللغة
+// دالة تطبيق اللغة — كاملة
 function applyLanguage() {
     const html = document.documentElement;
+    const isAr = currentLang === 'ar';
 
-    // تغيير اتجاه الصفحة
-    if (currentLang === 'ar') {
-        html.setAttribute('dir', 'rtl');
-        html.setAttribute('lang', 'ar');
-    } else {
-        html.setAttribute('dir', 'ltr');
-        html.setAttribute('lang', 'en');
-    }
-
+    // ── 1. اتجاه الصفحة — نستخدم dir لأن rtl-ltr.css يعتمد عليه ──
+    html.setAttribute('dir', isAr ? 'rtl' : 'ltr');
+    html.setAttribute('lang', currentLang);
     html.setAttribute('data-lang', currentLang);
 
-    // تحديث نص زر اللغة
-    // const langText = document.querySelector('.lang-text');
-    // if (langText) {
-    //     langText.textContent = currentLang === 'ar' ? 'EN' : 'ع';
-    // }
+    // ── 2. إصلاح موضع زر الطي ──
+    _fixSidebarToggleForLang();
 
-    // تحديث جميع العناصر التي تحتوي على data-i18n
+    // ── 3. تحديث data-i18n نصوص ──
     document.querySelectorAll('[data-i18n]').forEach(el => {
         const key = el.getAttribute('data-i18n');
-        if (translations[currentLang][key]) {
-            el.textContent = translations[currentLang][key];
-        }
+        const val = translations[currentLang]?.[key] || translations['ar']?.[key];
+        if (val !== undefined) el.textContent = val;
     });
 
-    // تحديث العناصر التي تحتوي على data-i18n-title
+    // ── 4. تحديث title ──
     document.querySelectorAll('[data-i18n-title]').forEach(el => {
         const key = el.getAttribute('data-i18n-title');
-        if (translations[currentLang][key]) {
-            el.setAttribute('title', translations[currentLang][key]);
-        }
+        const val = translations[currentLang]?.[key] || translations['ar']?.[key];
+        if (val !== undefined) el.setAttribute('title', val);
     });
 
-    // تحديث العناصر التي تحتوي على data-i18n-placeholder
+    // ── 5. تحديث placeholder ──
     document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
         const key = el.getAttribute('data-i18n-placeholder');
-        if (translations[currentLang][key]) {
-            el.setAttribute('placeholder', translations[currentLang][key]);
-        }
+        const val = translations[currentLang]?.[key] || translations['ar']?.[key];
+        if (val !== undefined) el.setAttribute('placeholder', val);
     });
 
-    // إعادة تحميل المحتوى الحالي
+    // ── 6. تحديث aria-label ──
+    document.querySelectorAll('[data-i18n-aria]').forEach(el => {
+        const key = el.getAttribute('data-i18n-aria');
+        const val = translations[currentLang]?.[key] || translations['ar']?.[key];
+        if (val !== undefined) el.setAttribute('aria-label', val);
+    });
+
+    // ── 7. إعادة تحميل المحتوى الحالي ──
     refreshCurrentContent();
 }
 
-// دالة إعادة تحميل المحتوى الحالي
-function refreshCurrentContent() {
-    if (typeof App !== 'undefined' && App.currentTab) {
-        if (App.currentTab === 'dashboard') {
-            if (typeof loadDashboard === 'function') loadDashboard();
-        } else if (App.currentTab === 'transactions') {
-            if (typeof loadTransactions === 'function') loadTransactions();
-        } else if (App.currentTab === 'settings') {
-            if (typeof loadSettingsPage === 'function') loadSettingsPage();
-        } else if (App.currentTab === 'sla') {
-            if (typeof loadSlaPage === 'function') loadSlaPage();
-        } else if (App.currentTab === 'performance') {
-            if (typeof loadPerformancePage === 'function') loadPerformancePage();
+// إصلاح موضع زر الطي في وضع LTR
+function _fixSidebarToggleForLang() {
+    const toggle = document.getElementById('sidebarToggle');
+    if (!toggle) return;
+    const sidebar = document.getElementById('sidebar');
+    if (!sidebar) return;
+    const isCollapsed = sidebar.classList.contains('collapsed');
+    const isEn = currentLang === 'en';
+
+    if (isEn) {
+        const width = isCollapsed
+            ? getComputedStyle(document.documentElement).getPropertyValue('--sidebar-collapsed').trim()
+            : getComputedStyle(document.documentElement).getPropertyValue('--sidebar-width').trim();
+        toggle.style.right = '';
+        toggle.style.left = 'calc(' + width + ' - 14px)';
+    } else {
+        const width = isCollapsed
+            ? getComputedStyle(document.documentElement).getPropertyValue('--sidebar-collapsed').trim()
+            : getComputedStyle(document.documentElement).getPropertyValue('--sidebar-width').trim();
+        toggle.style.left = '';
+        toggle.style.right = 'calc(' + width + ' - 14px)';
+    }
+
+    // تحديث أيقونة السهم
+    const closeIcon = toggle.querySelector('.toggle-icon-close polyline');
+    const openIcon = toggle.querySelector('.toggle-icon-open polyline');
+    if (closeIcon && openIcon) {
+        if (isEn) {
+            closeIcon.setAttribute('points', '9 18 15 12 9 6');
+            openIcon.setAttribute('points', '15 18 9 12 15 6');
+        } else {
+            closeIcon.setAttribute('points', '15 18 9 12 15 6');
+            openIcon.setAttribute('points', '9 18 15 12 9 6');
         }
     }
+}
+
+// دالة إعادة تحميل المحتوى الحالي بعد تغيير اللغة
+function refreshCurrentContent() {
+    if (typeof App === 'undefined' || !App.currentTab) return;
+    const tab = App.currentTab;
+    if (tab === 'dashboard' && typeof loadDashboard === 'function') loadDashboard();
+    else if (tab === 'transactions' && typeof loadTransactions === 'function') loadTransactions();
+    else if (tab === 'settings' && typeof loadSettingsPage === 'function') loadSettingsPage();
+    else if (tab === 'sla' && typeof loadSlaCentralPage === 'function') loadSlaCentralPage();
+    else if (tab === 'performance' && typeof loadPerformancePage === 'function') loadPerformancePage();
+    else if (tab === 'notifications' && typeof loadNotificationsPage === 'function') loadNotificationsPage();
+    else if (tab === 'correspondence' && typeof loadCorrespondencePage === 'function') loadCorrespondencePage();
+    else if (tab === 'purchase-requests' && typeof loadPurchaseRequestsPage === 'function') loadPurchaseRequestsPage();
+    else if (tab === 'archive' && typeof loadArchivePage === 'function') loadArchivePage();
+    else if (tab === 'reservations' || tab === 'budget-plans') {
+        if (typeof loadBudgetReservationsPage === 'function') loadBudgetReservationsPage();
+    }
+    else if (tab === 'bank-overview' || tab === 'bank-accounts' || tab === 'bank-investments') {
+        if (typeof loadBankDepositsPage === 'function') loadBankDepositsPage();
+    }
+    else if (tab === 'daily-payments' && typeof loadDailyPaymentsPage === 'function') loadDailyPaymentsPage();
+    else if (tab === 'ceo-approvals' && typeof loadCeoApprovalsPage === 'function') loadCeoApprovalsPage();
 }
 
 // تهيئة اللغة عند تحميل الصفحة
 function initLanguage() {
-    currentLang = localStorage.getItem('app_language') || 'ar';
+    // اقرأ من localStorage أولاً، ثم من Cookie، ثم من html data-lang (الذي حدده PHP)
+    const fromStorage = localStorage.getItem('app_language');
+    const fromCookie = document.cookie.split(';').map(c => c.trim())
+        .find(c => c.startsWith('app_language='))?.split('=')[1];
+    const fromHTML = document.documentElement.getAttribute('data-lang');
+
+    currentLang = fromStorage || fromCookie || fromHTML || 'ar';
+
+    // مزامنة الكل
+    localStorage.setItem('app_language', currentLang);
+    document.cookie = `app_language=${currentLang};path=/;max-age=31536000`;
+
     const html = document.documentElement;
-
-    if (currentLang === 'en') {
-        html.setAttribute('dir', 'ltr');
-        html.setAttribute('lang', 'en');
-    }
-
+    html.setAttribute('dir', currentLang === 'ar' ? 'rtl' : 'ltr');
+    html.setAttribute('lang', currentLang);
     html.setAttribute('data-lang', currentLang);
-
-    // const langText = document.querySelector('.lang-text');
-    // if (langText) {
-    //     langText.textContent = currentLang === 'ar' ? 'EN' : 'ع';
-    // }
 
     // تحديث العناصر الثابتة
     document.querySelectorAll('[data-i18n]').forEach(el => {
         const key = el.getAttribute('data-i18n');
-        if (translations[currentLang][key]) {
-            el.textContent = translations[currentLang][key];
-        }
+        const val = translations[currentLang]?.[key] || translations['ar']?.[key];
+        if (val !== undefined) el.textContent = val;
     });
 
     document.querySelectorAll('[data-i18n-title]').forEach(el => {
         const key = el.getAttribute('data-i18n-title');
-        if (translations[currentLang][key]) {
-            el.setAttribute('title', translations[currentLang][key]);
-        }
+        const val = translations[currentLang]?.[key] || translations['ar']?.[key];
+        if (val !== undefined) el.setAttribute('title', val);
     });
+
+    document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+        const key = el.getAttribute('data-i18n-placeholder');
+        const val = translations[currentLang]?.[key] || translations['ar']?.[key];
+        if (val !== undefined) el.setAttribute('placeholder', val);
+    });
+
+    // إصلاح موضع زر الطي
+    _fixSidebarToggleForLang();
 }
 // ========== نظام الترجمة (i18n) النهاية ==========
 
@@ -634,6 +971,7 @@ window.t = t;
 window.toggleLanguage = toggleLanguage;
 window.applyLanguage = applyLanguage;
 window.initLanguage = initLanguage;
+window._fixSidebarToggleForLang = _fixSidebarToggleForLang;
 
 
 
@@ -775,9 +1113,10 @@ function formatNumber(amount) {
 function formatCreationTime(datetime) {
     if (!datetime) return '—';
     try {
+        const locale = (typeof currentLang !== 'undefined' && currentLang === 'en') ? 'en-US' : 'ar-SA';
         const date = new Date(datetime);
-        const dateStr = date.toLocaleDateString('ar-SA', { year: 'numeric', month: 'short', day: 'numeric' });
-        const timeStr = date.toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
+        const dateStr = date.toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric' });
+        const timeStr = date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
         return dateStr + ' - ' + timeStr;
     } catch (e) {
         return datetime;
@@ -853,18 +1192,28 @@ function switchTab(tab) {
         const perms = currentUser.pagePermissions || {};
         if (perms.hasOwnProperty(tab) && !perms[tab]) {
             if (DOM.mainContent) {
+                const isEn = (typeof currentLang !== 'undefined' && currentLang === 'en');
                 DOM.mainContent.innerHTML = `
                     <div style="display:flex;flex-direction:column;align-items:center;
                                 justify-content:center;min-height:55vh;gap:.85rem;
                                 color:var(--text-muted);text-align:center;padding:2rem">
                         <div style="font-size:3.5rem;opacity:.35">🔒</div>
-                        <h2 style="margin:0;color:var(--text-primary);font-size:1.2rem">غير مصرح بالوصول</h2>
+                        <h2 style="margin:0;color:var(--text-primary);font-size:1.2rem">
+                            ${isEn ? 'Access Denied' : 'غير مصرح بالوصول'}
+                        </h2>
                         <p style="margin:0;font-size:.85rem;max-width:300px;line-height:1.6">
-                            ليس لديك صلاحية لعرض هذه الصفحة.<br>تواصل مع مدير النظام.
+                            ${isEn
+                        ? 'You do not have permission to view this page.<br>Contact the system administrator.'
+                        : 'ليس لديك صلاحية لعرض هذه الصفحة.<br>تواصل مع مدير النظام.'}
                         </p>
                     </div>`;
             }
-            showToast('🔒 ليس لديك صلاحية الوصول لهذه الصفحة', 'error');
+            showToast(
+                (typeof currentLang !== 'undefined' && currentLang === 'en')
+                    ? '🔒 Access denied'
+                    : '🔒 ليس لديك صلاحية الوصول لهذه الصفحة',
+                'error'
+            );
             return;
         }
     }
@@ -896,7 +1245,7 @@ function switchTab(tab) {
     } else if (tab === 'notifications') {
         if (typeof loadNotificationsPage === 'function') loadNotificationsPage();
     } else if (tab === 'sla') {
-        if (typeof loadSlaPage === 'function') loadSlaPage();
+        if (typeof loadSlaCentralPage === 'function') loadSlaCentralPage(); else if (typeof loadSlaPage === 'function') loadSlaPage();
     } else if (tab === 'performance') {
         if (typeof loadPerformancePage === 'function') loadPerformancePage();
     } else if (tab === 'budget-plans') {
@@ -922,6 +1271,8 @@ function switchTab(tab) {
         if (typeof loadCeoApprovalsPage === 'function') loadCeoApprovalsPage();
     } else if (tab === 'purchase-requests') {
         if (typeof loadPurchaseRequestsPage === 'function') loadPurchaseRequestsPage();
+    } else if (tab === 'reports') {
+        if (typeof loadReportsPage === 'function') loadReportsPage();
     }
 }
 
@@ -966,11 +1317,6 @@ function openTab(tab, groupId) {
 
 // ── خاص بتبويبات الخزينة (bank-deposits sub-tabs) ──────────
 function openBankSubTab(subTab, groupId) {
-    // افتح مجموعة treasury
-    document.querySelectorAll('.nav-parent').forEach(p => p.classList.remove('open'));
-    const parent = document.getElementById('nav-parent-' + (groupId || 'treasury'));
-    if (parent) parent.classList.add('open');
-
     // خريطة subTab → data-tab
     const dataTabMap = {
         overview: 'bank-overview',
@@ -978,27 +1324,27 @@ function openBankSubTab(subTab, groupId) {
         investments: 'bank-investments',
     };
     const dataTab = dataTabMap[subTab] || 'bank-overview';
+
+    // فعّل الزر الصحيح في السايدبار
     document.querySelectorAll('.nav-tab').forEach(t => {
         t.classList.toggle('active', t.dataset.tab === dataTab);
     });
     App.currentTab = dataTab;
 
-    // حمّل صفحة bank-deposits إذا لم تكن محملة، ثم انتقل للتاب
+    // إذا الصفحة محملة → بدّل التاب مباشرة
+    if (typeof switchBankTab === 'function' && document.getElementById('bank-tab-overview')) {
+        switchBankTab(subTab);
+        return;
+    }
+
+    // الصفحة غير محملة → حمّلها مع تمرير التاب المطلوب
     if (typeof loadBankDepositsPage === 'function') {
-        const doSwitch = () => { if (typeof switchBankTab === 'function') switchBankTab(subTab); };
-        const result = loadBankDepositsPage();
-        if (result && typeof result.then === 'function') result.then(doSwitch);
-        else setTimeout(doSwitch, 300);
+        loadBankDepositsPage(subTab);
     }
 }
 
 // ── خاص بتبويبات الموازنة (حجوزات / موازنة تقديرية) ─────────
 function openBudgetSubTab(subTab) {
-    // افتح مجموعة budget
-    document.querySelectorAll('.nav-parent').forEach(p => p.classList.remove('open'));
-    const parent = document.getElementById('nav-parent-budget');
-    if (parent) parent.classList.add('open');
-
     // فعّل الزر الصحيح بناءً على data-tab
     const targetDataTab = subTab === 'plans' ? 'budget-plans' : 'reservations';
     document.querySelectorAll('.nav-tab').forEach(t => {
