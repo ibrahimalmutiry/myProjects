@@ -1564,7 +1564,7 @@ function fmtMoney(v, currency) {
     const cur = currency || 'SAR';
     if (typeof fmtMoneyCur === 'function') return fmtMoneyCur(parseFloat(v) || 0, cur);
     if (typeof fmtMoneyVal === 'function') return fmtMoneyVal(v);
-    return new Intl.NumberFormat('ar-SA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v || 0) + ' ر.س';
+    return new Intl.NumberFormat('ar-SA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v || 0) + ' <span class="sar-symbol" aria-label="ريال سعودي"></span>';
 }
 
 function fmtDate(d) {

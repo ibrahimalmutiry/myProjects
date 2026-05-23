@@ -31,6 +31,31 @@ const PRState = {
     userAccess: null,   // يُجلب من API: { is_supply_chain, is_view_all, role }
 };
 
+// ── أسماء المراحل الافتراضية ─────────────────────────────
+function getPRStageNamesDefault() {
+    return {
+        draft: 'مسودة', reception: 'الاستلام والتحقق',
+        budget_review: 'مراجعة موظف الموازنة', treasury_review: 'مراجعة مدير الخزينة',
+        finance_review: 'مراجعة رئيس القطاع المالي', treasury_finance_review: 'مراجعة الخزينة والمالية',
+        ceo_approval: 'موافقة الرئيس التنفيذي', purchasing: 'المشتريات — إنشاء حجز',
+        waiting_budget_approval: 'اعتماد حجز الموازنة', accounts_review: 'الحسابات — مراجعة وتوزيع',
+        po_issuance: 'إصدار أمر الشراء', payment: 'المالية — الدفع',
+        completed: 'مكتملة', rejected: 'مرفوضة', returned: 'مُرجَعة للمنشئ',
+    };
+}
+
+// ── تحميل أسماء المراحل من DB ────────────────────────────
+if (!PRState.stageNamesCache) PRState.stageNamesCache = {};
+async function prLoadStageNames() {
+    try {
+        const r = await fetch('api/purchase_requests_api.php?action=stage_names');
+        const d = await r.json();
+        if (d.success && d.names) Object.assign(PRState.stageNamesCache, d.names);
+    } catch (e) { }
+}
+
+
+
 /** أسماء المراحل بالعربية */
 function getPRStageNames() {
     return {
@@ -119,6 +144,8 @@ async function loadPurchaseRequestsPage() {
         await prLoadFormOptions();
     }
 
+    // تحميل أسماء المراحل الديناميكية
+    prLoadStageNames();
     // تحميل القائمة الرئيسية
     await prLoadRequestsList();
 }
@@ -195,7 +222,7 @@ function prRenderPage() {
                             <line x1="16" y1="13" x2="8" y2="13"/>
                             <line x1="16" y1="17" x2="8" y2="17"/>
                         </svg>
-                        المعاملات
+                        طلبات الشراء
                     </h2>
                     <span class="pr-count-badge">${PRState.requests.length} طلب</span>
                 </div>
@@ -366,7 +393,7 @@ function prEmptyState() {
     return `
         <div class="pr-empty">
             <div class="pr-empty-icon">📋</div>
-            <p>لا توجد معاملات حالياً</p>
+            <p>لا توجد طلبات شراء حالياً</p>
             <button class="btn btn-primary" onclick="prOpenCreateModal()">إنشاء طلب جديد</button>
         </div>
     `;
@@ -408,6 +435,7 @@ async function prOpenDetail(requestId) {
  * @param {Object} req بيانات الطلب مع الأحداث والمرفقات
  */
 function prRenderDetail(req) {
+    _prCurrentReq = req;
     const stageName = PR_STAGE_NAMES[req.current_stage] || req.current_stage;
     const stageColor = PR_STAGE_COLORS[req.current_stage] || '#94a3b8';
     const canApprove = prCanApproveCurrentStage(req);
@@ -447,37 +475,11 @@ function prRenderDetail(req) {
         }
     }
 
-    // مسار المعاملة
-    const stages = req.workflow_stages || [];
-    const totalSteps = stages.length;
-    const doneCount = stages.filter(s => ['approved', 'completed'].includes(s.status)).length;
+    // مسار المعاملة — التصميم الجديد
+    const stepperHTML = prBuildStepperHTML(req);
+    const doneCount = (req.workflow_stages || []).filter(s => ['approved', 'completed'].includes(s.status)).length;
+    const totalSteps = (req.workflow_stages || []).length;
     const pct = totalSteps > 1 ? Math.round(doneCount / (totalSteps - 1) * 100) : 100;
-
-    const stepsHTML = stages.map((s, idx) => {
-        const done = ['approved', 'completed'].includes(s.status);
-        const current = s.stage_name === req.current_stage;
-        const rejected = s.status === 'rejected';
-        const name = PR_STAGE_NAMES[s.stage_name] || s.stage_name;
-        const who = s.approved_by_name || s.employee_name || '';
-        const date = s.completed_at ? prFormatDate(s.completed_at) : '';
-        let state = done ? 'done' : current ? 'active' : rejected ? 'rejected' : 'pending';
-        const clr = { done: '#22c55e', active: '#3b82f6', rejected: '#ef4444', pending: '#cbd5e1' }[state];
-        let inner = done
-            ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.5"><polyline points="20 6 9 17 4 12"/></svg>`
-            : rejected ? `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`
-                : current ? `<span class="d3-pulse"></span>`
-                    : `<span style="font-size:.62rem;font-weight:700;color:#94a3b8">${idx + 1}</span>`;
-        return `
-        <div class="d3-step d3-step-${state}">
-            <div class="d3-step-circle" style="background:${clr};border-color:${clr};${current ? 'box-shadow:0 0 0 5px rgba(59,130,246,.18)' : ''}">${inner}</div>
-            <div class="d3-step-info">
-                <span class="d3-step-name">${name}</span>
-                ${who ? `<span class="d3-step-who">${who}</span>` : ''}
-                ${date ? `<span class="d3-step-date">${date}</span>` : ''}
-            </div>
-        </div>
-        ${idx < totalSteps - 1 ? `<div class="d3-step-line${done ? ' d3-step-line-done' : ''}"></div>` : ''}`;
-    }).join('');
 
     // SLA strip فوق المسار
     const slaStrip = prRenderSlaStrip(req.sla_status);
@@ -515,20 +517,17 @@ function prRenderDetail(req) {
                 ${!isClosed ? `<span class="d3-pill" style="background:${stageColor}18;color:${stageColor};border-color:${stageColor}35">${stageName}</span>` : ''}
                 ${req.priority === 'urgent' ? `<span class="d3-urgent">⚡ ${tr('عاجل')}</span>` : ''}
             </div>
-            <div class="d3-header-actions">${actionBtns}</div>
+            <div class="d3-header-actions">
+                ${actionBtns}
+                <button class="d3-btn d3-btn-ghost" onclick="prExportPDF(${req.id})">${tr('PDF')}</button>
+            </div>
         </div>
 
         <!-- ══ SLA Strip فوق المسار ══════════════════════════════ -->
         ${slaStrip}
 
         <!-- ══ Stepper ══════════════════════════════════════════ -->
-        <div class="d3-stepper-card">
-            <div class="d3-card-label">${tr('مسار المعاملة')}
-                <span class="d3-pct-badge" style="${pct >= 100 ? 'background:#dcfce7;color:#16a34a' : 'background:#dbeafe;color:#1d4ed8'}">${pct}%</span>
-                <span class="d3-steps-count">${doneCount} / ${totalSteps}</span>
-            </div>
-            <div class="d3-stepper">${stepsHTML}</div>
-        </div>
+        ${stepperHTML}
 
         <!-- ══ بيانات الطلب بين المسار وسجل النشاط ══════════════ -->
         <div class="d3-info-col">
@@ -545,6 +544,26 @@ function prRenderDetail(req) {
                             <div class="d3-amount-final">${prFormatAmount(req.final_amount, req.currency)}</div>
                             <div class="d3-amount-lbl">${tr('المبلغ النهائي')}</div>
                         </div>` : ''}
+                    </div>
+
+                    <!-- quick stats -->
+                    <div class="pr-quick-stats">
+                        <div class="pr-qs-item">
+                            <span class="pr-qs-val">${req.amount ? prFormatAmount(req.amount, req.currency) : '—'}</span>
+                            <span class="pr-qs-lbl">${tr('المبلغ التقديري')}</span>
+                        </div>
+                        <div class="pr-qs-item pr-qs-divider">
+                            <span class="pr-qs-val">${(req.workflow_stages || []).filter(function (s) { return s.status === 'approved' || s.status === 'completed'; }).length} / ${(req.workflow_stages || []).length}</span>
+                            <span class="pr-qs-lbl">${tr('مراحل')}</span>
+                        </div>
+                        <div class="pr-qs-item pr-qs-divider">
+                            <span class="pr-qs-val">${(req.attachments || []).length}</span>
+                            <span class="pr-qs-lbl">${tr('مرفقات')}</span>
+                        </div>
+                        <div class="pr-qs-item pr-qs-divider">
+                            <span class="pr-qs-val">${req.created_at ? Math.floor((Date.now() - new Date(req.created_at)) / (86400000)) : '—'}</span>
+                            <span class="pr-qs-lbl">${tr('يوم منذ الإنشاء')}</span>
+                        </div>
                     </div>
 
                     <!-- sections grid -->
@@ -611,38 +630,73 @@ function prRenderDetail(req) {
                 </div>
             </div><!-- /d3-info-col -->
 
-        <!-- ══ بيانات الدفع — تظهر فقط بعد اكتمال الدفع ══════════ -->
-        ${(req.payment_ref || req.payment_executed_at || req.payment_method) ? `
-        <div class="d3-card" style="margin-top:.8rem">
-            <div class="d3-card-label">💳 ${tr('بيانات الدفع')}</div>
+        <!-- ══ بيانات الدفع ══════════════════════════════════════ -->
+        ${(req.payment_ref || req.payment_executed_at || req.payment_method) ? (function () {
+            var _d = req.payment_executed_at ? new Date(req.payment_executed_at) : null;
+            var piDate = _d ? _d.toLocaleDateString('ar-SA-u-nu-latn', { year: 'numeric', month: 'long', day: 'numeric' }) : '';
+            var piTime = _d ? _d.toLocaleTimeString('ar-SA-u-nu-latn', { hour: '2-digit', minute: '2-digit', hour12: true }) : '';
+            var piName = req.payment_executed_by_name || '';
+            var piRole = req.payment_executed_by_role || '';
+            var piTitle = req.payment_executed_by_title || '';
+            var _roleMap2 = {
+                'system_admin': 'مدير النظام', 'CEO': 'الرئيس التنفيذي', 'sector_head': 'رئيس القطاع',
+                'division_manager': 'مدير القسم', 'budget': 'موظف الموازنة', 'payment': 'موظف الدفع',
+                'purchasing': 'موظف المشتريات', 'receiver': 'موظف الاستلام', 'treasury_manager': 'مدير الخزينة',
+            };
+            var piLabel = piTitle || _roleMap2[piRole] || piRole || '';
+            var piInit = piName ? piName.trim().charAt(0) : '';
+            var receipts = (req.attachments || []).filter(function (a) {
+                return a.attachment_type === 'payment_receipt' || a.attachment_type === 'payment_order';
+            });
 
-            <!-- معلومات الدفع -->
-            <div class="d3-kv-grid" style="padding:.75rem 1rem .5rem;gap:.5rem">
-                ${req.payment_ref ? `<div class="d3-kv2"><span class="d3-k2">رقم أمر الدفع</span><span class="d3-v2" style="font-weight:700;color:#16a34a;font-family:monospace">${req.payment_ref}</span></div>` : ''}
-                ${req.payment_method ? `<div class="d3-kv2"><span class="d3-k2">طريقة الدفع</span><span class="d3-v2">${req.payment_method}</span></div>` : ''}
-                ${req.payment_executed_at ? `<div class="d3-kv2"><span class="d3-k2">تاريخ ووقت الدفع</span><span class="d3-v2">${prFormatDateTime(req.payment_executed_at)}</span></div>` : ''}
-                ${req.payment_notes ? `<div class="d3-kv2"><span class="d3-k2">ملاحظات الدفع</span><span class="d3-v2">${req.payment_notes}</span></div>` : ''}
-            </div>
+            var html = '<div class="d3-card pi-card" style="margin-top:.8rem">';
 
-            <!-- إيصالات الدفع المرفوعة من صفحة المدفوعات -->
-            ${(() => {
-                const receipts = req.attachments?.filter(a =>
-                    a.attachment_type === 'payment_receipt' ||
-                    a.attachment_type === 'payment_order'
-                ) || [];
-                return `
-                <div style="padding:.25rem 1rem .85rem">
-                    <div class="d3-payment-receipts-title">
-                        🧾 إيصالات الدفع
-                        <span class="d3-cnt">${receipts.length}</span>
-                    </div>
-                    ${receipts.length
-                        ? prRenderAttachments(receipts)
-                        : '<div class="pr-no-attach" style="font-style:italic">لم يتم إرفاق إيصالات دفع بعد</div>'
-                    }
-                </div>`;
-            })()}
-        </div>` : ''}
+            // header
+            html += '<div class="pi-header">';
+            html += '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>';
+            html += '<span class="pi-title">' + tr('بيانات الدفع') + '</span>';
+            if (req.payment_ref) html += '<span class="pi-ref">' + req.payment_ref + '</span>';
+            html += '</div>';
+
+            // صف المعلومات
+            html += '<div class="pi-meta-row">';
+            if (req.payment_method) {
+                html += '<div class="pi-meta-item"><span class="pi-meta-lbl">' + tr('طريقة الدفع') + '</span><span class="pi-meta-val">' + req.payment_method + '</span></div>';
+            }
+            if (piDate) {
+                html += '<div class="pi-meta-item"><span class="pi-meta-lbl">' + tr('تاريخ الدفع') + '</span><span class="pi-meta-val">' + piDate + '</span></div>';
+            }
+            if (piTime) {
+                html += '<div class="pi-meta-item"><span class="pi-meta-lbl">' + tr('وقت الدفع') + '</span><span class="pi-meta-val pi-time">' + piTime + '</span></div>';
+            }
+            if (piName) {
+                html += '<div class="pi-meta-item pi-meta-item--executor">';
+                html += '<span class="pi-meta-lbl">' + tr('نُفِّذ بواسطة') + '</span>';
+                html += '<span class="pi-executor">';
+                html += '<span class="pi-avatar">' + piInit + '</span>';
+                html += '<span class="pi-executor-body">';
+                html += '<span class="pi-executor-name">' + piName + '</span>';
+                if (piLabel) html += '<span class="pi-executor-role">' + piLabel + '</span>';
+                html += '</span></span></div>';
+            }
+            if (req.payment_notes) {
+                html += '<div class="pi-meta-item pi-meta-item--full"><span class="pi-meta-lbl">' + tr('ملاحظات الدفع') + '</span><span class="pi-meta-val">' + req.payment_notes + '</span></div>';
+            }
+            html += '</div>';
+
+            // إيصالات
+            html += '<div class="pi-receipts">';
+            html += '<div class="pi-receipts-title">';
+            html += '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
+            html += tr('إيصالات الدفع');
+            html += '<span class="pi-cnt">' + receipts.length + '</span>';
+            html += '</div>';
+            html += receipts.length ? prRenderAttachments(receipts) : '<div class="pi-no-receipts">' + tr('لم يتم إرفاق إيصالات دفع بعد') + '</div>';
+            html += '</div>';
+
+            html += '</div>';
+            return html;
+        })() : ''}
 
         <!-- ══ سجل النشاط ════════════════════════════════════════ -->
         <div class="d3-card" style="margin-top:.8rem">
@@ -650,8 +704,302 @@ function prRenderDetail(req) {
             <div class="d3-events">${prRenderEvents(req.events)}</div>
         </div>
 
+        <div class="d3-card pr-sub-card" style="margin-top:.8rem">
+            <div class="pr-sub-row">
+                <div class="pr-sub-info">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                    <span class="pr-sub-lbl">${tr('التنبيهات')}</span>
+                    <span class="pr-sub-count" id="pr-sub-count-${req.id}">${req.subscription ? req.subscription.total : 0} ${tr('متابع')}</span>
+                </div>
+                <button class="pr-sub-btn ${req.subscription && req.subscription.subscribed ? 'pr-sub-btn--active' : ''}" id="pr-sub-btn-${req.id}" onclick="prToggleSubscription(${req.id})">
+                    ${req.subscription && req.subscription.subscribed
+            ? '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/><line x1="1" y1="1" x2="23" y2="23"/></svg> ' + tr('إلغاء الاشتراك')
+            : '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg> ' + tr('اشترك بالتنبيهات')
+        }
+                </button>
+            </div>
+        </div>
+
+        <div class="d3-card pr-comments-card" style="margin-top:.8rem">
+            <div class="pr-comments-header">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                <span>${tr('تعليقات داخلية')}</span>
+                <span class="d3-cnt" id="pr-comments-cnt-${req.id}">${(req.comments || []).length}</span>
+            </div>
+            <div class="pr-comments-list" id="pr-comments-list-${req.id}">${prRenderComments(req.comments || [])}</div>
+            <div class="pr-comment-input-row">
+                <div class="pr-comment-avatar">${(currentUser.name || 'م').charAt(0)}</div>
+                <input type="text" class="pr-comment-input" id="pr-comment-input-${req.id}" placeholder="${tr('أضف تعليقاً داخلياً...')}" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();prAddComment(${req.id})}">
+                <button class="pr-comment-send" onclick="prAddComment(${req.id})">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                </button>
+            </div>
+        </div>
+
+        ${(req.similar || []).length ? (function () {
+            var rows = (req.similar || []).map(function (s) {
+                return '<div class="pr-similar-row" onclick="prOpenDetailById(' + s.id + ')">'
+                    + '<span class="pr-similar-num">' + s.request_number + '</span>'
+                    + '<span class="pr-similar-title">' + (s.title || '—') + '</span>'
+                    + '<span class="pr-similar-amt">' + parseFloat(s.amount || 0).toLocaleString('ar-SA-u-nu-latn', { maximumFractionDigits: 0 }) + ' ر.س</span>'
+                    + '<span class="pr-stage-pill">' + (PR_STAGE_NAMES[s.current_stage] || s.current_stage) + '</span>'
+                    + '</div>';
+            }).join('');
+            return '<div class="d3-card pr-similar-card" style="margin-top:.8rem">'
+                + '<div class="pr-similar-header"><span>' + tr('طلبات مشابهة') + '</span><span class="d3-cnt">' + (req.similar || []).length + '</span></div>'
+                + '<div class="pr-similar-list">' + rows + '</div>'
+                + '</div>';
+        })() : ''}
+
+        <div class="d3-card pr-links-card" style="margin-top:.8rem">
+            <div class="pr-links-header">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                <span>${tr('طلبات مرتبطة')}</span>
+                <span class="d3-cnt" id="pr-links-cnt-${req.id}">${(req.links || []).length}</span>
+                <button class="pr-links-add-btn" onclick="prOpenAddLinkModal(${req.id})">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    ${tr('ربط')}
+                </button>
+            </div>
+            <div class="pr-links-list" id="pr-links-list-${req.id}">
+                ${(function () {
+            var links = req.links || [];
+            if (!links.length) return '<div class="pr-links-empty">' + tr('لا توجد طلبات مرتبطة بعد') + '</div>';
+            return links.map(function (l) {
+                return '<div class="pr-links-row">'
+                    + '<span class="pr-links-num" onclick="prOpenDetailById(' + (l.linked_pr_id || l.id) + ')" style="cursor:pointer;color:var(--primary)">' + l.request_number + '</span>'
+                    + '<span class="pr-links-title">' + (l.title || '—') + '</span>'
+                    + '<span class="pr-links-amt">' + parseFloat(l.amount || 0).toLocaleString('ar-SA-u-nu-latn', { maximumFractionDigits: 0 }) + ' ر.س</span>'
+                    + '<span class="pr-stage-pill">' + (PR_STAGE_NAMES[l.current_stage] || l.current_stage || '—') + '</span>'
+                    + '<button class="pr-links-remove" onclick="prRemoveLink(' + req.id + ',' + l.linked_pr_id + ')">'
+                    + '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'
+                    + '</button></div>';
+            }).join('');
+        })()}
+            </div>
+        </div>
+
     </div>`;
 }
+
+// ════════════════════════════════════════════
+// دوال الميزات الجديدة
+// ════════════════════════════════════════════
+
+let _prCurrentReq = {};
+
+function prRenderComments(comments) {
+    if (!comments || !comments.length) {
+        return '<div class="pr-comments-empty">' + (typeof tr === 'function' ? tr('لا توجد تعليقات بعد') : 'لا توجد تعليقات بعد') + '</div>';
+    }
+    var _roleMap = {
+        'system_admin': 'مدير النظام', 'CEO': 'الرئيس التنفيذي', 'sector_head': 'رئيس القطاع',
+        'division_manager': 'مدير القسم', 'budget': 'موظف الموازنة', 'payment': 'موظف الدفع',
+        'purchasing': 'موظف المشتريات', 'receiver': 'موظف الاستلام', 'treasury_manager': 'مدير الخزينة',
+    };
+    return comments.map(function (c) {
+        var isMe = parseInt(c.employee_id) === parseInt(currentUser.id);
+        var init = (c.emp_name || 'م').charAt(0);
+        var role = c.emp_title || _roleMap[c.emp_role] || c.emp_role || '';
+        var d = new Date(c.created_at);
+        var dateStr = d.toLocaleDateString('ar-SA-u-nu-latn', { month: 'short', day: 'numeric' }) + ' ' + d.toLocaleTimeString('ar-SA-u-nu-latn', { hour: '2-digit', minute: '2-digit', hour12: true });
+        var html = '<div class="pr-comment-item' + (isMe ? ' pr-comment-mine' : '') + '">';
+        html += '<div class="pr-comment-av">' + init + '</div>';
+        html += '<div class="pr-comment-body">';
+        html += '<div class="pr-comment-meta">';
+        html += '<span class="pr-comment-name">' + (c.emp_name || '—') + '</span>';
+        if (role) html += '<span class="pr-comment-role">' + role + '</span>';
+        html += '<span class="pr-comment-time">' + dateStr + '</span>';
+        if (isMe) {
+            html += '<button class="pr-comment-del" onclick="prDeleteComment(' + c.id + ',' + c.pr_id + ')" title="حذف">';
+            html += '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>';
+            html += '</button>';
+        }
+        html += '</div>';
+        html += '<div class="pr-comment-text">' + c.body + '</div>';
+        html += '</div></div>';
+        return html;
+    }).join('');
+}
+
+async function prAddComment(prId) {
+    var inp = document.getElementById('pr-comment-input-' + prId);
+    var body = inp && inp.value ? inp.value.trim() : '';
+    if (!body) return;
+    inp.disabled = true;
+    try {
+        var res = await fetch('api/purchase_requests_api.php?action=add_comment', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pr_id: prId, body: body })
+        });
+        var data = await res.json();
+        if (data.success) {
+            inp.value = '';
+            var list = document.getElementById('pr-comments-list-' + prId);
+            var empty = list ? list.querySelector('.pr-comments-empty') : null;
+            if (empty) empty.remove();
+            var tmp = document.createElement('div');
+            tmp.innerHTML = prRenderComments([data.comment]);
+            if (list && tmp.firstElementChild) list.appendChild(tmp.firstElementChild);
+            var cnt = document.getElementById('pr-comments-cnt-' + prId);
+            if (cnt) cnt.textContent = parseInt(cnt.textContent || 0) + 1;
+        } else {
+            showToast(data.message || 'خطأ', 'error');
+        }
+    } catch (e) { showToast('خطأ في الاتصال', 'error'); }
+    inp.disabled = false;
+    inp.focus();
+}
+
+async function prDeleteComment(commentId, prId) {
+    if (!confirm('حذف التعليق؟')) return;
+    var res = await fetch('api/purchase_requests_api.php?action=delete_comment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: commentId })
+    });
+    var data = await res.json();
+    if (data.success) {
+        var btn = document.querySelector('.pr-comment-del[onclick="prDeleteComment(' + commentId + ',' + prId + ')"]');
+        if (btn) {
+            var item = btn.closest('.pr-comment-item');
+            if (item) item.remove();
+        }
+        var cnt = document.getElementById('pr-comments-cnt-' + prId);
+        if (cnt) cnt.textContent = Math.max(0, parseInt(cnt.textContent || 0) - 1);
+    }
+}
+
+function prExportPDF(prId) {
+    window.open('pdf_generator.php?type=purchase_request&id=' + prId, '_blank');
+}
+
+async function prToggleSubscription(prId) {
+    var btn = document.getElementById('pr-sub-btn-' + prId);
+    if (btn) btn.disabled = true;
+    try {
+        var res = await fetch('api/purchase_requests_api.php?action=toggle_subscription', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pr_id: prId })
+        });
+        var data = await res.json();
+        if (data.success) {
+            var subscribed = data.subscribed;
+            if (btn) {
+                btn.className = 'pr-sub-btn' + (subscribed ? ' pr-sub-btn--active' : '');
+                if (subscribed) {
+                    btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/><line x1="1" y1="1" x2="23" y2="23"/></svg> ' + tr('إلغاء الاشتراك');
+                } else {
+                    btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg> ' + tr('اشترك بالتنبيهات');
+                }
+            }
+            showToast(subscribed ? 'تم الاشتراك' : 'تم إلغاء الاشتراك', subscribed ? 'success' : 'info');
+        }
+    } catch (e) { showToast('خطأ', 'error'); }
+    if (btn) btn.disabled = false;
+}
+
+function prOpenDetailById(prId) {
+    prOpenDetail(prId);
+}
+
+function prOpenAddLinkModal(prId) {
+    DOM.modalTitle.textContent = tr('ربط بطلب آخر');
+    var html = '';
+    html += '<div class="form-group">';
+    html += '<label class="form-label">' + tr('رقم الطلب المراد ربطه') + '</label>';
+    html += '<input type="text" id="link-pr-num" class="form-input" placeholder="PR-XXXX">';
+    html += '</div>';
+    html += '<div class="form-group">';
+    html += '<label class="form-label">' + tr('ملاحظة') + ' (' + tr('اختياري') + ')</label>';
+    html += '<input type="text" id="link-pr-note" class="form-input" placeholder="' + tr('سبب الربط...') + '">';
+    html += '</div>';
+    html += '<div style="display:flex;gap:.5rem;margin-top:1rem;justify-content:flex-end">';
+    html += '<button class="btn btn-secondary" onclick="closeModal()">' + tr('إلغاء') + '</button>';
+    html += '<button class="btn btn-primary" onclick="prSubmitAddLink(' + prId + ')">' + tr('ربط') + '</button>';
+    html += '</div>';
+    DOM.modalBody.innerHTML = html;
+    openModal();
+}
+
+async function prSubmitAddLink(prId) {
+    var numEl = document.getElementById('link-pr-num');
+    var noteEl = document.getElementById('link-pr-note');
+    var num = numEl ? numEl.value.trim() : '';
+    var note = noteEl ? noteEl.value.trim() : '';
+    if (!num) { showToast('أدخل رقم الطلب', 'error'); return; }
+    var search = await fetch('api/purchase_requests_api.php?action=list&search=' + encodeURIComponent(num));
+    var sData = await search.json();
+    var list = sData.data || sData.requests || [];
+    var found = null;
+    for (var i = 0; i < list.length; i++) { if (list[i].request_number === num) { found = list[i]; break; } }
+    if (!found) { showToast('الطلب غير موجود', 'error'); return; }
+    var res = await fetch('api/purchase_requests_api.php?action=add_link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pr_id: prId, linked_pr_id: found.id, note: note })
+    });
+    var data = await res.json();
+    if (data.success) {
+        showToast('تم الربط بنجاح', 'success');
+        closeModal();
+        var linksRes = await fetch('api/purchase_requests_api.php?action=get_links&pr_id=' + prId);
+        var linksData = await linksRes.json();
+        _prCurrentReq.links = linksData.links || [];
+        var cnt = document.getElementById('pr-links-cnt-' + prId);
+        if (cnt) cnt.textContent = _prCurrentReq.links.length;
+        prRefreshLinksList(prId);
+    } else {
+        showToast(data.message || 'خطأ', 'error');
+    }
+}
+
+function prRefreshLinksList(prId) {
+    var container = document.getElementById('pr-links-list-' + prId);
+    if (!container) return;
+    var links = _prCurrentReq.links || [];
+    if (!links.length) {
+        container.innerHTML = '<div class="pr-links-empty">' + tr('لا توجد طلبات مرتبطة بعد') + '</div>';
+        return;
+    }
+    var html = '';
+    for (var i = 0; i < links.length; i++) {
+        var l = links[i];
+        html += '<div class="pr-links-row">';
+        html += '<span class="pr-links-num" onclick="prOpenDetailById(' + (l.linked_pr_id || l.id) + ')" style="cursor:pointer;color:var(--primary)">' + l.request_number + '</span>';
+        html += '<span class="pr-links-title">' + (l.title || '—') + '</span>';
+        html += '<span class="pr-links-amt">' + parseFloat(l.amount || 0).toLocaleString('ar-SA-u-nu-latn', { maximumFractionDigits: 0 }) + ' ر.س</span>';
+        html += '<span class="pr-stage-pill">' + (PR_STAGE_NAMES[l.current_stage] || l.current_stage || '—') + '</span>';
+        html += '<button class="pr-links-remove" onclick="prRemoveLink(' + prId + ',' + (l.linked_pr_id || l.id) + ')">';
+        html += '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+        html += '</button></div>';
+    }
+    container.innerHTML = html;
+}
+
+async function prRemoveLink(prId, linkedId) {
+    if (!confirm(tr('إزالة الربط بين الطلبين؟'))) return;
+    var res = await fetch('api/purchase_requests_api.php?action=remove_link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pr_id: prId, linked_pr_id: linkedId })
+    });
+    var data = await res.json();
+    if (data.success) {
+        showToast(tr('تم إزالة الربط'), 'success');
+        if (_prCurrentReq.links) {
+            _prCurrentReq.links = _prCurrentReq.links.filter(function (l) {
+                return (l.linked_pr_id || l.id) !== linkedId;
+            });
+        }
+        prRefreshLinksList(prId);
+        var cnt = document.getElementById('pr-links-cnt-' + prId);
+        if (cnt) cnt.textContent = (_prCurrentReq.links || []).length;
+    }
+}
+
 
 function prRenderStepsIndicator(stages, currentStage) {
     if (!stages || !stages.length) return '';
@@ -978,6 +1326,199 @@ function prInfoRow(label, value) {
 /**
  * فتح نافذة إنشاء طلب جديد
  */
+
+// ════════════════════════════════════════════════════════════
+// بطاقة مسار المعاملة الجديدة
+// ════════════════════════════════════════════════════════════
+const WF_GROUPS = {
+    reception: 'استلام',
+    warehouse_manager_review: 'استلام',
+    budget_review: 'موازنة ومالية',
+    treasury_review: 'موازنة ومالية',
+    finance_review: 'موازنة ومالية',
+    ceo_approval: 'رئاسة',
+    purchasing: 'مشتريات',
+    waiting_budget_approval: 'مشتريات',
+    accounts_review: 'مشتريات',
+    payment: 'إغلاق',
+    completed: 'إغلاق',
+};
+
+function wfGroup(key) {
+    return WF_GROUPS[key] || PRState.stageNamesCache[key] && 'أخرى' || 'أخرى';
+}
+
+function wfInitials(name) {
+    if (!name) return '';
+    const p = name.trim().split(' ');
+    return p.length >= 2 ? p[0][0] + p[1][0] : name.substring(0, 2);
+}
+
+function wfStageName(key) {
+    return PRState.stageNamesCache[key]
+        || getPRStageNamesDefault()[key]
+        || key;
+}
+
+function prBuildStepperHTML(req) {
+    const BLUE = '#1B4F8A';
+    const GREEN = '#1B6A3E';
+    const PURPLE = '#7c3aed';
+    const RED = '#8A1B1B';
+
+    const stages = req.workflow_stages || [];
+    const total = stages.length;
+    const doneCount = stages.filter(s => ['approved', 'completed'].includes(s.status)).length;
+    const pct = total > 1 ? Math.round(doneCount / (total - 1) * 100) : 100;
+    const curKey = req.current_stage || '';
+    const isDone = curKey === 'completed';
+    const isRejAll = curKey === 'rejected';
+    const isClosed = isDone || isRejAll;
+
+    // اللون الرئيسي حسب الحالة
+    const accent = isDone ? GREEN : isRejAll ? RED : curKey === 'ceo_approval' ? PURPLE : BLUE;
+
+    // بيانات المرحلة الحالية
+    const curStageObj = stages.find(s => s.stage_name === curKey) || {};
+    const curName = wfStageName(curKey);
+    const curEmp = curStageObj.approved_by_name || curStageObj.employee_name || curStageObj.assigned_to_name || '';
+    const curInitials = wfInitials(curEmp);
+
+    // مسار العمل — مختصر أم طويل
+    const pathLabel = req.workflow_path === 'short' ? '⚡ مختصر'
+        : req.workflow_path === 'long' ? '📋 كامل'
+            : req.workflow_path ? req.workflow_path : '—';
+
+    // SLA
+    const slaOk = req.sla_status?.status !== 'overdue';
+    const slaLabel = slaOk ? '✓ ضمن المهلة' : '⚠ تجاوز المهلة';
+    const slaColor = slaOk ? GREEN : '#8A1B1B';
+
+    // ── ترتيب المراحل ─────────────────────────────────────
+    const sortedStages = [...stages].sort((a, b) => {
+        const aFin = ['completed', 'rejected'].includes(a.stage_name) ? 9999 : (a.stage_order || 0);
+        const bFin = ['completed', 'rejected'].includes(b.stage_name) ? 9999 : (b.stage_order || 0);
+        return aFin - bFin;
+    });
+
+    // حساب عرض الخط المكتمل
+    const doneIdx = sortedStages.filter(s => ['approved', 'completed'].includes(s.status)).length;
+    const lineWidth = total > 1 ? Math.round((doneIdx / (total - 1)) * 100) : 0;
+
+    // ── بناء عقد المراحل ──────────────────────────────────
+    const nodesHTML = sortedStages.map((s, idx) => {
+        const done = ['approved', 'completed'].includes(s.status);
+        const active = s.stage_name === curKey;
+        const rej = s.status === 'rejected';
+        const final = s.stage_name === 'completed';
+        const sName = wfStageName(s.stage_name);
+        const who = s.approved_by_name || s.employee_name || '';
+        const date = s.completed_at ? prFormatDate(s.completed_at) : '—';
+        const num = s.stage_order || (idx + 1);
+        const isCeo = s.stage_name === 'ceo_approval';
+        const nodeClr = isCeo ? PURPLE : BLUE;
+
+        // شكل الدائرة
+        let circleStyle = '', innerHTML;
+        if (done) {
+            circleStyle = `background:${nodeClr};border-color:${nodeClr};color:#fff`;
+            innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>`;
+        } else if (rej) {
+            circleStyle = `background:${RED};border-color:${RED};color:#fff`;
+            innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
+        } else if (active) {
+            circleStyle = `background:#fff;border:2.5px solid ${nodeClr};color:${nodeClr}`;
+            innerHTML = `<span style="width:10px;height:10px;border-radius:50%;background:${nodeClr};display:block;animation:govPulse 1.4s infinite"></span>`;
+        } else if (final) {
+            circleStyle = `border-style:dashed;color:var(--color-text-secondary)`;
+            innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>`;
+        } else {
+            circleStyle = `color:var(--color-text-secondary)`;
+            innerHTML = `<span style="font-size:13px;font-weight:500">${num}</span>`;
+        }
+
+        const nameCls = active ? `style="color:${nodeClr};font-weight:500"` : '';
+        const dateCls = active ? `style="color:${nodeClr};font-weight:500"` : '';
+
+        // Tooltip
+        const tipStatus = done
+            ? `<span class="gov2-ts gov2-ts-done">✓ مكتملة${s.completed_at ? ' — ' + prFormatDate(s.completed_at) : ''}</span>`
+            : active
+                ? `<span class="gov2-ts gov2-ts-act">● جارية الآن</span>`
+                : rej
+                    ? `<span class="gov2-ts gov2-ts-rej">✕ مرفوضة</span>`
+                    : `<span class="gov2-ts gov2-ts-pend">في الانتظار</span>`;
+
+        return `<div class="gov2-step">
+            <div class="gov2-circle" style="${circleStyle}">${innerHTML}</div>
+            <span class="gov2-step-name" ${nameCls}>${sName}</span>
+            <span class="gov2-step-date" ${dateCls}>${active ? 'جارية' : date}</span>
+            <div class="gov2-tip">
+                <span class="gov2-tip-name">${sName}</span>
+                ${who ? `<span class="gov2-tip-emp"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> ${who}</span>` : ''}
+                ${tipStatus}
+            </div>
+        </div>`;
+    }).join('');
+
+    // ── رأس البطاقة ───────────────────────────────────────
+    const empHTML = curEmp && !isClosed
+        ? `<div class="gov2-vl"></div>
+           <div class="gov2-emp">
+               <div class="gov2-av" style="background:${accent}1a;color:${accent}">${curInitials || '—'}</div>
+               <span>${curEmp}</span>
+           </div>`
+        : '';
+
+    const headStatus = isClosed
+        ? `<span class="gov2-closed-badge" style="background:${accent}1a;color:${accent};border-color:${accent}40">${curName}</span>`
+        : `<span class="gov2-pulse-dot" style="background:${accent}"></span>
+           <span class="gov2-stage">${curName}</span>
+           ${empHTML}`;
+
+    return `<div class="gov2-card">
+        <div class="gov2-topbar" style="background:${accent}"></div>
+        <div class="gov2-head">
+            <div class="gov2-head-left">${headStatus}</div>
+            <div class="gov2-head-right">
+                <div class="gov2-meta-row">
+                    <span class="gov2-mk">التقدم</span>
+                    <span class="gov2-mv" style="color:${accent}">${pct}%</span>
+                </div>
+                <div class="gov2-meta-row">
+                    <span class="gov2-mk">المراحل</span>
+                    <span class="gov2-mv">${doneCount} / ${total}</span>
+                </div>
+            </div>
+        </div>
+        <div class="gov2-progress-row">
+            <span class="gov2-pr-lbl">نسبة الإنجاز</span>
+            <div class="gov2-bar"><div class="gov2-bar-fill" style="width:${pct}%;background:${accent}"></div></div>
+            <span class="gov2-pr-pct" style="color:${accent}">${pct}%</span>
+            <div class="gov2-vl" style="margin:0 6px"></div>
+            <div class="gov2-sla-badge" style="background:${slaColor}14;border-color:${slaColor}30">
+                <span class="gov2-sla-dot" style="background:${slaColor}"></span>
+                <span style="color:${slaColor}">${slaLabel}</span>
+            </div>
+        </div>
+        <div class="gov2-steps-wrap">
+            <div class="gov2-steps-track">
+                <div class="gov2-bg-line"></div>
+                <div class="gov2-done-line" style="width:${lineWidth}%;background:${accent}"></div>
+                <div class="gov2-nodes">${nodesHTML}</div>
+            </div>
+        </div>
+        <div class="gov2-footer">
+            <div class="gov2-fc"><div class="gov2-fk">رقم الطلب</div><div class="gov2-fv">${req.request_number || '—'}</div></div>
+            <div class="gov2-fc"><div class="gov2-fk">المسار</div><div class="gov2-fv">${pathLabel}</div></div>
+            <div class="gov2-fc"><div class="gov2-fk">المراحل المكتملة</div><div class="gov2-fv" style="color:${accent}">${doneCount} من ${total}</div></div>
+            <div class="gov2-fc"><div class="gov2-fk">حالة SLA</div><div class="gov2-fv" style="color:${slaColor}">${slaLabel}</div></div>
+        </div>
+    </div>`;
+}
+
+function prGetInitials(n) { return wfInitials(n); }
+
 function prOpenCreateModal() {
     const opts = PRState.formOptions || {};
     const threshold = opts.threshold || 5000;
@@ -1431,6 +1972,207 @@ document.addEventListener('click', function (e) {
     }
 });
 
+// ════════════════════════════════════════════════════════════
+// تعريف مجموعات المراحل للتصنيف البصري
+// ════════════════════════════════════════════════════════════
+const PR_STAGE_GROUPS = [
+    {
+        key: 'reception',
+        label: 'الاستلام',
+        labelEn: 'Reception',
+        stages: ['reception', 'warehouse_manager_review'],
+    },
+    {
+        key: 'finance',
+        label: 'الموازنة والمالية',
+        labelEn: 'Budget & Finance',
+        stages: ['budget_review', 'treasury_review', 'finance_review'],
+    },
+    {
+        key: 'ceo',
+        label: 'الرئاسة',
+        labelEn: 'Executive',
+        stages: ['ceo_approval'],
+        color: '#7c3aed',
+    },
+    {
+        key: 'procurement',
+        label: 'المشتريات والاعتماد',
+        labelEn: 'Procurement',
+        stages: ['purchasing', 'waiting_budget_approval', 'accounts_review', 'po_issuance'],
+    },
+    {
+        key: 'closing',
+        label: 'الإغلاق',
+        labelEn: 'Closing',
+        stages: ['payment', 'completed'],
+    },
+];
+
+/**
+ * إيجاد مجموعة مرحلة معينة
+ * إذا لم تُعرَّف → تُضاف لمجموعة "أخرى"
+ */
+function prGetStageGroup(stageKey) {
+    for (const g of PR_STAGE_GROUPS) {
+        if (g.stages.includes(stageKey)) return g;
+    }
+    return null;
+}
+
+// ════════════════════════════════════════════════════════════
+// بناء بطاقة مسار المعاملة — التصميم الجديد
+// ════════════════════════════════════════════════════════════
+function prBuildStepperCard(req) {
+    const stages = req.workflow_stages || [];
+    const totalSteps = stages.length;
+    const doneStages = stages.filter(s => ['approved', 'completed'].includes(s.status));
+    const doneCount = doneStages.length;
+    const pct = totalSteps > 1 ? Math.round(doneCount / (totalSteps - 1) * 100) : 100;
+
+    // ── بيانات المرحلة الحالية ────────────────────────────
+    const curStage = stages.find(s => s.stage_name === req.current_stage) || {};
+    const curName = PR_STAGE_NAMES[req.current_stage] || req.current_stage || '—';
+    const curEmployee = curStage.employee_name || curStage.approved_by_name || '';
+    const curInitials = curEmployee
+        ? curEmployee.trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('')
+        : '';
+    const isClosed = ['completed', 'rejected'].includes(req.current_stage);
+
+    // ── تجميع المراحل في مجموعات ─────────────────────────
+    // أولاً: جمع المراحل الغير معرَّفة في مجموعات
+    const ungrouped = stages.filter(s => !prGetStageGroup(s.stage_name));
+    const extraGroup = ungrouped.length ? [{
+        key: 'extra', label: 'مراحل أخرى', labelEn: 'Other',
+        stages: ungrouped.map(s => s.stage_name),
+    }] : [];
+
+    // بناء قائمة المجموعات الفعلية (التي لها مراحل في هذا الطلب)
+    const allGroups = [...PR_STAGE_GROUPS, ...extraGroup];
+    const activeGroups = allGroups
+        .map(g => ({
+            ...g,
+            stageObjs: stages.filter(s => g.stages.includes(s.stage_name))
+                .sort((a, b) => (a.stage_order || 0) - (b.stage_order || 0)),
+        }))
+        .filter(g => g.stageObjs.length > 0);
+
+    // ── بناء HTML المجموعات ───────────────────────────────
+    const groupsHTML = activeGroups.map((g, gi) => {
+        const groupColor = g.color || null;
+
+        const nodesHTML = g.stageObjs.map((s, si) => {
+            const done = ['approved', 'completed'].includes(s.status);
+            const current = s.stage_name === req.current_stage;
+            const rejected = s.status === 'rejected';
+            const name = PR_STAGE_NAMES[s.stage_name] || s.stage_name;
+            const who = s.approved_by_name || s.employee_name || '';
+            const date = s.completed_at ? prFormatDate(s.completed_at) : '';
+            const num = s.stage_order || (si + 1);
+
+            // حالة الدائرة
+            let circleClass, circleStyle = '', innerHTML;
+            if (done) {
+                circleClass = 'wf2-c-done';
+                innerHTML = `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.5"><polyline points="20 6 9 17 4 12"/></svg>`;
+            } else if (rejected) {
+                circleClass = 'wf2-c-rejected';
+                innerHTML = `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
+            } else if (current) {
+                circleClass = 'wf2-c-act';
+                if (groupColor) circleStyle = `border-color:${groupColor};color:${groupColor}`;
+                innerHTML = `<span class="wf2-pulse"${groupColor ? ` style="background:${groupColor}"` : ''}></span>`;
+            } else if (s.stage_name === 'completed') {
+                circleClass = 'wf2-c-final';
+                innerHTML = `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>`;
+            } else {
+                circleClass = 'wf2-c-pend';
+                innerHTML = `<span style="font-size:9px;font-weight:600;color:var(--color-text-secondary,#94a3b8)">${num}</span>`;
+            }
+
+            // الخط الرابط
+            const isLast = si === g.stageObjs.length - 1;
+            const divider = !isLast
+                ? `<div class="wf2-divider${done ? ' wf2-div-done' : ''}"></div>`
+                : '';
+
+            // Tooltip
+            const tipStatus = done
+                ? `<span class="wf2-tip-s wf2-tip-done">✓ مكتملة${date ? ' — ' + date : ''}</span>`
+                : current
+                    ? `<span class="wf2-tip-s wf2-tip-act">● جارية الآن</span>`
+                    : rejected
+                        ? `<span class="wf2-tip-s wf2-tip-rej">✕ مرفوضة</span>`
+                        : `<span class="wf2-tip-s wf2-tip-pend">في الانتظار</span>`;
+
+            return `
+            <div class="wf2-node">
+                <div class="wf2-circle ${circleClass}" style="${circleStyle}">${innerHTML}</div>
+                <span class="wf2-node-lbl${current ? ' wf2-lbl-act' : ''}"${groupColor && current ? ` style="color:${groupColor}"` : ''}>${name}</span>
+                <div class="wf2-tip">
+                    <span class="wf2-tip-name">${name}</span>
+                    ${who ? `<span class="wf2-tip-emp"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> ${who}</span>` : ''}
+                    ${tipStatus}
+                </div>
+            </div>
+            ${divider}`;
+        }).join('');
+
+        const sepAfter = gi < activeGroups.length - 1 ? `
+        <div class="wf2-group-sep">
+            <div class="wf2-gsep-line"></div>
+            <div class="wf2-gsep-dot"></div>
+            <div class="wf2-gsep-line"></div>
+        </div>` : '';
+
+        return `
+        <div class="wf2-group">
+            <div class="wf2-group-lbl"${groupColor ? ` style="color:${groupColor}"` : ''}>${tr(g.label)}</div>
+            <div class="wf2-group-row">${nodesHTML}</div>
+        </div>
+        ${sepAfter}`;
+    }).join('');
+
+    // ── الرأس ─────────────────────────────────────────────
+    const headStatus = isClosed
+        ? `<span class="wf2-badge-closed">${curName}</span>`
+        : `<span class="wf2-pulse-dot"></span><span class="wf2-cur-name">${curName}</span>`;
+
+    const empHTML = curEmployee && !isClosed ? `
+        <div class="wf2-sep"></div>
+        <div class="wf2-employee">
+            <div class="wf2-avatar">${curInitials || '—'}</div>
+            <span>${curEmployee}</span>
+        </div>` : '';
+
+    return `
+    <div class="wf2-card">
+
+        <!-- ── الرأس ── -->
+        <div class="wf2-head">
+            <div class="wf2-head-left">
+                ${headStatus}
+                ${empHTML}
+            </div>
+            <div class="wf2-spacer"></div>
+            <span class="wf2-pct-pill">${pct}%</span>
+            <span class="wf2-count">${doneCount} / ${totalSteps}</span>
+        </div>
+
+        <!-- ── شريط التقدم ── -->
+        <div class="wf2-bar-track">
+            <div class="wf2-bar-fill" style="width:${pct}%"></div>
+        </div>
+
+        <!-- ── المجموعات ── -->
+        <div class="wf2-groups">
+            ${groupsHTML}
+        </div>
+
+    </div>`;
+}
+
+
 /** اختيار عملة */
 function prSelectCurrency(code, sym, flag) {
     document.getElementById('prf-currency').value = code;
@@ -1651,7 +2393,14 @@ function prPreviewWorkflowPath() {
         : `<div class="prf-path-pill prf-path-long">📋 مسار كامل — أعلى من ${threshold.toLocaleString()} ريال &nbsp;·&nbsp; الخزينة + المالية ← CEO ← المشتريات ← المالية</div>`;
 }
 
+// ── مفتاح حماية من التكرار (يُعاد ضبطه بعد كل نتيجة) ──────
+let _prSubmitLock = false;
+
 async function prSubmitCreate() {
+    // ── حماية صارمة من التكرار ──────────────────────────────
+    if (_prSubmitLock) return;
+    _prSubmitLock = true;
+
     const title = document.getElementById('prf-title')?.value?.trim();
     const amount = parseFloat(document.getElementById('prf-amount')?.value) || 0;
     const rtype = document.getElementById('prf-request-type')?.value || '';
@@ -1659,51 +2408,203 @@ async function prSubmitCreate() {
     const suppSel = suppEl?.value || '';
     const suppMan = document.getElementById('prf-supplier-manual')?.value?.trim() || '';
 
-    // القائمة ظاهرة = نوع يحتاج مورداً من قاعدة البيانات
     const suppVisible = suppEl && suppEl.style.display !== 'none';
-
-    // supplier_id: يُرسَل فقط إذا كانت القائمة ظاهرة واختار المستخدم موردًا فعلياً (ليس manual)
     const supplierId = (suppVisible && suppSel && suppSel !== 'manual') ? suppSel : '';
-    // supplier_name_manual: يُرسَل إما من حقل الإدخال اليدوي أو اسم المورد من القائمة إن لم يكن id
     const supplierName = (!supplierId) ? suppMan : '';
 
     const body = {
-        title: title,
+        title,
         description: document.getElementById('prf-desc')?.value || '',
         type_id: rtype,
         parent_type_id: document.getElementById('prf-type-parent')?.value || '',
         supplier_id: supplierId,
         supplier_name_manual: supplierName,
-        amount: amount,
+        amount,
         currency: document.getElementById('prf-currency')?.value || 'SAR',
         cost_center_id: document.getElementById('prf-cost-center')?.value || '',
         budget_category_id: document.getElementById('prf-budget-cat')?.value || '',
         priority: document.getElementById('prf-priority')?.value || 'normal',
         needed_date: document.getElementById('prf-needed-date')?.value || '',
+        _idem: `PR-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     };
 
-    const btn = document.getElementById('prf-submit-btn');
-    if (btn) { btn.disabled = true; btn.textContent = 'جارٍ الإرسال...'; }
+    // ── عرض شاشة التحميل ────────────────────────────────────
+    prShowSubmitLoading();
+
+    let success = false;
+    let resultNumber = '';
+    let errorMsg = '';
+
+    const _abort = new AbortController();
+    const _timer = setTimeout(() => _abort.abort(), 25000);
 
     try {
         const res = await fetch('api/purchase_requests_api.php?action=create', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body),
+            signal: _abort.signal,
         });
-        const data = await res.json();
 
-        if (data.success) {
-            showToast(`✅ تم إنشاء الطلب ${data.number} بنجاح`, 'success');
-            closeModal();
-            await prLoadRequestsList();
+        clearTimeout(_timer);
+
+        let data = {};
+        try { data = await res.json(); } catch (_) { }
+
+        if (res.ok && data.success) {
+            success = true;
+            resultNumber = data.number || '';
         } else {
-            showToast(data.message || 'فشل إنشاء الطلب', 'error');
+            errorMsg = data.message || `خطأ ${res.status}: فشل إنشاء الطلب`;
         }
     } catch (e) {
-        showToast(tr('خطأ في الاتصال'), 'error');
-    } finally {
-        if (btn) { btn.disabled = false; btn.textContent = 'إرسال الطلب'; }
+        clearTimeout(_timer);
+        if (e.name === 'AbortError') {
+            errorMsg = 'انتهت مهلة الإرسال (25 ثانية). تحقق من الاتصال ثم حاول مجدداً.';
+        } else {
+            errorMsg = 'تعذّر الاتصال بالخادم. تحقق من الاتصال بالإنترنت.';
+        }
+    }
+
+    // ── عرض نتيجة واضحة بدلاً من Toast ─────────────────────
+    prShowSubmitResult(success, resultNumber, errorMsg, async () => {
+        if (success) {
+            closeModal();
+            await prLoadRequestsList();
+        }
+        // عند الخطأ: أبقِ النموذج مفتوحاً للتعديل
+        _prSubmitLock = false;
+    });
+}
+
+/** عرض overlay التحميل داخل النافذة */
+function prShowSubmitLoading() {
+    // إخفاء footer النموذج وتعطيل الأزرار
+    const footer = document.querySelector('#prf-page-3 .prf-footer');
+    if (footer) footer.style.display = 'none';
+
+    // إزالة overlay قديم إن وُجد
+    document.getElementById('prf-loading-overlay')?.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'prf-loading-overlay';
+    overlay.className = 'prf-loading-overlay';
+    overlay.innerHTML = `
+        <div class="prf-loading-box">
+            <div class="prf-spinner">
+                <svg viewBox="0 0 44 44" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="22" cy="22" r="17" fill="none"
+                            stroke="currentColor" stroke-width="3"
+                            stroke-dasharray="72 28"
+                            stroke-linecap="round"/>
+                </svg>
+            </div>
+            <p class="prf-loading-text">جارٍ إرسال الطلب</p>
+            <p class="prf-loading-sub">يُرجى الانتظار، لا تغلق النافذة</p>
+            <div class="prf-loading-dots">
+                <span></span><span></span><span></span>
+            </div>
+        </div>
+    `;
+
+    // إضافة داخل modal body
+    const page3 = document.getElementById('prf-page-3');
+    if (page3) page3.appendChild(overlay);
+}
+
+/** عرض نتيجة الإرسال داخل النافذة */
+function prShowSubmitResult(success, number, errorMsg, onClose) {
+    // إزالة overlay التحميل
+    document.getElementById('prf-loading-overlay')?.remove();
+
+    const page3 = document.getElementById('prf-page-3');
+    if (!page3) { onClose?.(); return; }
+
+    // إزالة نتيجة قديمة
+    document.getElementById('prf-result-overlay')?.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'prf-result-overlay';
+    overlay.className = 'prf-result-overlay';
+
+    if (success) {
+        overlay.innerHTML = `
+            <div class="prf-result-box prf-result-success">
+                <div class="prf-result-header">
+                    <div class="prf-result-icon-wrap">
+                        <svg viewBox="0 0 52 52" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <circle cx="26" cy="26" r="22" stroke="currentColor" stroke-width="2.5" class="prf-check-circle"/>
+                            <polyline points="15,27 22,34 37,18" stroke="currentColor" stroke-width="3"
+                                      stroke-linecap="round" stroke-linejoin="round" class="prf-check-path"/>
+                        </svg>
+                    </div>
+                    <h3 class="prf-result-title">تم إنشاء الطلب بنجاح</h3>
+                </div>
+                <div class="prf-result-body">
+                    <span class="prf-result-num">
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                        ${number}
+                    </span>
+                    <p class="prf-result-sub">سيُحال الطلب للمرحلة التالية تلقائياً<br>ويمكنك متابعته من قائمة الطلبات</p>
+                    <div class="prf-result-divider"></div>
+                    <div class="prf-result-actions">
+                        <button class="prf-result-btn prf-result-btn-ok" onclick="prCloseResult()">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                            حسناً
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    } else {
+        overlay.innerHTML = `
+            <div class="prf-result-box prf-result-error">
+                <div class="prf-result-header">
+                    <div class="prf-result-icon-wrap">
+                        <svg viewBox="0 0 52 52" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <circle cx="26" cy="26" r="22" stroke="currentColor" stroke-width="2.5" class="prf-err-circle"/>
+                            <line x1="17" y1="17" x2="35" y2="35" stroke="currentColor" stroke-width="3" stroke-linecap="round" class="prf-err-x1"/>
+                            <line x1="35" y1="17" x2="17" y2="35" stroke="currentColor" stroke-width="3" stroke-linecap="round" class="prf-err-x2"/>
+                        </svg>
+                    </div>
+                    <h3 class="prf-result-title">تعذّر إنشاء الطلب</h3>
+                </div>
+                <div class="prf-result-body">
+                    <p class="prf-result-errmsg">${errorMsg}</p>
+                    <p class="prf-result-hint">راجع البيانات المُدخلة ثم أعد المحاولة</p>
+                    <div class="prf-result-actions">
+                        <button class="prf-result-btn prf-result-btn-retry" onclick="prCloseResult(true)">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.9"/></svg>
+                            تعديل وإعادة الإرسال
+                        </button>
+                        <button class="prf-result-btn prf-result-btn-ok" onclick="prCloseResult()">
+                            إغلاق
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    page3.appendChild(overlay);
+
+    // تخزين الـ callback
+    window._prResultCallback = onClose;
+    window._prResultSuccess = success;
+}
+
+/** إغلاق نافذة النتيجة */
+function prCloseResult(keepForm = false) {
+    document.getElementById('prf-result-overlay')?.remove();
+
+    if (!keepForm && window._prResultSuccess) {
+        // نجاح: تنفيذ الـ callback (إغلاق modal + تحديث القائمة)
+        window._prResultCallback?.();
+    } else {
+        // خطأ أو تعديل: أظهر footer النموذج مجدداً
+        const footer = document.querySelector('#prf-page-3 .prf-footer');
+        if (footer) footer.style.display = '';
+        window._prResultCallback?.();
     }
 }
 

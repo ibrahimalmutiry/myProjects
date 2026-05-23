@@ -1025,7 +1025,7 @@ function displayCurrencySettings(currencies) {
                                 <span class="rate-suffix">ر.س</span>
                             </div>
                             <div class="rate-example">
-                                مثال: ${(100 * currency.exchange_rate_to_sar).toFixed(2)} ر.س = 100 ${currency.code}
+                                مثال: ${(100 * currency.exchange_rate_to_sar).toFixed(2)} <span class="sar-symbol" aria-label="ريال سعودي"></span> = 100 ${currency.code}
                             </div>
                         </div>
                         

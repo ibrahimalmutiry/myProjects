@@ -1179,7 +1179,7 @@ function _getOrCreateBudgetTxType(\mysqli $conn): int {
 
 // ── جلب سعر الصرف ────────────────────────────────────────────
 function _getExchangeRate(\mysqli $conn, string $currency): float {
-    $r = $conn->query("SELECT rate_to_sar FROM exchange_rates WHERE currency='$currency' LIMIT 1");
+    $r = $conn->query("SELECT rate_to_sar FROM exchange_rates WHERE code='$currency' OR currency='$currency' LIMIT 1");
     if ($r && ($row = $r->fetch_assoc())) return (float)$row['rate_to_sar'];
     return 1.0;
 }

@@ -600,10 +600,12 @@ async function saveEmployee(e) {
     var action = id ? 'update_employee' : 'add_employee';
 
     try {
+        var _tok = (typeof _getCsrfToken === 'function') ? await _getCsrfToken() : (window.csrfToken || '');
         var res = await fetch('api/settings.php?action=' + action, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': _tok },
+            body: JSON.stringify(Object.assign({ csrf_token: _tok }, data))
         });
 
         var result = await res.json();
@@ -625,10 +627,12 @@ async function deleteEmployee(id, name) {
     if (!confirm('هل أنت متأكد من حذف الموظف "' + name + '"؟')) return;
 
     try {
+        var _tok = (typeof _getCsrfToken === 'function') ? await _getCsrfToken() : (window.csrfToken || '');
         var res = await fetch('api/settings.php?action=delete_employee', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: id })
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': _tok },
+            body: JSON.stringify({ csrf_token: _tok, id: id })
         });
 
         var result = await res.json();
@@ -720,6 +724,17 @@ var ACTIONS_CONFIG = [
     { key: 'pr.budget_review', label: 'مراجعة الموازنة', icon: '💰', group: 'طلبات الشراء' },
     { key: 'pr.delete', label: 'حذف طلب', icon: '🗑', group: 'طلبات الشراء' },
     { key: 'pr.export', label: 'تصدير الطلبات', icon: '📤', group: 'طلبات الشراء' },
+    // العينات — مراحل سير العمل
+    { key: 'sample.create', label: 'إنشاء طلب عينة', icon: '➕', group: 'العينات' },
+    { key: 'sample.advance', label: 'تقديم لمرحلة تالية', icon: '↩️', group: 'العينات' },
+    { key: 'sample.reject', label: 'رفض العينة', icon: '❌', group: 'العينات' },
+    { key: 'sample.need_modification', label: 'إرجاع للتعديل (الجودة)', icon: '✏️', group: 'العينات' },
+    { key: 'sample.dispatch', label: 'تسجيل الإرسال', icon: '🚚', group: 'العينات' },
+    { key: 'sample.mark_delivered', label: 'تأكيد التسليم', icon: '✅', group: 'العينات' },
+    { key: 'sample.upload', label: 'إرفاق ملفات', icon: '📎', group: 'العينات' },
+    { key: 'sample.print_card', label: 'طباعة بطاقة العينة', icon: '🖨️', group: 'العينات' },
+    { key: 'sample.sla_edit', label: 'تعديل مهل الـ SLA', icon: '⏱', group: 'العينات' },
+    { key: 'sample.delete', label: 'حذف عينة', icon: '🗑', group: 'العينات' },
 ];
 
 var PAGES_CONFIG = [
@@ -730,6 +745,7 @@ var PAGES_CONFIG = [
     { key: 'purchase-requests', label: 'طلبات الشراء (المعاملات)', icon: '📋', group: 'معاملات' },
     { key: 'transactions', label: 'المعاملات المالية', icon: '💰', group: 'معاملات' },
     { key: 'correspondence', label: 'الخطابات', icon: '📨', group: 'معاملات' },
+    { key: 'samples', label: 'إدارة العينات', icon: '🧪', group: 'معاملات' },
     // التخطيط المالي
     { key: 'reservations', label: 'حجوزات الموازنة', icon: '📅', group: 'التخطيط المالي' },
     { key: 'budget-plans', label: 'الموازنة التقديرية', icon: '📊', group: 'التخطيط المالي' },
@@ -1207,10 +1223,13 @@ async function savePermissions(empId, empName) {
     });
 
     try {
+        var _tok = (typeof _getCsrfToken === 'function') ? await _getCsrfToken() : (window.csrfToken || '');
         var res = await fetch('api/settings.php?action=save_employee_permissions', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': _tok },
             body: JSON.stringify({
+                csrf_token: _tok,
                 employee_id: empId,
                 permission_level: level,
                 can_delete: canDel,
@@ -1706,14 +1725,16 @@ async function saveProfEmployee() {
     document.querySelectorAll('.prof-toggle[data-action]').forEach(function (t) { actionPerms[t.dataset.action] = t.classList.contains('on'); });
 
     try {
+        var _tok = (typeof _getCsrfToken === 'function') ? await _getCsrfToken() : (window.csrfToken || '');
+        var _csrfHeaders = { 'Content-Type': 'application/json', 'X-CSRF-Token': _tok };
         var a = id ? 'update_employee' : 'add_employee';
-        var r1 = await fetch('api/settings.php?action=' + a, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(empData) });
+        var r1 = await fetch('api/settings.php?action=' + a, { method: 'POST', credentials: 'same-origin', headers: _csrfHeaders, body: JSON.stringify(Object.assign({ csrf_token: _tok }, empData)) });
         var d1 = await r1.json();
         if (!d1.success) { showToast('\u274c ' + (d1.message || '\u062e\u0637\u0623'), 'error'); return; }
         var empId = id || d1.id;
         var r2 = await fetch('api/settings.php?action=save_employee_permissions', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ employee_id: empId, permission_level: level, can_delete: canDel, pages: pages, action_permissions: actionPerms })
+            method: 'POST', credentials: 'same-origin', headers: _csrfHeaders,
+            body: JSON.stringify({ csrf_token: _tok, employee_id: empId, permission_level: level, can_delete: canDel, pages: pages, action_permissions: actionPerms })
         });
         var d2 = await r2.json();
         showToast('\u2705 \u062a\u0645 \u0627\u0644\u062d\u0641\u0638 \u0628\u0646\u062c\u0627\u062d', 'success');

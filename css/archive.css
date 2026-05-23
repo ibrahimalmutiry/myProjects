@@ -3808,3 +3808,159 @@ textarea.aed-input {
     align-items: flex-start;
     justify-content: center;
 }
+
+/* arch-receipts CSS */
+
+/* ── إيصالات الدفع ────────────────────────────── */
+.arch-receipts-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: .85rem;
+    padding: 1rem;
+}
+
+.arch-receipt-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.arch-receipt-header {
+    display: flex;
+    align-items: flex-start;
+    gap: .75rem;
+    padding: .85rem 1rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.arch-receipt-icon {
+    font-size: 1.4rem;
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+.arch-receipt-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.arch-receipt-title {
+    font-size: .82rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: 1.4;
+}
+
+.arch-receipt-sub {
+    font-size: .72rem;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+.arch-receipt-amount {
+    font-size: .9rem;
+    font-weight: 700;
+    color: var(--accent-green, #2f7d52);
+    flex-shrink: 0;
+    text-align: left;
+}
+
+.arch-receipt-amount small {
+    font-size: .65rem;
+    font-weight: 400;
+    color: var(--text-muted);
+    margin-right: 2px;
+}
+
+.arch-receipt-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: .5rem 1rem;
+    background: var(--bg-surface);
+}
+
+.arch-receipt-ref {
+    font-size: .72rem;
+    color: var(--text-muted);
+    font-family: monospace;
+}
+
+/* arch-receipts CSS */
+
+/* ── إيصالات الدفع ────────────────────────────── */
+.arch-receipts-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: .85rem;
+    padding: 1rem;
+}
+
+.arch-receipt-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.arch-receipt-header {
+    display: flex;
+    align-items: flex-start;
+    gap: .75rem;
+    padding: .85rem 1rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.arch-receipt-icon {
+    font-size: 1.4rem;
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+.arch-receipt-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.arch-receipt-title {
+    font-size: .82rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: 1.4;
+}
+
+.arch-receipt-sub {
+    font-size: .72rem;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+.arch-receipt-amount {
+    font-size: .9rem;
+    font-weight: 700;
+    color: var(--accent-green, #2f7d52);
+    flex-shrink: 0;
+    text-align: left;
+}
+
+.arch-receipt-amount small {
+    font-size: .65rem;
+    font-weight: 400;
+    color: var(--text-muted);
+    margin-right: 2px;
+}
+
+.arch-receipt-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: .5rem 1rem;
+    background: var(--bg-surface);
+}
+
+.arch-receipt-ref {
+    font-size: .72rem;
+    color: var(--text-muted);
+    font-family: monospace;
+}

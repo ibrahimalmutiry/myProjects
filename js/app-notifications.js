@@ -569,7 +569,7 @@ document.addEventListener('click', (e) => {
 // ═══════════════════════════════════════════════════════════
 
 /** فلتر عرض الصفحة: 'all' | 'unread' | 'read' */
-let notifPageFilter = 'unread';
+let notifPageFilter = 'all';
 
 /**
  * تحميل صفحة التنبيهات كاملة في main-content
@@ -599,228 +599,244 @@ async function loadNotificationsPage() {
 /**
  * رسم صفحة التنبيهات الكاملة
  */
+// ════════════════════════════════════════════════════════════
+// تجميع التنبيهات المتكررة — نفس العنوان يُجمَّع في واحد
+// ════════════════════════════════════════════════════════════
+function _deduplicateNotifs(arr) {
+    var seen = {};
+    var result = [];
+    arr.forEach(function (n) {
+        var key = (n.title || '') + '|' + (n.category || '');
+        if (!seen[key]) {
+            seen[key] = { notif: Object.assign({}, n), count: 1 };
+            result.push(seen[key]);
+        } else {
+            seen[key].count++;
+            // احتفظ بالأحدث
+            if (new Date(n.created_at) > new Date(seen[key].notif.created_at)) {
+                seen[key].notif = Object.assign({}, n);
+            }
+        }
+    });
+    return result.map(function (s) {
+        if (s.count > 1) {
+            s.notif._groupCount = s.count;
+            s.notif.title = (s.notif.title || s.notif.transaction_number || 'إشعار') + ' (' + s.count + ')';
+        }
+        return s.notif;
+    });
+}
+
 function renderNotificationsPage() {
+    const now = Date.now();
     const total = notificationsData.length;
-    const unread = notificationsData.filter(n => !n.is_read).length;
-    const read = total - unread;
 
-    // ── تصنيف التنبيهات ──
-    // تنبيهات خاصة: SLA/OLA + recipient_id محدد + التصعيدات
-    const PERSONAL_CATS = [
-        'sla_warning', 'sla_breach', 'ola_breach', 'ola_warning',
-        'escalation', 'manual_escalation', 'direct'
-    ]; const isPersonal = n =>
+    // ── تصنيف التنبيهات ──────────────────────────────────────
+    const PERSONAL_CATS = ['sla_warning', 'sla_breach', 'ola_breach', 'ola_warning',
+        'escalation', 'manual_escalation', 'direct', 'security',
+        'purchase_request', 'pr_approval'];
+    const isPersonal = n =>
         PERSONAL_CATS.includes(n.category) ||
-        (n.recipient_id && String(n.recipient_id) !== '0');
+        (n.recipient_id && String(n.recipient_id) !== '0') ||
+        (n.category && (n.category.includes('brute') || n.category.includes('ip')));
 
-    const personalAll = notificationsData.filter(isPersonal);
-    const generalAll = notificationsData.filter(n => !isPersonal(n));
+    const personalAll = _deduplicateNotifs(notificationsData.filter(isPersonal));
+    const generalAll = _deduplicateNotifs(notificationsData.filter(n => !isPersonal(n)));
 
+    // فلترة حسب النوع المحدد
     const applyFilter = arr => {
-        if (notifPageFilter === 'unread') return arr.filter(n => !n.is_read);
-        if (notifPageFilter === 'read') return arr.filter(n => n.is_read);
+        if (notifPageFilter === 'security')
+            return arr.filter(n => (n.category || '').includes('security') || (n.category || '').includes('brute') || (n.category || '').includes('ip'));
+        if (notifPageFilter === 'sla')
+            return arr.filter(n => (n.category || '').includes('sla') || (n.category || '').includes('ola') || (n.category || '').includes('escalat'));
+        if (notifPageFilter === 'pr')
+            return arr.filter(n => (n.category || '').includes('purchase') || (n.category || '').startsWith('pr_'));
         return arr;
     };
 
     const personal = applyFilter(personalAll);
     const general = applyFilter(generalAll);
 
-    // ── badge الخاص بالنوع ──
-    function getSourceBadge(n) {
+    // ── badge النوع ──────────────────────────────────────────
+    function getBadge(n) {
         const cat = n.category || '';
-        const map = {
-            'sla_warning': { label: 'SLA تحذير', color: 'rgba(255,169,77,.18)', text: 'var(--accent-orange)', icon: '⚠️' },
-            'sla_breach': { label: 'SLA تجاوز', color: 'rgba(255,107,107,.18)', text: 'var(--accent-red)', icon: '🚨' },
-            'ola_breach': { label: 'OLA تجاوز', color: 'rgba(255,107,107,.18)', text: 'var(--accent-red)', icon: '🔴' },
-            'escalation': { label: 'تصعيد', color: 'rgba(177,151,252,.18)', text: 'var(--accent-purple)', icon: '📤' },
-            'manual_escalation': { label: 'تصعيد يدوي', color: 'rgba(74,171,247,.18)', text: 'var(--accent-blue)', icon: '🔔' },
-            'direct': { label: 'مباشر', color: 'rgba(59,201,219,.18)', text: 'var(--accent-cyan)', icon: '📩' },
-            'status_change': { label: 'تحديث حالة', color: 'rgba(105,219,124,.18)', text: 'var(--accent-green)', icon: '🔄' },
-            'correspondence': { label: 'خطاب', color: 'rgba(74,171,247,.15)', text: 'var(--accent-blue)', icon: '📨' },
-            'bank': { label: 'بنك', color: 'rgba(255,169,77,.15)', text: 'var(--accent-orange)', icon: '🏦' },
-            'reservation': { label: 'حجز', color: 'rgba(177,151,252,.15)', text: 'var(--accent-purple)', icon: '📅' },
+        const badges = {
+            'sla_warning': { label: 'SLA تحذير', bg: '#FAEEDA', color: '#633806' },
+            'sla_breach': { label: 'SLA تجاوز', bg: '#FCEBEB', color: '#791F1F' },
+            'ola_breach': { label: 'OLA تجاوز', bg: '#FCEBEB', color: '#791F1F' },
+            'ola_warning': { label: 'OLA تحذير', bg: '#FAEEDA', color: '#633806' },
+            'escalation': { label: 'تصعيد', bg: '#EEEDFE', color: '#3C3489' },
+            'manual_escalation': { label: 'تصعيد يدوي', bg: '#EEEDFE', color: '#3C3489' },
+            'security': { label: 'أمان', bg: '#FCEBEB', color: '#791F1F' },
+            'status_change': { label: 'تحديث حالة', bg: '#EAF3DE', color: '#27500A' },
+            'purchase_request': { label: 'طلب شراء', bg: '#E6F1FB', color: '#0C447C' },
+            'correspondence': { label: 'خطاب', bg: '#E6F1FB', color: '#0C447C' },
+            'bank': { label: 'بنك', bg: '#E1F5EE', color: '#085041' },
+            'reservation': { label: 'حجز', bg: '#FAEEDA', color: '#412402' },
         };
-        // تحديد المصدر من transaction_type أو category
         let key = cat;
-        if (!map[key]) {
-            const tt = (n.transaction_type || '').toLowerCase();
-            if (tt.includes('خطاب') || tt.includes('مراسل') || cat.includes('corr')) key = 'correspondence';
-            else if (tt.includes('حجز') || cat.includes('reserv')) key = 'reservation';
+        if (!badges[key]) {
+            if (cat.includes('brute') || cat.includes('ip')) key = 'security';
+            else if (cat.includes('sla')) key = 'sla_warning';
+            else if (cat.includes('purchase') || cat.startsWith('pr_')) key = 'purchase_request';
+            else if (cat.includes('corr')) key = 'correspondence';
             else if (cat.includes('bank') || cat.includes('deposit')) key = 'bank';
             else key = 'status_change';
         }
-        const b = map[key] || map['status_change'];
-        return `<span class="notif-source-badge" style="background:${b.color};color:${b.text}">${b.icon} ${b.label}</span>`;
+        const b = badges[key] || badges['status_change'];
+        return '<span style="font-size:10px;padding:1px 7px;border-radius:99px;background:' + b.bg + ';color:' + b.color + '">' + b.label + '</span>';
     }
 
-    // ── أيقونة التنبيه ──
-    function getNotifIcon(n) {
+    // ── لون الخط الجانبي ──────────────────────────────────────
+    function getBorderColor(n) {
         const cat = n.category || '';
-        if (cat.includes('sla') || cat.includes('ola') || cat.includes('escalat')) {
-            return `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
-                <line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line>
-            </svg>`;
-        }
-        if (cat === 'direct' || n.recipient_id) {
-            return `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
-                <polyline points="22,6 12,13 2,6"></polyline>
-            </svg>`;
-        }
-        const stage = n.stage || '';
-        const svgs = {
-            receiving: `<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>`,
-            budget: `<line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>`,
-            payment: `<rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect><line x1="1" y1="10" x2="23" y2="10"></line>`,
-            invoice: `<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline>`,
-        };
-        const inner = svgs[stage] || `<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path>`;
-        return `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${inner}</svg>`;
+        if (cat === 'security' || cat.includes('brute') || cat.includes('ip') || cat.includes('breach')) return '#E24B4A';
+        if (cat.includes('sla') || cat.includes('ola') || cat.includes('escalat')) return '#EF9F27';
+        if (cat.includes('purchase') || cat.startsWith('pr_') || cat === 'purchase_request') return '#378ADD';
+        if (cat === 'correspondence') return '#534AB7';
+        if (cat === 'bank') return '#1D9E75';
+        return 'var(--color-border-tertiary)';
     }
 
-    // ── لون أيقونة التنبيه ──
-    function getIconStyle(n) {
+    // ── أيقونة التنبيه ──────────────────────────────────────
+    function getIcon(n) {
         const cat = n.category || '';
-        if (cat.includes('sla_breach') || cat.includes('ola')) return 'background:rgba(255,107,107,.14);color:var(--accent-red)';
-        if (cat.includes('sla_warning')) return 'background:rgba(255,169,77,.14);color:var(--accent-orange)';
-        if (cat.includes('escalat')) return 'background:rgba(177,151,252,.14);color:var(--accent-purple)';
-        if (cat === 'direct') return 'background:rgba(74,171,247,.14);color:var(--accent-blue)';
-        const stage = n.stage || '';
-        const map = {
-            receiving: 'background:rgba(105,219,124,.12);color:var(--accent-green)',
-            budget: 'background:rgba(59,201,219,.12);color:var(--accent-cyan)',
-            payment: 'background:rgba(255,169,77,.12);color:var(--accent-orange)',
-            invoice: 'background:rgba(177,151,252,.12);color:var(--accent-purple)',
-        };
-        return map[stage] || 'background:var(--bg-surface);color:var(--text-muted)';
+        if (cat.includes('breach') || cat.includes('brute') || cat.includes('ip') || cat === 'security')
+            return { ico: 'ti-shield-lock', bg: '#FCEBEB', color: '#A32D2D' };
+        if (cat.includes('sla') || cat.includes('ola'))
+            return { ico: 'ti-clock-exclamation', bg: '#FAEEDA', color: '#854F0B' };
+        if (cat.includes('escalat'))
+            return { ico: 'ti-arrow-up-right', bg: '#EEEDFE', color: '#534AB7' };
+        if (cat.includes('purchase') || cat.startsWith('pr_'))
+            return { ico: 'ti-clipboard-list', bg: '#E6F1FB', color: '#185FA5' };
+        if (cat === 'correspondence')
+            return { ico: 'ti-mail', bg: '#EEEDFE', color: '#534AB7' };
+        if (cat.includes('bank') || cat.includes('deposit'))
+            return { ico: 'ti-building-bank', bg: '#E1F5EE', color: '#0F6E56' };
+        if (cat.includes('approval') || cat.includes('approve'))
+            return { ico: 'ti-circle-check', bg: '#EAF3DE', color: '#3B6D11' };
+        if (cat.includes('reject'))
+            return { ico: 'ti-circle-x', bg: '#FCEBEB', color: '#A32D2D' };
+        return { ico: 'ti-bell', bg: 'var(--color-background-secondary)', color: 'var(--color-text-secondary)' };
     }
 
-    // ── بناء صف تنبيه ──
+    // ── بناء صف تنبيه ────────────────────────────────────────
     function buildRow(n) {
-        const isUnread = !n.is_read;
         const timeAgo = formatTimeAgo(n.created_at || n.update_time);
         const title = n.title || n.transaction_number || 'إشعار';
         const desc = n.message || n.status || '';
+        const isNew = n.created_at && (now - new Date(n.created_at).getTime()) < 86400000;
+        const ico = getIcon(n);
+        const bcolor = getBorderColor(n);
+        const refNum = n.ref_number || n.transaction_number || '';
+        const canApprove = n.category === 'purchase_request' || (n.category || '').includes('approval');
 
-        return `
-        <div class="np-row ${isUnread ? 'np-unread' : 'np-read'}"
-             data-notif-id="${n.id}"
-             onclick="handleNotifPageClick(${n.id})">
-            <div class="np-icon" style="${getIconStyle(n)}">${getNotifIcon(n)}</div>
-            <div class="np-body">
-                <div class="np-top">
-                    <span class="np-title">${title}</span>
-                    ${isUnread ? '<span class="np-dot"></span>' : ''}
-                </div>
-                <div class="np-desc">${desc.replace(/\n/g, '<br>').substring(0, 120)}${desc.length > 120 ? '…' : ''}</div>
-                <div class="np-meta">
-                    ${getSourceBadge(n)}
-                    ${n.ref_number || n.transaction_number ? `<span class="np-ref">${n.ref_number || n.transaction_number}</span>` : ''}
-                    ${n.employee_name ? `<span class="np-emp">👤 ${n.employee_name}</span>` : ''}
-                    <span class="np-time">${timeAgo}</span>
-                </div>
-            </div>
-            <div class="np-actions">
-                ${isUnread ? `<button class="np-btn" onclick="event.stopPropagation();markNotifRead(${n.id})" title="تعيين كمقروء">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                </button>` : ''}
-                ${n.transaction_id ? `<button class="np-btn np-btn-go" onclick="event.stopPropagation();goToTransaction(${n.transaction_id})" title="فتح">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
-                </button>` : ''}
-            </div>
-        </div>`;
+        return '<div class="np-row" style="border-right:3px solid ' + bcolor + '" data-notif-id="' + n.id + '" onclick="handleNotifPageClick(' + n.id + ')">'
+            // نقطة "جديد"
+            + '<div style="width:7px;height:7px;border-radius:50%;flex-shrink:0;margin-top:14px;background:' + (isNew ? '#378ADD' : 'transparent') + '"></div>'
+            // أيقونة
+            + '<div style="width:34px;height:34px;border-radius:var(--border-radius-md);display:flex;align-items:center;justify-content:center;flex-shrink:0;background:' + ico.bg + '">'
+            + '<i class="ti ' + ico.ico + '" style="font-size:16px;color:' + ico.color + '" aria-hidden="true"></i>'
+            + '</div>'
+            // المحتوى
+            + '<div style="flex:1;min-width:0">'
+            + '<div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap">'
+            + '<span style="font-size:12px;font-weight:500;color:var(--color-text-primary)">' + title + '</span>'
+            + (isNew ? '<span style="font-size:10px;padding:0 6px;border-radius:99px;background:#E6F1FB;color:#0C447C">جديد</span>' : '')
+            + '</div>'
+            + (desc ? '<div style="font-size:11px;color:var(--color-text-secondary);margin-top:2px;line-height:1.45">' + desc.substring(0, 110) + (desc.length > 110 ? '…' : '') + '</div>' : '')
+            + '<div style="display:flex;align-items:center;gap:5px;margin-top:5px;flex-wrap:wrap">'
+            + getBadge(n)
+            + (refNum ? '<span style="font-size:10px;color:var(--color-text-tertiary)">' + refNum + '</span>' : '')
+            + '<span style="font-size:10px;color:var(--color-text-tertiary)">' + timeAgo + '</span>'
+            + '</div>'
+            // أزرار الإجراء المباشر
+            + (canApprove && n.transaction_id ? '<div style="display:flex;gap:5px;margin-top:6px">'
+                + '<button style="font-size:11px;padding:3px 10px;border-radius:var(--border-radius-md);border:0.5px solid #C0DD97;background:#EAF3DE;color:#27500A;cursor:pointer" onclick="event.stopPropagation()">موافقة</button>'
+                + '<button style="font-size:11px;padding:3px 10px;border-radius:var(--border-radius-md);border:0.5px solid #F7C1C1;background:#FCEBEB;color:#791F1F;cursor:pointer" onclick="event.stopPropagation()">رفض</button>'
+                + '</div>' : '')
+            + '</div>'
+            // زر حذف
+            + '<button class="np-btn np-btn-del" onclick="event.stopPropagation();deleteNotif(' + n.id + ')" title="حذف" style="opacity:.45;transition:opacity .15s" onmouseenter="this.style.opacity=1" onmouseleave="this.style.opacity=.45">'
+            + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>'
+            + '</button>'
+            + '</div>';
     }
 
-    // ── بناء قسم ──
+    // ── بناء قسم ──────────────────────────────────────────────
     function buildSection(items, emptyMsg) {
-        if (items.length === 0) return `
-            <div class="np-empty">
-                <div class="np-empty-icon">✅</div>
-                <div>${emptyMsg}</div>
-            </div>`;
+        if (!items.length)
+            return '<div style="padding:1.75rem;text-align:center;color:var(--color-text-tertiary);font-size:13px">'
+                + '<i class="ti ti-circle-check" style="font-size:28px;display:block;margin-bottom:8px;opacity:.4" aria-hidden="true"></i>'
+                + emptyMsg + '</div>';
         return items.map(buildRow).join('');
     }
 
-    const pUnread = personalAll.filter(n => !n.is_read).length;
-    const gUnread = generalAll.filter(n => !n.is_read).length;
-
+    // ══════════════════════════════════════════════════════════
+    // بناء HTML الصفحة
+    // ══════════════════════════════════════════════════════════
     DOM.mainContent.innerHTML = `
     <div class="np-wrap">
 
         <!-- هيدر -->
         <div class="np-header">
             <div>
-                <h2 class="np-main-title">🔔 التنبيهات</h2>
-                <p class="np-main-sub">إجمالي: ${total} تنبيه — ${unread} غير مقروء</p>
+                <h2 class="np-main-title">التنبيهات</h2>
+                <p class="np-main-sub">${total} تنبيه — ${notificationsData.filter(n => n.created_at && (now - new Date(n.created_at).getTime()) < 86400000).length} جديد اليوم</p>
             </div>
-            <button class="btn btn-secondary" onclick="markAllAsRead()" style="font-size:.82rem;gap:.4rem;display:flex;align-items:center">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                تعيين الكل كمقروء
-            </button>
-        </div>
-
-        <!-- إحصاءات -->
-        <div class="np-stats">
-            <div class="np-stat">
-                <div class="np-stat-n">${total}</div>
-                <div class="np-stat-l">الإجمالي</div>
-            </div>
-            <div class="np-stat np-stat--orange">
-                <div class="np-stat-n">${unread}</div>
-                <div class="np-stat-l">غير مقروء</div>
-            </div>
-            <div class="np-stat np-stat--green">
-                <div class="np-stat-n">${read}</div>
-                <div class="np-stat-l">مقروء</div>
-            </div>
-            <div class="np-stat np-stat--purple">
-                <div class="np-stat-n">${personalAll.length}</div>
-                <div class="np-stat-l">خاصة بي</div>
+            <div style="display:flex;gap:.5rem;align-items:center">
+                <button class="btn btn-secondary" onclick="toggleAnalyticsPanel()" id="np-analytics-toggle" style="font-size:.78rem">
+                    <i class="ti ti-chart-bar" aria-hidden="true"></i> تحليل
+                </button>
+                <button class="btn" onclick="deleteAllNotifs()" style="font-size:.78rem;color:var(--color-text-danger,#A32D2D);border-color:var(--color-border-tertiary)">
+                    <i class="ti ti-trash" aria-hidden="true"></i> حذف الكل
+                </button>
             </div>
         </div>
 
-        <!-- فلتر مقروء/غير مقروء -->
+        <!-- لوحة التحليل — مخفية بالافتراضي -->
+        <div id="np-analytics-panel" style="display:none">
+            ${_buildAnalyticsPanel(total, notificationsData, now)}
+        </div>
+
+        <!-- فلاتر النوع -->
         <div class="np-filter-bar">
-            <button class="np-filter-btn ${notifPageFilter === 'unread' ? 'active' : ''}" onclick="setNotifFilter('unread')">
-                غير مقروء ${unread > 0 ? `<span class="np-filter-count">${unread}</span>` : ''}
+            <button class="np-filter-btn ${notifPageFilter === 'all' ? 'active' : ''}" onclick="setNotifFilter('all')">الكل <span class="np-filter-count">${total}</span></button>
+            <button class="np-filter-btn ${notifPageFilter === 'security' ? 'active' : ''}" onclick="setNotifFilter('security')">
+                <i class="ti ti-shield-lock" style="font-size:13px" aria-hidden="true"></i> أمان
             </button>
-            <button class="np-filter-btn ${notifPageFilter === 'all' ? 'active' : ''}" onclick="setNotifFilter('all')">
-                الكل <span class="np-filter-count">${total}</span>
+            <button class="np-filter-btn ${notifPageFilter === 'sla' ? 'active' : ''}" onclick="setNotifFilter('sla')">
+                <i class="ti ti-clock" style="font-size:13px" aria-hidden="true"></i> SLA
             </button>
-            <button class="np-filter-btn ${notifPageFilter === 'read' ? 'active' : ''}" onclick="setNotifFilter('read')">
-                مقروء ${read > 0 ? `<span class="np-filter-count">${read}</span>` : ''}
+            <button class="np-filter-btn ${notifPageFilter === 'pr' ? 'active' : ''}" onclick="setNotifFilter('pr')">
+                <i class="ti ti-clipboard-list" style="font-size:13px" aria-hidden="true"></i> شراء
             </button>
         </div>
 
-        <!-- القسم الأول: التنبيهات الخاصة -->
+        <!-- القسم 1: تنبيهاتي الشخصية -->
         <div class="np-section-card">
-            <div class="np-section-header np-section-header--personal">
-                <div class="np-section-icon">🎯</div>
-                <div>
-                    <div class="np-section-title">تنبيهاتي الشخصية</div>
-                    <div class="np-section-sub">التصعيدات، SLA/OLA، الرسائل المباشرة</div>
+            <div class="np-section-header" style="border-right:3px solid #378ADD">
+                <i class="ti ti-user-circle" style="font-size:16px;color:#185FA5" aria-hidden="true"></i>
+                <div style="flex:1">
+                    <div style="font-size:13px;font-weight:500;color:var(--color-text-primary)">تنبيهاتي الشخصية</div>
+                    <div style="font-size:11px;color:var(--color-text-secondary);margin-top:1px">موافقات مطلوبة · SLA · أمان · رسائل مباشرة</div>
                 </div>
-                <div class="np-section-badge">${pUnread > 0 ? `<span class="np-badge-count">${pUnread}</span>` : ''}</div>
+                <span style="font-size:11px;font-weight:500;color:var(--color-text-secondary)">${personal.length}</span>
             </div>
-            <div class="np-section-list" id="personalNotifList">
-                ${buildSection(personal, 'لا توجد تنبيهات شخصية')}
-            </div>
+            <div>${buildSection(personal, 'لا توجد تنبيهات شخصية')}</div>
         </div>
 
-        <!-- القسم الثاني: التنبيهات العامة -->
-        <div class="np-section-card">
-            <div class="np-section-header np-section-header--general">
-                <div class="np-section-icon">📋</div>
-                <div>
-                    <div class="np-section-title">التنبيهات العامة</div>
-                    <div class="np-section-sub">تحديثات المعاملات، الخطابات، الحجوزات، البنوك</div>
+        <!-- القسم 2: التنبيهات العامة -->
+        <div class="np-section-card" style="margin-top:.75rem">
+            <div class="np-section-header" style="border-right:3px solid var(--color-border-secondary)">
+                <i class="ti ti-world" style="font-size:16px;color:var(--color-text-secondary)" aria-hidden="true"></i>
+                <div style="flex:1">
+                    <div style="font-size:13px;font-weight:500;color:var(--color-text-primary)">التنبيهات العامة</div>
+                    <div style="font-size:11px;color:var(--color-text-secondary);margin-top:1px">تحديثات المعاملات · طلبات جديدة · تغييرات المراحل</div>
                 </div>
-                <div class="np-section-badge">${gUnread > 0 ? `<span class="np-badge-count">${gUnread}</span>` : ''}</div>
+                <span style="font-size:11px;font-weight:500;color:var(--color-text-secondary)">${general.length}</span>
             </div>
-            <div class="np-section-list" id="generalNotifList">
-                ${buildSection(general, 'لا توجد تنبيهات عامة')}
-            </div>
+            <div>${buildSection(general, 'لا توجد تنبيهات عامة')}</div>
         </div>
 
     </div>`;
@@ -828,7 +844,105 @@ function renderNotificationsPage() {
     injectNotifPageStyles();
 }
 
+// ════════════════════════════════════════════════════════════
+// لوحة التحليل — دالة مساعدة منفصلة
+// ════════════════════════════════════════════════════════════
+function _buildAnalyticsPanel(total, data, now) {
+    var secCount = data.filter(function (n) { return (n.category || '').includes('security') || (n.category || '').includes('brute') || (n.category || '').includes('ip'); }).length;
+    var slaCount = data.filter(function (n) { return (n.category || '').includes('sla') || (n.category || '').includes('ola') || (n.category || '').includes('escalat'); }).length;
+    var prCount = data.filter(function (n) { return (n.category || '').includes('purchase') || (n.category || '').startsWith('pr_'); }).length;
+    var newCount = data.filter(function (n) { return n.created_at && (now - new Date(n.created_at).getTime()) < 86400000; }).length;
+
+    function dayKey(d) { var dt = new Date(d); return dt.getFullYear() + '-' + (dt.getMonth() + 1) + '-' + dt.getDate(); }
+    var dayMap = {};
+    for (var d = 6; d >= 0; d--) { var dt = new Date(now - d * 86400000); dayMap[dayKey(dt)] = 0; }
+    data.forEach(function (n) { if (n.created_at) { var k = dayKey(n.created_at); if (dayMap[k] !== undefined) dayMap[k]++; } });
+    var dayVals = Object.values(dayMap);
+    var dayLabels = Object.keys(dayMap).map(function (k) { var p = k.split('-'); return p[2] + '/' + p[1]; });
+    var maxDay = Math.max.apply(null, dayVals) || 1;
+
+    var html = '<div style="background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:.85rem 1rem;margin-bottom:.75rem">';
+
+    // KPIs
+    html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:.6rem;margin-bottom:.85rem">';
+    [{ label: 'الإجمالي', val: total, color: '#378ADD' }, { label: 'جديد اليوم', val: newCount, color: '#1D9E75' }, { label: 'SLA', val: slaCount, color: '#EF9F27' }, { label: 'أمان', val: secCount, color: '#E24B4A' }].forEach(function (k) {
+        html += '<div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:.6rem .75rem;text-align:center">'
+            + '<div style="font-size:1.4rem;font-weight:500;color:' + k.color + '">' + k.val + '</div>'
+            + '<div style="font-size:.68rem;color:var(--color-text-secondary);margin-top:2px">' + k.label + '</div>'
+            + '</div>';
+    });
+    html += '</div>';
+
+    // Bar chart
+    html += '<div style="font-size:.68rem;font-weight:500;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.5rem">النشاط — آخر 7 أيام</div>';
+    html += '<div style="display:flex;align-items:flex-end;gap:4px;height:60px;margin-bottom:4px">';
+    dayVals.forEach(function (v, i) {
+        var h = maxDay > 0 ? Math.max(Math.round(v / maxDay * 100), v > 0 ? 4 : 0) : 0;
+        var isToday = i === dayVals.length - 1;
+        html += '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;height:100%;justify-content:flex-end" title="' + dayLabels[i] + ': ' + v + '">'
+            + '<div style="font-size:9px;color:var(--color-text-tertiary)">' + (v > 0 ? v : '') + '</div>'
+            + '<div style="width:100%;background:' + (isToday ? '#378ADD' : '#B5D4F4') + ';height:' + h + '%;border-radius:2px 2px 0 0;min-height:' + (v > 0 ? '3' : '0') + 'px"></div>'
+            + '</div>';
+    });
+    html += '</div>';
+    html += '<div style="display:flex;justify-content:space-between">';
+    [0, 2, 4, 6].forEach(function (i) { html += '<span style="font-size:9px;color:var(--color-text-tertiary)">' + dayLabels[i] + '</span>'; });
+    html += '</div>';
+    html += '</div>';
+    return html;
+}
+
 /** تغيير الفلتر وإعادة الرسم */
+
+// ════════════════════════════════════════════════════════════
+// حذف تنبيه واحد
+// ════════════════════════════════════════════════════════════
+
+// ════════════════════════════════════════════════════════════
+// تبديل ظهور لوحة التحليل
+// ════════════════════════════════════════════════════════════
+var _analyticsPanelOpen = false;
+function toggleAnalyticsPanel() {
+    var panel = document.getElementById('np-analytics-panel');
+    var btn = document.getElementById('np-analytics-toggle');
+    if (!panel) return;
+    _analyticsPanelOpen = !_analyticsPanelOpen;
+    panel.style.display = _analyticsPanelOpen ? 'block' : 'none';
+    if (btn) btn.style.opacity = _analyticsPanelOpen ? '1' : '0.6';
+}
+
+async function deleteNotif(notifId) {
+    try {
+        await fetch('api/?action=delete_notification', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: notifId })
+        });
+        notificationsData = notificationsData.filter(n => n.id !== notifId);
+        unreadNotificationsCount = notificationsData.filter(n => !n.is_read).length; // ← أضف هذا
+        renderNotificationsPage();
+        updateNotificationBadge();
+    } catch (e) { showToast('خطأ في الحذف', 'error'); }
+}
+
+// ════════════════════════════════════════════════════════════
+// حذف كل التنبيهات
+// ════════════════════════════════════════════════════════════
+async function deleteAllNotifs() {
+    if (!confirm('حذف كل التنبيهات؟ هذا الإجراء لا يمكن التراجع عنه.')) return;
+    try {
+        await fetch('api/?action=delete_all_notifications', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ filter: notifPageFilter })
+        });
+        notificationsData = [];
+        renderNotificationsPage();
+        updateNotificationBadge();
+        showToast('تم حذف التنبيهات', 'success');
+    } catch (e) { showToast('خطأ في الحذف', 'error'); }
+}
+
 function setNotifFilter(filter) {
     notifPageFilter = filter;
     renderNotificationsPage();
@@ -856,7 +970,7 @@ function markNotifRead(notifId) {
     const n = notificationsData.find(x => parseInt(x.id, 10) === id);
     if (n) n.is_read = true;
 
-    unreadNotificationsCount = notificationsData.filter(x => !x.is_read).length;
+    unreadNotificationsCount = notificationsData.filter(x => x.is_read != 1 && x.is_read !== true).length;
     updateNotificationBadge();
 
     // تحديد نوع التنبيه: system_notification (له id حقيقي) أم tx notification
@@ -1042,25 +1156,42 @@ function injectNotifPageStyles() {
     .np-row {
         display: flex;
         align-items: flex-start;
-        gap: .875rem;
-        padding: .875rem 1.25rem;
-        border-bottom: 1px solid var(--border-color);
+        gap: .75rem;
+        padding: .85rem 1rem;
+        border-bottom: 0.5px solid var(--color-border-tertiary);
         cursor: pointer;
-        transition: background .15s;
-        position: relative;
+        transition: background .12s;
     }
     .np-row:last-child  { border-bottom: none; }
-    .np-row:hover       { background: var(--bg-surface); }
-    .np-row.np-unread   { background: var(--bg-card); }
-    .np-row.np-unread::before {
-        content: '';
-        position: absolute;
-        right: 0; top: 0; bottom: 0;
-        width: 3px;
-        background: var(--accent-blue);
-        border-radius: 0 3px 3px 0;
-    }
-    .np-row.np-read     { opacity: .75; }
+        .np-analytics-panel { background:var(--bg-surface,var(--color-background-secondary)); border:1px solid var(--border-color,var(--color-border-tertiary)); border-radius:12px; padding:.85rem 1rem; margin-bottom:.85rem; }
+        .np-analytics-kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:.6rem; margin-bottom:.85rem; }
+        .np-akpi { background:var(--bg-card,var(--color-background-primary)); border:0.5px solid var(--border-color,var(--color-border-tertiary)); border-radius:10px; padding:.65rem .85rem; text-align:center; }
+        .np-akpi-val { font-size:1.5rem; font-weight:700; line-height:1; margin-bottom:.2rem; }
+        .np-akpi-lbl { font-size:.68rem; color:var(--text-muted,var(--color-text-secondary)); }
+        .np-analytics-charts { display:grid; grid-template-columns:2fr 1.5fr 1.5fr; gap:.75rem; }
+        .np-chart-box { background:var(--bg-card,var(--color-background-primary)); border:0.5px solid var(--border-color,var(--color-border-tertiary)); border-radius:10px; padding:.75rem .85rem; }
+        .np-chart-title { font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted,var(--color-text-secondary)); margin-bottom:.65rem; }
+        .np-bar-chart { display:flex; align-items:flex-end; gap:4px; height:70px; }
+        .np-bar-col { flex:1; display:flex; flex-direction:column; align-items:center; gap:2px; height:100%; justify-content:flex-end; }
+        .np-bar-val { font-size:9px; color:var(--text-muted,var(--color-text-secondary)); min-height:12px; }
+        .np-bar { width:100%; border-radius:3px 3px 0 0; min-height:2px; transition:height .3s; }
+        .np-bar-lbl { font-size:9px; color:var(--text-muted,var(--color-text-secondary)); text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
+        .np-chart-note { font-size:.68rem; color:var(--text-muted,var(--color-text-secondary)); margin-top:.45rem; text-align:center; }
+        .np-donut-wrap { display:flex; align-items:center; gap:.75rem; }
+        .np-donut-legend { display:flex; flex-direction:column; gap:5px; flex:1; }
+        .np-legend-row { display:flex; align-items:center; gap:5px; font-size:.7rem; }
+        .np-legend-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+        .np-legend-lbl { flex:1; color:var(--text-secondary,var(--color-text-secondary)); }
+        .np-legend-val { color:var(--text-primary,var(--color-text-primary)); font-weight:500; }
+        .np-pulse-list { display:flex; flex-direction:column; gap:7px; }
+        .np-pulse-row { display:flex; align-items:center; gap:6px; }
+        .np-pulse-icon { font-size:.8rem; width:18px; text-align:center; }
+        .np-pulse-lbl { font-size:.72rem; color:var(--text-secondary,var(--color-text-secondary)); min-width:70px; }
+        .np-pulse-bar-wrap { flex:1; height:5px; border-radius:99px; background:var(--border-color,var(--color-border-tertiary)); overflow:hidden; }
+        .np-pulse-bar { height:100%; border-radius:99px; transition:width .4s; }
+        .np-pulse-num { font-size:.72rem; font-weight:700; min-width:20px; text-align:left; }
+        @media (max-width:600px) { .np-analytics-kpis { grid-template-columns:repeat(2,1fr); } .np-analytics-charts { grid-template-columns:1fr; } }
+    .np-row:hover { background: var(--color-background-secondary); }
 
     /* أيقونة */
     .np-icon {

@@ -24,8 +24,16 @@ set_exception_handler(function($e) {
     exit;
 });
 
-// ── تحميل التبعيات (نفس نمط ceo_approvals_api.php) ─────────
-require_once __DIR__ . '/../includes/functions.php';
+// ── تحميل التبعيات ──────────────────────────────────────────
+$_fnPaths = [
+    __DIR__ . '/../includes/functions.php',
+    __DIR__ . '/functions.php',
+    dirname(__DIR__) . '/includes/functions.php',
+    dirname(__DIR__) . '/functions.php',
+];
+foreach ($_fnPaths as $_p) {
+    if (file_exists($_p)) { require_once $_p; break; }
+}
 
 if (!function_exists('db')) {
     ob_end_clean();
@@ -51,6 +59,9 @@ $userDeptId      = (int)($_SESSION['department_id'] ?? 0);
 $userDeptCode    = $_SESSION['department_code'] ?? '';
 
 // جلب كود الإدارة من DB إن لم يكن في الجلسة
+
+$method = $_SERVER['REQUEST_METHOD'];
+
 if (empty($userDeptCode) && $userDeptId) {
     $conn = db();
     $dr   = $conn->query("SELECT code FROM departments WHERE id=$userDeptId LIMIT 1");
@@ -131,7 +142,30 @@ try {
             $req['attachments']     = prGetAttachments($id);
             $req['stage_approvals'] = prGetStageApprovals($id);
             $req['sla_status']      = prGetRequestSlaStatus($id);
+            $req['comments']        = prGetComments($id);
+            $req['links']           = prGetLinks($id);
+            $req['subscription']    = prGetSubscriptionInfo($id, $currentUserId);
+            $req['similar']         = prGetSimilar($id);
             jsonOut(['success'=>true,'data'=>$req]);
+        }
+
+        // ── أسماء المراحل الديناميكية من DB ─────────────────────
+        elseif ($action === 'stage_names') {
+            $names = [];
+            $conn = db();
+            $checkTbl = $conn->query("SHOW TABLES LIKE 'workflow_stage_definitions'");
+            if ($checkTbl && $checkTbl->num_rows > 0) {
+                $r = $conn->query("
+                    SELECT DISTINCT stage_key, stage_name_ar
+                    FROM workflow_stage_definitions
+                    WHERE stage_name_ar IS NOT NULL AND stage_name_ar != ''
+                    ORDER BY stage_key
+                ");
+                if ($r) while ($row = $r->fetch_assoc()) {
+                    $names[$row['stage_key']] = $row['stage_name_ar'];
+                }
+            }
+            jsonOut(['success' => true, 'names' => $names]);
         }
 
         // ── سجل الأحداث ──────────────────────────────────────
@@ -348,8 +382,19 @@ try {
             $data                  = $body;
             $data['created_by']    = $currentUserId;
             $data['department_id'] = $data['department_id'] ?? $userDeptId;
+
+            // تنظيف أي output عالق قبل الإرسال
+            if (ob_get_level() > 0) ob_clean();
+
             $result = prCreateRequest($data);
-            jsonOut($result, $result['success'] ? 200 : 400);
+
+            if ($result['success'] && function_exists('logToSecurityLog')) {
+                @logToSecurityLog('pr_create', 'إنشاء طلب شراء: ' . ($data['title'] ?? ''),
+                    'success', ['number' => $result['number'] ?? '']);
+            }
+
+            // دائماً 200 — المستخدم يقرأ success/message
+            jsonOut($result, 200);
         }
 
         // ── موافقة ────────────────────────────────────────────
@@ -358,8 +403,12 @@ try {
             $stage     = $body['stage'] ?? '';
             $notes     = $body['notes'] ?? '';
             if (!$requestId || !$stage) jsonOut(['success'=>false,'message'=>'البيانات ناقصة'], 400);
-            $result = prApproveStage($requestId, $currentUserId, $stage, $notes);
-            jsonOut($result, $result['success'] ? 200 : 400);
+        $result = prApproveStage($requestId, $currentUserId, $stage, $notes);
+if ($result['success']) {
+    if (function_exists('logToSecurityLog')) @logToSecurityLog('pr_approve', 'موافقة على طلب #' . $requestId . ' مرحلة: ' . $stage,
+        'success', ['request_id' => $requestId, 'stage' => $stage]);
+}
+jsonOut($result, $result['success'] ? 200 : 400);
         }
 
         // ── اختيار مسار الحسابات: PO أو دفع مباشر ──────────────
@@ -451,8 +500,12 @@ try {
             $stage     = $body['stage'] ?? '';
             $reason    = trim($body['reason'] ?? '');
             if (!$requestId || !$reason) jsonOut(['success'=>false,'message'=>'سبب الرفض مطلوب'], 400);
-            $result = prRejectRequest($requestId, $currentUserId, $stage, $reason);
-            jsonOut($result, $result['success'] ? 200 : 400);
+         $result = prRejectRequest($requestId, $currentUserId, $stage, $reason);
+if ($result['success']) {
+    if (function_exists('logToSecurityLog')) @logToSecurityLog('pr_reject', 'رفض طلب #' . $requestId . ' — ' . $reason,
+        'success', ['request_id' => $requestId, 'stage' => $stage]);
+}
+jsonOut($result, $result['success'] ? 200 : 400);
         }
 
         // ── إعادة تقديم طلب مرجَع ───────────────────────────
@@ -665,7 +718,102 @@ try {
             jsonOut($result, $result['success'] ? 200 : 400);
         }
 
-        else {
+
+        // ── التعليقات الداخلية ───────────────────────────────
+        elseif ($action === 'add_comment') {
+            $conn = db();
+            $data = json_decode(file_get_contents('php://input'), true);
+            $prId = (int)($data['pr_id'] ?? 0);
+            $body = trim($conn->real_escape_string($data['body'] ?? ''));
+            if (!$prId || !$body) jsonOut(['success'=>false,'message'=>'بيانات ناقصة'], 400);
+            $conn->query("INSERT INTO pr_comments (pr_id, employee_id, body) VALUES ($prId, $currentUserId, '$body')");
+            $newId = $conn->insert_id;
+            $r = $conn->query("SELECT c.*, e.name AS emp_name, e.role AS emp_role, e.job_title AS emp_title FROM pr_comments c LEFT JOIN employees e ON c.employee_id=e.id WHERE c.id=$newId LIMIT 1");
+            jsonOut(['success'=>true,'comment'=>$r->fetch_assoc()]);
+        }
+        elseif ($action === 'get_comments') {
+            $conn = db();
+            $prId = (int)($_GET['pr_id'] ?? 0);
+            $rows = [];
+            $r = $conn->query("SELECT c.*, e.name AS emp_name, e.role AS emp_role FROM pr_comments c LEFT JOIN employees e ON c.employee_id=e.id WHERE c.pr_id=$prId ORDER BY c.created_at ASC");
+            while ($row = $r->fetch_assoc()) $rows[] = $row;
+            jsonOut(['success'=>true,'comments'=>$rows]);
+        }
+        elseif ($action === 'delete_comment') {
+            $conn = db();
+            $data = json_decode(file_get_contents('php://input'), true);
+            $id = (int)($data['id'] ?? 0);
+            $r = $conn->query("SELECT employee_id FROM pr_comments WHERE id=$id LIMIT 1");
+            $c = $r ? $r->fetch_assoc() : null;
+            if (!$c) jsonOut(['success'=>false,'message'=>'غير موجود'], 404);
+            if ((int)$c['employee_id'] !== $currentUserId && $permissionLevel !== 'system_admin')
+                jsonOut(['success'=>false,'message'=>'غير مصرح'], 403);
+            $conn->query("DELETE FROM pr_comments WHERE id=$id");
+            jsonOut(['success'=>true]);
+        }
+        // ── الاشتراك ─────────────────────────────────────────
+        elseif ($action === 'toggle_subscription') {
+            $conn = db();
+            $data = json_decode(file_get_contents('php://input'), true);
+            $prId = (int)($data['pr_id'] ?? 0);
+            $check = $conn->query("SELECT id FROM pr_subscriptions WHERE pr_id=$prId AND employee_id=$currentUserId LIMIT 1");
+            if ($check->num_rows) {
+                $conn->query("DELETE FROM pr_subscriptions WHERE pr_id=$prId AND employee_id=$currentUserId");
+                jsonOut(['success'=>true,'subscribed'=>false]);
+            } else {
+                $conn->query("INSERT IGNORE INTO pr_subscriptions (pr_id,employee_id) VALUES ($prId,$currentUserId)");
+                jsonOut(['success'=>true,'subscribed'=>true]);
+            }
+        }
+        elseif ($action === 'get_subscription_status') {
+            $conn = db();
+            $prId = (int)($_GET['pr_id'] ?? 0);
+            $sub = (bool)$conn->query("SELECT id FROM pr_subscriptions WHERE pr_id=$prId AND employee_id=$currentUserId")->num_rows;
+            $total = (int)$conn->query("SELECT COUNT(*) AS c FROM pr_subscriptions WHERE pr_id=$prId")->fetch_assoc()['c'];
+            jsonOut(['success'=>true,'subscribed'=>$sub,'total'=>$total]);
+        }
+        // ── الروابط ──────────────────────────────────────────
+        elseif ($action === 'add_link') {
+            $conn = db();
+            $data = json_decode(file_get_contents('php://input'), true);
+            $prId = (int)($data['pr_id'] ?? 0);
+            $linkedId = (int)($data['linked_pr_id'] ?? 0);
+            $note = $conn->real_escape_string($data['note'] ?? '');
+            if (!$prId || !$linkedId || $prId === $linkedId) jsonOut(['success'=>false,'message'=>'بيانات غير صحيحة'], 400);
+            $conn->query("INSERT IGNORE INTO pr_links (pr_id,linked_pr_id,note,created_by) VALUES ($prId,$linkedId,'$note',$currentUserId)");
+            $conn->query("INSERT IGNORE INTO pr_links (pr_id,linked_pr_id,note,created_by) VALUES ($linkedId,$prId,'$note',$currentUserId)");
+            jsonOut(['success'=>true]);
+        }
+        elseif ($action === 'remove_link') {
+            $conn = db();
+            $data = json_decode(file_get_contents('php://input'), true);
+            $prId = (int)($data['pr_id'] ?? 0);
+            $linkedId = (int)($data['linked_pr_id'] ?? 0);
+            $conn->query("DELETE FROM pr_links WHERE (pr_id=$prId AND linked_pr_id=$linkedId) OR (pr_id=$linkedId AND linked_pr_id=$prId)");
+            jsonOut(['success'=>true]);
+        }
+        elseif ($action === 'get_links') {
+            $conn = db();
+            $prId = (int)($_GET['pr_id'] ?? 0);
+            $rows = [];
+            $r = $conn->query("SELECT l.*, pr.request_number, pr.title, pr.current_stage, pr.amount, pr.currency FROM pr_links l LEFT JOIN purchase_requests pr ON l.linked_pr_id=pr.id WHERE l.pr_id=$prId ORDER BY l.created_at DESC");
+            while ($row = $r->fetch_assoc()) $rows[] = $row;
+            jsonOut(['success'=>true,'links'=>$rows]);
+        }
+        elseif ($action === 'get_similar') {
+            $conn = db();
+            $prId = (int)($_GET['pr_id'] ?? 0);
+            $req = $prId ? prGetRequest($prId) : null;
+            if (!$req) jsonOut(['success'=>false,'message'=>'غير موجود'], 404);
+            $deptId = (int)($req['department_id'] ?? 0);
+            $supplierId = (int)($req['supplier_id'] ?? 0);
+            $where = $supplierId ? "(pr.department_id=$deptId OR pr.supplier_id=$supplierId) AND pr.id!=$prId" : "pr.department_id=$deptId AND pr.id!=$prId";
+            $rows = [];
+            $r = $conn->query("SELECT pr.id,pr.request_number,pr.title,pr.amount,pr.currency,pr.current_stage FROM purchase_requests pr WHERE $where ORDER BY pr.created_at DESC LIMIT 5");
+            while ($row = $r->fetch_assoc()) $rows[] = $row;
+            jsonOut(['success'=>true,'similar'=>$rows]);
+        }
+        else  {
             jsonOut(['success'=>false,'message'=>'إجراء غير معروف: '.$action], 400);
         }
         jsonOut(['success'=>false,'message'=>'طريقة غير مدعومة'], 405);

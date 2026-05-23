@@ -98,6 +98,10 @@ async function loadSettingsPage() {
                 </button>
 
                 <!-- ✅ تبويب محرر الثيم الجديد -->
+                <button class="settings-tab-btn" data-section="security-log" onclick="showSettingsSection('security-log', this)">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                    سجل الأمان
+                </button>
                 <button class="settings-tab-btn" data-section="theme" onclick="showSettingsSection('theme', this)">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16c2.76 0 5-2.24 5-5 0-4.42-4.03-8-9-8z"/>
@@ -108,7 +112,14 @@ async function loadSettingsPage() {
                     </svg>
                     الهوية البصرية
                 </button>
-
+<button class="settings-tab-btn" data-section="workflow" onclick="showSettingsSection('workflow', this)">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+        <path d="M2 17l10 5 10-5"/>
+        <path d="M2 12l10 5 10-5"/>
+    </svg>
+    مسارات الموافقة
+</button>
             </div>
 
             <!-- المحتوى -->
@@ -172,6 +183,19 @@ async function showSettingsSection(section, btn) {
             else document.getElementById('settingsContent').innerHTML = '<p style="color:red;padding:2rem">⚠️ لم يتم تحميل ملف الموردين — أضف app-settings-suppliers.js في index.php</p>';
             break;
 
+        case 'security-log':
+            if (typeof loadSecurityLogPage === 'function') {
+                loadSecurityLogPage('settingsContent');
+            } else {
+                document.getElementById('settingsContent').innerHTML =
+                    '<p style="color:red;padding:2rem">⚠️ أضف app-security-log.js في index.php</p>';
+            }
+            break;
+        case 'workflow':
+            if (typeof renderWorkflowSection === 'function') renderWorkflowSection();
+            else document.getElementById('settingsContent').innerHTML =
+                '<p style="color:red;padding:2rem">⚠️ أضف app-settings-workflow.js في index.php</p>';
+            break;
         // ✅ قسم محرر الثيم
         case 'theme':
             if (typeof ThemeEditor !== 'undefined') {

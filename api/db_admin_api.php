@@ -205,9 +205,29 @@ try {
             $pk    = $conn->real_escape_string($_GET['pk']     ?? 'id');
             $pkVal = $conn->real_escape_string($_GET['pk_val'] ?? '');
             if (!$table || $pkVal === '') jsonResponse(['success' => false, 'message' => 'بيانات غير مكتملة'], 400);
+
+            // ── حفظ snapshot قبل الحذف ───────────────────────
+            $snapshot = null;
+            $snapR = $conn->query("SELECT * FROM `$table` WHERE `$pk` = '$pkVal' LIMIT 1");
+            if ($snapR && $snapR->num_rows) {
+                $snapshot = $snapR->fetch_assoc();
+            }
+
             $sql = "DELETE FROM `$table` WHERE `$pk` = '$pkVal' LIMIT 1";
-            if ($conn->query($sql)) jsonResponse(['success' => true, 'message' => 'تم الحذف بنجاح']);
-            else jsonResponse(['success' => false, 'message' => 'فشل الحذف: ' . $conn->error], 500);
+            if ($conn->query($sql)) {
+                // تسجيل في security_log مع snapshot
+                if (function_exists('logToSecurityLog')) {
+                    logToSecurityLog(
+                        'data_delete',
+                        'حذف سجل من جدول: ' . $table . ' — ID: ' . $pkVal,
+                        'warning',
+                        ['table' => $table, 'pk' => $pk, 'pk_val' => $pkVal, 'snapshot' => $snapshot]
+                    );
+                }
+                jsonResponse(['success' => true, 'message' => 'تم الحذف بنجاح']);
+            } else {
+                jsonResponse(['success' => false, 'message' => 'فشل الحذف: ' . $conn->error], 500);
+            }
             break;
 
         // ══════════════════════════════════════════════════════

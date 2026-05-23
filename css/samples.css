@@ -1,0 +1,1367 @@
+/* ════════════════════════════════════════════════════════════════════
+   samples.css — Sample Tracking Workflow System
+   تصميم حديث · RTL · Responsive · ألوان الحالات
+   أزرق=جديد · أصفر=تحت التنفيذ · أخضر=مكتمل · أحمر=مرفوض/متأخر
+   الألوان مشتقة من متغيّرات النظام (تتبدّل فاتح/داكن تلقائياً)
+   ════════════════════════════════════════════════════════════════════ */
+
+/* المتغيّرات على :root حتى يرثها المودل المُلحق بـ body خارج #smp-root،
+   ومشتقة من ألوان النظام الدلالية بدل قيم ثابتة */
+:root {
+    /* أزرق = جديد → info */
+    --smp-blue: var(--color-info, #228be6);
+    --smp-blue-bg: color-mix(in srgb, var(--color-info, #228be6) 14%, transparent);
+    --smp-blue-bd: color-mix(in srgb, var(--color-info, #228be6) 45%, transparent);
+    /* أصفر = تحت التنفيذ → warning */
+    --smp-yellow: var(--color-warning, #e8590c);
+    --smp-yellow-bg: color-mix(in srgb, var(--color-warning, #e8590c) 14%, transparent);
+    --smp-yellow-bd: color-mix(in srgb, var(--color-warning, #e8590c) 55%, transparent);
+    /* أخضر = مكتمل → success */
+    --smp-green: var(--color-success, #2f7d52);
+    --smp-green-bg: color-mix(in srgb, var(--color-success, #2f7d52) 14%, transparent);
+    --smp-green-bd: color-mix(in srgb, var(--color-success, #2f7d52) 50%, transparent);
+    /* أحمر = مرفوض/متأخر → danger */
+    --smp-red: var(--color-danger, #F26F63);
+    --smp-red-bg: color-mix(in srgb, var(--color-danger, #F26F63) 14%, transparent);
+    --smp-red-bd: color-mix(in srgb, var(--color-danger, #F26F63) 50%, transparent);
+
+    /* الأسطح والنصوص — من متغيّرات النظام مباشرةً */
+    --smp-card: var(--bg-card, #fff);
+    --smp-bg2: var(--bg-secondary, #f6f7f9);
+    --smp-border: var(--border-color, #e3e6ea);
+    --smp-text: var(--text-primary, #1a1d21);
+    --smp-muted: var(--text-muted, #8a9099);
+    --smp-radius: var(--radius-lg, 14px);
+}
+
+#smp-root {
+    direction: rtl;
+    padding: 22px 26px;
+    max-width: 1400px;
+    margin: 0 auto;
+    color: var(--smp-text);
+}
+
+/* ── الترويسة ──────────────────────────────────────────────────────── */
+.smp-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+    margin-bottom: 22px;
+    flex-wrap: wrap;
+}
+
+.smp-title {
+    font-size: 24px;
+    font-weight: 700;
+    margin: 0;
+}
+
+.smp-sub {
+    font-size: 13px;
+    color: var(--smp-muted);
+    margin: 4px 0 0;
+}
+
+/* ── بطاقات الإحصائيات ─────────────────────────────────────────────── */
+.smp-stats {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 14px;
+    margin-bottom: 22px;
+}
+
+.smp-stat {
+    background: var(--smp-card);
+    border: 1px solid var(--smp-border);
+    border-radius: var(--smp-radius);
+    padding: 18px 16px;
+    cursor: pointer;
+    transition: transform .15s, box-shadow .15s;
+    position: relative;
+    overflow: hidden;
+}
+
+.smp-stat::before {
+    content: '';
+    position: absolute;
+    inset-inline-start: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background: var(--smp-muted);
+}
+
+.smp-stat:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 22px rgba(0, 0, 0, .08);
+}
+
+.smp-stat-v {
+    font-size: 30px;
+    font-weight: 800;
+    line-height: 1;
+}
+
+.smp-stat-l {
+    font-size: 12px;
+    color: var(--smp-muted);
+    margin-top: 8px;
+}
+
+.smp-stat.c-blue::before {
+    background: var(--smp-blue);
+}
+
+.smp-stat.c-blue .smp-stat-v {
+    color: var(--smp-blue);
+}
+
+.smp-stat.c-yellow::before {
+    background: var(--smp-yellow-bd);
+}
+
+.smp-stat.c-yellow .smp-stat-v {
+    color: var(--smp-yellow);
+}
+
+.smp-stat.c-green::before {
+    background: var(--smp-green-bd);
+}
+
+.smp-stat.c-green .smp-stat-v {
+    color: var(--smp-green);
+}
+
+.smp-stat.c-red::before {
+    background: var(--smp-red-bd);
+}
+
+.smp-stat.c-red .smp-stat-v {
+    color: var(--smp-red);
+}
+
+/* ── الفلاتر ───────────────────────────────────────────────────────── */
+.smp-filters {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.smp-input {
+    font-family: inherit;
+    font-size: 13px;
+    padding: 9px 12px;
+    border: 1px solid var(--smp-border);
+    border-radius: 9px;
+    background: var(--smp-card);
+    color: var(--smp-text);
+    outline: none;
+}
+
+.smp-input:focus {
+    border-color: var(--smp-blue);
+    box-shadow: 0 0 0 3px var(--smp-blue-bg);
+}
+
+#smp-search {
+    flex: 1;
+    min-width: 220px;
+}
+
+.smp-chk {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--smp-muted);
+    cursor: pointer;
+}
+
+/* ── الجدول ────────────────────────────────────────────────────────── */
+.smp-table-wrap {
+    background: var(--smp-card);
+    border: 1px solid var(--smp-border);
+    border-radius: var(--smp-radius);
+    overflow: hidden;
+}
+
+.smp-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.smp-table thead th {
+    text-align: right;
+    padding: 13px 14px;
+    background: var(--smp-bg2);
+    color: var(--smp-muted);
+    font-weight: 600;
+    font-size: 12px;
+    border-bottom: 1px solid var(--smp-border);
+    white-space: nowrap;
+}
+
+.smp-table tbody td {
+    padding: 13px 14px;
+    border-bottom: 1px solid var(--smp-border);
+}
+
+.smp-row {
+    cursor: pointer;
+    transition: background .12s;
+}
+
+.smp-row:hover {
+    background: var(--smp-bg2);
+}
+
+.smp-row:last-child td {
+    border-bottom: none;
+}
+
+.smp-row.is-over {
+    background: var(--smp-red-bg);
+}
+
+.smp-row.is-over:hover {
+    background: #fbe0e0;
+}
+
+.smp-mono {
+    font-family: ui-monospace, monospace;
+    font-weight: 600;
+    color: var(--smp-blue);
+}
+
+/* ── الشارات والأولوية ─────────────────────────────────────────────── */
+.smp-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 11px;
+    border-radius: 99px;
+    border: 1px solid;
+    white-space: nowrap;
+}
+
+.bd-blue {
+    background: var(--smp-blue-bg);
+    color: var(--smp-blue);
+    border-color: var(--smp-blue-bd);
+}
+
+.bd-yellow {
+    background: var(--smp-yellow-bg);
+    color: var(--smp-yellow);
+    border-color: var(--smp-yellow-bd);
+}
+
+.bd-green {
+    background: var(--smp-green-bg);
+    color: var(--smp-green);
+    border-color: var(--smp-green-bd);
+}
+
+.bd-red {
+    background: var(--smp-red-bg);
+    color: var(--smp-red);
+    border-color: var(--smp-red-bd);
+}
+
+.smp-prio {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 9px;
+    border-radius: 6px;
+}
+
+.smp-pr-low {
+    background: var(--smp-bg2);
+    color: var(--smp-muted);
+}
+
+.smp-pr-normal {
+    background: var(--smp-blue-bg);
+    color: var(--smp-blue);
+}
+
+.smp-pr-high {
+    background: var(--smp-yellow-bg);
+    color: var(--smp-yellow);
+}
+
+.smp-pr-urgent {
+    background: var(--smp-red-bg);
+    color: var(--smp-red);
+    font-weight: 700;
+}
+
+.smp-over-tag {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 5px;
+    background: var(--smp-red);
+    color: #fff;
+    margin-inline-start: 6px;
+}
+
+/* ── الترقيم ───────────────────────────────────────────────────────── */
+.smp-pager {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    margin-top: 18px;
+    font-size: 13px;
+    color: var(--smp-muted);
+}
+
+/* ── الأزرار ───────────────────────────────────────────────────────── */
+.smp-btn {
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 9px 16px;
+    border-radius: 9px;
+    cursor: pointer;
+    border: 1px solid var(--smp-border);
+    background: var(--smp-card);
+    color: var(--smp-text);
+    transition: filter .12s, background .12s;
+}
+
+.smp-btn:hover:not(:disabled) {
+    background: var(--smp-bg2);
+}
+
+.smp-btn:disabled {
+    opacity: .5;
+    cursor: not-allowed;
+}
+
+.smp-btn-primary {
+    background: var(--smp-blue);
+    border-color: var(--smp-blue);
+    color: #fff;
+}
+
+.smp-btn-success {
+    background: var(--smp-green);
+    border-color: var(--smp-green);
+    color: #fff;
+}
+
+.smp-btn-warn {
+    background: var(--smp-yellow-bd);
+    border-color: var(--smp-yellow-bd);
+    color: #fff;
+}
+
+.smp-btn-danger {
+    background: var(--smp-red);
+    border-color: var(--smp-red);
+    color: #fff;
+}
+
+.smp-btn-primary:hover:not(:disabled),
+.smp-btn-success:hover:not(:disabled),
+.smp-btn-warn:hover:not(:disabled),
+.smp-btn-danger:hover:not(:disabled) {
+    filter: brightness(1.08);
+    background: inherit;
+}
+
+/* ── النوافذ ───────────────────────────────────────────────────────── */
+.smp-modal-bg {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 20, 28, .55);
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 30px 16px;
+    z-index: 9999;
+    overflow-y: auto;
+    backdrop-filter: blur(2px);
+}
+
+.smp-modal {
+    background: var(--smp-card, #fff);
+    border-radius: 18px;
+    width: 100%;
+    max-width: 560px;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, .25);
+    animation: smpIn .2s ease;
+    display: flex;
+    flex-direction: column;
+    max-height: 90vh;
+}
+
+.smp-modal-lg {
+    max-width: 840px;
+}
+
+@keyframes smpIn {
+    from {
+        opacity: 0;
+        transform: translateY(-12px);
+    }
+
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+.smp-modal-h {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 18px 22px;
+    border-bottom: 1px solid var(--smp-border);
+}
+
+.smp-modal-h h2 {
+    font-size: 17px;
+    margin: 0 0 6px;
+}
+
+.smp-modal-b {
+    padding: 20px 22px;
+    overflow-y: auto;
+}
+
+.smp-modal-f {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 14px 22px;
+    border-top: 1px solid var(--smp-border);
+}
+
+.smp-x {
+    border: none;
+    background: none;
+    font-size: 20px;
+    cursor: pointer;
+    color: var(--smp-muted);
+    line-height: 1;
+    padding: 2px 6px;
+    border-radius: 6px;
+}
+
+.smp-x:hover {
+    background: var(--smp-bg2);
+    color: var(--smp-text);
+}
+
+/* ── حقول النماذج ──────────────────────────────────────────────────── */
+.smp-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.smp-fld {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    margin-bottom: 12px;
+}
+
+.smp-fld>span {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--smp-muted);
+}
+
+.smp-fld.req>span::after {
+    content: ' *';
+    color: var(--smp-red);
+}
+
+.smp-fld .smp-input {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+textarea.smp-input {
+    resize: vertical;
+    font-family: inherit;
+}
+
+/* ── Workflow Timeline ─────────────────────────────────────────────── */
+.smp-tl {
+    display: flex;
+    align-items: flex-start;
+    gap: 0;
+    padding: 8px 4px 18px;
+    margin-bottom: 14px;
+    overflow-x: auto;
+}
+
+.tl-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    min-width: 78px;
+}
+
+.tl-node {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    font-weight: 700;
+    border: 2px solid var(--smp-border);
+    background: var(--smp-card);
+    color: var(--smp-muted);
+    flex-shrink: 0;
+}
+
+.tl-done {
+    background: var(--smp-green);
+    border-color: var(--smp-green);
+    color: #fff;
+}
+
+.tl-current {
+    background: var(--smp-yellow-bd);
+    border-color: var(--smp-yellow-bd);
+    color: #fff;
+    box-shadow: 0 0 0 4px var(--smp-yellow-bg);
+}
+
+.tl-pending {
+    background: var(--smp-card);
+}
+
+.tl-lbl {
+    font-size: 10px;
+    font-weight: 600;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.tl-at {
+    font-size: 9px;
+    color: var(--smp-muted);
+}
+
+.tl-line {
+    flex: 1;
+    height: 2px;
+    background: var(--smp-border);
+    margin-top: 18px;
+    min-width: 14px;
+}
+
+.tl-line-done {
+    background: var(--smp-green);
+}
+
+.smp-reject-banner,
+.smp-mod-banner {
+    padding: 11px 15px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 14px;
+}
+
+.smp-reject-banner {
+    background: var(--smp-red-bg);
+    color: var(--smp-red);
+    border: 1px solid var(--smp-red-bd);
+}
+
+.smp-mod-banner {
+    background: var(--smp-yellow-bg);
+    color: var(--smp-yellow);
+    border: 1px solid var(--smp-yellow-bd);
+}
+
+/* ── الإجراءات ─────────────────────────────────────────────────────── */
+.smp-actions {
+    background: var(--smp-bg2);
+    border: 1px solid var(--smp-border);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 16px;
+}
+
+.smp-stage-fields {
+    margin-bottom: 14px;
+}
+
+.smp-act-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.smp-act-note {
+    font-size: 13px;
+    color: var(--smp-muted);
+    padding: 10px 0;
+}
+
+/* ── الأقسام القابلة للطي ──────────────────────────────────────────── */
+.smp-sec {
+    border: 1px solid var(--smp-border);
+    border-radius: 12px;
+    margin-bottom: 12px;
+    overflow: hidden;
+}
+
+.smp-sec>summary {
+    padding: 12px 16px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 14px;
+    background: var(--smp-bg2);
+    list-style: none;
+}
+
+.smp-sec>summary::-webkit-details-marker {
+    display: none;
+}
+
+.smp-sec>summary::before {
+    content: '▼ ';
+    font-size: 9px;
+    color: var(--smp-muted);
+}
+
+.smp-sec:not([open])>summary::before {
+    content: '◀ ';
+}
+
+.smp-info {
+    padding: 8px 16px 16px;
+}
+
+.smp-info-r {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 7px 0;
+    border-bottom: 1px dashed var(--smp-border);
+    font-size: 13px;
+}
+
+.smp-info-r:last-child {
+    border-bottom: none;
+}
+
+.smp-info-r span {
+    color: var(--smp-muted);
+}
+
+/* ── المرفقات ──────────────────────────────────────────────────────── */
+.smp-atts {
+    padding: 12px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.smp-att {
+    font-size: 13px;
+    color: var(--smp-blue);
+    text-decoration: none;
+    padding: 8px 12px;
+    background: var(--smp-bg2);
+    border-radius: 8px;
+}
+
+.smp-att:hover {
+    background: var(--smp-blue-bg);
+}
+
+.smp-att small {
+    color: var(--smp-muted);
+}
+
+/* ── سجل النشاط ────────────────────────────────────────────────────── */
+.smp-activity {
+    padding: 14px 16px;
+}
+
+.smp-ev {
+    display: flex;
+    gap: 12px;
+    padding-bottom: 14px;
+    position: relative;
+}
+
+.smp-ev:not(:last-child)::before {
+    content: '';
+    position: absolute;
+    right: 5px;
+    top: 16px;
+    bottom: 0;
+    width: 1px;
+    background: var(--smp-border);
+}
+
+.smp-ev-dot {
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    background: var(--smp-blue);
+    border: 2px solid var(--smp-blue-bg);
+    flex-shrink: 0;
+    margin-top: 3px;
+    z-index: 1;
+}
+
+.smp-ev-desc {
+    font-size: 13px;
+}
+
+.smp-ev-desc small {
+    color: var(--smp-muted);
+    font-size: 11px;
+}
+
+.smp-ev-meta {
+    font-size: 11px;
+    color: var(--smp-muted);
+    margin-top: 2px;
+}
+
+.smp-muted {
+    color: var(--smp-muted);
+    font-size: 13px;
+    padding: 12px 16px;
+}
+
+/* ── Responsive ────────────────────────────────────────────────────── */
+@media (max-width: 900px) {
+    .smp-stats {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .smp-table thead {
+        display: none;
+    }
+
+    .smp-table,
+    .smp-table tbody,
+    .smp-table tr,
+    .smp-table td {
+        display: block;
+        width: 100%;
+        box-sizing: border-box;
+    }
+
+    .smp-table tr {
+        border-bottom: 8px solid var(--smp-bg2);
+        padding: 6px 0;
+    }
+
+    .smp-table td {
+        border: none;
+        padding: 5px 14px;
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+    }
+
+    .smp-table td::before {
+        content: attr(data-l);
+        color: var(--smp-muted);
+        font-weight: 600;
+    }
+
+    .smp-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 560px) {
+    #smp-root {
+        padding: 16px 12px;
+    }
+
+    .smp-stats {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   إضافات: المسار الحكومي + المسار العمودي + تخطيط عمودين + طباعة البطاقة
+   ════════════════════════════════════════════════════════════════════ */
+
+/* ── ترويسة المودل المحسّنة ──────────────────────────────────────── */
+.smp-h-info {
+    flex: 1;
+}
+
+.smp-h-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.smp-h-num {
+    font-size: 17px;
+    font-weight: 600;
+    font-family: ui-monospace, monospace;
+}
+
+.smp-h-sub {
+    font-size: 13px;
+    color: var(--smp-muted);
+    margin-top: 4px;
+}
+
+.smp-h-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.smp-btn-ghost {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    padding: 7px 12px;
+}
+
+/* ── المسار الأفقي الحكومي (Stepper) ─────────────────────────────── */
+.smp-stepper-wrap {
+    background: var(--smp-card);
+    border: 0.5px solid var(--smp-border);
+    border-radius: var(--smp-radius);
+    padding: 22px 14px 16px;
+    margin-bottom: 16px;
+    overflow-x: auto;
+}
+
+.smp-stepper {
+    display: flex;
+    align-items: flex-start;
+    min-width: 560px;
+}
+
+.stp-step {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 7px;
+    position: relative;
+    min-width: 64px;
+}
+
+.stp-node {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: 600;
+    z-index: 2;
+    flex-shrink: 0;
+    position: relative;
+}
+
+.stp-done {
+    background: var(--smp-green);
+    color: #fff;
+}
+
+.stp-current {
+    background: var(--smp-card);
+    border: 3px solid var(--smp-yellow-bd);
+    color: var(--smp-yellow);
+    box-shadow: 0 0 0 4px var(--smp-yellow-bg);
+}
+
+.stp-pending {
+    background: var(--smp-card);
+    border: 2px solid var(--smp-border);
+    color: var(--smp-muted);
+}
+
+.stp-lbl {
+    font-size: 11px;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.stp-lbl-done {
+    color: var(--smp-green);
+    font-weight: 600;
+}
+
+.stp-lbl-cur {
+    color: var(--smp-yellow);
+    font-weight: 600;
+}
+
+.stp-lbl-pend {
+    color: var(--smp-muted);
+}
+
+.stp-at {
+    font-size: 9px;
+    color: var(--smp-muted);
+}
+
+.stp-at.stp-now {
+    color: var(--smp-yellow-bd);
+}
+
+.stp-bar {
+    position: absolute;
+    top: 18px;
+    right: -50%;
+    width: 100%;
+    height: 3px;
+    background: var(--smp-border);
+    z-index: 1;
+}
+
+.stp-bar-full {
+    background: var(--smp-green);
+}
+
+.stp-bar-half {
+    background: linear-gradient(to left, var(--smp-green) 50%, var(--smp-border) 50%);
+}
+
+/* ── تخطيط العمودين داخل المودل ──────────────────────────────────── */
+.smp-cols {
+    display: grid;
+    grid-template-columns: 1.5fr 1fr;
+    gap: 14px;
+    align-items: start;
+}
+
+.smp-col-main,
+.smp-col-side {
+    min-width: 0;
+}
+
+/* ── المسار العمودي التفصيلي (Audit Timeline) ────────────────────── */
+.smp-vtl {
+    padding: 12px 14px;
+}
+
+.vtl-row {
+    display: flex;
+    gap: 12px;
+}
+
+.vtl-rail {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.vtl-dot {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.vtl-done {
+    background: var(--smp-green);
+    color: #fff;
+}
+
+.vtl-cur {
+    background: var(--smp-card);
+    border: 3px solid var(--smp-yellow-bd);
+    color: var(--smp-yellow);
+    box-shadow: 0 0 0 3px var(--smp-yellow-bg);
+}
+
+.vtl-pend {
+    background: var(--smp-card);
+    border: 2px solid var(--smp-border);
+    color: var(--smp-muted);
+}
+
+.vtl-line {
+    width: 2px;
+    flex: 1;
+    min-height: 16px;
+    background: var(--smp-border);
+    margin: 3px 0;
+}
+
+.vtl-line-done {
+    background: var(--smp-green);
+}
+
+.vtl-body {
+    flex: 1;
+    padding-bottom: 14px;
+}
+
+.vtl-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+}
+
+.vtl-name {
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.vtl-name-cur {
+    color: var(--smp-yellow);
+}
+
+.vtl-dept {
+    font-size: 11px;
+    color: var(--smp-muted);
+    margin-top: 3px;
+}
+
+.vtl-at {
+    font-size: 10px;
+    color: var(--smp-muted);
+    margin-top: 1px;
+}
+
+.vtl-badge {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 99px;
+    white-space: nowrap;
+}
+
+.vtl-b-done {
+    background: var(--smp-green-bg);
+    color: var(--smp-green);
+}
+
+.vtl-b-cur {
+    background: var(--smp-yellow-bg);
+    color: var(--smp-yellow);
+}
+
+.vtl-b-pend {
+    background: var(--smp-bg2);
+    color: var(--smp-muted);
+}
+
+/* ── نافذة اختيار مقاس الطباعة ────────────────────────────────────── */
+.smp-size-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.smp-size-opt {
+    text-align: right;
+    font-family: inherit;
+    cursor: pointer;
+    background: var(--smp-card);
+    border: 0.5px solid var(--smp-border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    transition: border-color .12s, background .12s;
+}
+
+.smp-size-opt:hover {
+    border-color: var(--smp-green-bd);
+    background: var(--smp-green-bg);
+}
+
+.smp-size-opt b {
+    font-size: 14px;
+}
+
+.smp-size-opt span {
+    font-size: 11px;
+    color: var(--smp-muted);
+}
+
+/* ── Responsive: عمود واحد على الجوال ─────────────────────────────── */
+@media (max-width: 760px) {
+    .smp-cols {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ── شريط مسؤول المرحلة + حالة SLA ──────────────────────────────────── */
+.smp-stage-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+    border-bottom: 0.5px solid var(--smp-border);
+}
+
+.smp-stage-owner {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--smp-text);
+}
+
+.smp-sla {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 99px;
+}
+
+.smp-sla-ok {
+    background: var(--smp-green-bg);
+    color: var(--smp-green);
+}
+
+.smp-sla-warn {
+    background: var(--smp-yellow-bg);
+    color: var(--smp-yellow);
+}
+
+.smp-sla-breach {
+    background: var(--smp-red-bg);
+    color: var(--smp-red);
+}
+
+/* ملاحظة التاريخ التلقائي في الإرسال */
+.smp-date-note {
+    font-size: 11px;
+    color: var(--smp-muted);
+    background: var(--smp-bg2);
+    border-radius: 8px;
+    padding: 8px 12px;
+    margin-top: 6px;
+}
+
+/* مؤشّر SLA نقطة في الجدول */
+.smp-sla-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-left: 6px;
+    vertical-align: middle;
+}
+
+.sd-ok {
+    background: var(--smp-green);
+}
+
+.sd-warn {
+    background: var(--smp-yellow-bd);
+}
+
+.sd-breach {
+    background: var(--smp-red);
+}
+
+/* ── جدول إعدادات SLA ───────────────────────────────────────────────── */
+.smp-sla-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.smp-sla-table th,
+.smp-sla-table td {
+    padding: 10px 12px;
+    border-bottom: 0.5px solid var(--smp-border);
+    text-align: right;
+}
+
+.smp-sla-table th {
+    color: var(--smp-muted);
+    font-weight: 600;
+    font-size: 12px;
+}
+
+.smp-sla-table input[type="number"] {
+    width: 80px;
+    padding: 6px 8px;
+    border: 0.5px solid var(--smp-border);
+    border-radius: 6px;
+    background: var(--smp-card);
+    color: var(--smp-text);
+    font-family: inherit;
+}
+
+/* ── نموذج الإنشاء: بطاقة الطالب التلقائية ──────────────────────────── */
+.smp-requester {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 18px;
+    background: var(--smp-blue-bg);
+    border-radius: 10px;
+    padding: 10px 14px;
+}
+
+.smp-req-av {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: var(--smp-card);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    color: var(--smp-blue);
+    font-size: 13px;
+    flex-shrink: 0;
+}
+
+.smp-req-info {
+    flex: 1;
+}
+
+.smp-req-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--smp-blue);
+}
+
+.smp-req-dept {
+    font-size: 11px;
+    color: var(--smp-blue);
+    opacity: .85;
+}
+
+.smp-req-lock {
+    font-size: 13px;
+    opacity: .6;
+}
+
+/* ── زرّا عميل/مورد ──────────────────────────────────────────────────── */
+.smp-kind-row {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+.smp-kind {
+    flex: 1;
+    font-family: inherit;
+    font-size: 13px;
+    cursor: pointer;
+    padding: 11px;
+    border-radius: 10px;
+    border: 0.5px solid var(--smp-border);
+    background: var(--smp-card);
+    color: var(--smp-muted);
+    transition: all .12s;
+}
+
+.smp-kind.active {
+    border: 2px solid var(--smp-blue);
+    background: var(--smp-blue-bg);
+    color: var(--smp-blue);
+    font-weight: 600;
+}
+
+/* ── الأقسام الشرطية (عقد / مورد) ────────────────────────────────────── */
+.smp-cond {
+    background: var(--smp-bg2);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 14px;
+}
+
+.smp-cond-h {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--smp-blue);
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* ── منطقة إرفاق الملفات ─────────────────────────────────────────────── */
+.smp-dropzone {
+    display: block;
+    border: 1px dashed var(--smp-border);
+    border-radius: 10px;
+    padding: 18px;
+    text-align: center;
+    cursor: pointer;
+    color: var(--smp-muted);
+    transition: border-color .12s, background .12s;
+}
+
+.smp-dropzone:hover {
+    border-color: var(--smp-blue-bd);
+    background: var(--smp-blue-bg);
+}
+
+.smp-dz-main {
+    font-size: 12px;
+    margin-top: 4px;
+}
+
+.smp-dz-sub {
+    font-size: 10px;
+    margin-top: 2px;
+    opacity: .8;
+}
+
+.smp-files-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.smp-file-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    background: var(--smp-bg2);
+    border: 0.5px solid var(--smp-border);
+    border-radius: 8px;
+    padding: 5px 10px;
+}
+
+.smp-file-chip button {
+    border: none;
+    background: none;
+    cursor: pointer;
+    color: var(--smp-red);
+    font-size: 12px;
+    padding: 0;
+    line-height: 1;
+}

@@ -1011,19 +1011,22 @@ try {
                 // تعليم تنبيه system_notifications كمقروء
                 jsonResponse(markNotificationRead($notifId, $userId));
             } elseif ($transactionId > 0) {
-                // تنبيه معاملة — أنشئ سجل قراءة في system_notifications
-                $conn = db();
-                $conn->query("
-                    INSERT INTO system_notifications
-                        (type, category, title, message, transaction_id, employee_id, is_read, read_at, created_at)
-                    VALUES
-                        ('info','tx_read','قراءة معاملة','',{$transactionId},{$userId},1,NOW(),NOW())
-                    ON DUPLICATE KEY UPDATE is_read=1, read_at=NOW()
-                ");
-                jsonResponse(['success' => true]);
-            } else {
-                jsonResponse(['success' => false, 'message' => 'معرف غير صالح'], 400);
-            }
+    $conn = db();
+    // تحقق أولاً هل يوجد سجل مسبق
+    $check = $conn->query("SELECT id FROM system_notifications 
+        WHERE transaction_id=$transactionId 
+          AND employee_id=$userId 
+          AND category='tx_read' LIMIT 1");
+    if ($check && $check->num_rows > 0) {
+        $row = $check->fetch_assoc();
+        $conn->query("UPDATE system_notifications SET is_read=1, read_at=NOW() WHERE id=" . (int)$row['id']);
+    } else {
+        $conn->query("INSERT INTO system_notifications
+            (type, category, title, message, transaction_id, employee_id, is_read, read_at, created_at)
+            VALUES ('info','tx_read','قراءة معاملة','',$transactionId,$userId,1,NOW(),NOW())");
+    }
+    jsonResponse(['success' => true]);
+}
             break;
 
         // ─── تعليم مجموعة إشعارات كمقروءة ──────────────────────
@@ -1074,7 +1077,27 @@ try {
             }
             jsonResponse(saveNotificationSettings($input));
             break;
+            // ─── حذف تنبيه واحد ───────────────────────────────────────
+        case 'delete_notification':
+            if ($method !== 'POST') jsonResponse(['success' => false, 'message' => 'POST فقط'], 405);
+            require_once __DIR__ . '/../includes/notification_functions.php';
+            $input   = json_decode(file_get_contents('php://input'), true);
+            $notifId = (int)($input['id'] ?? $input['notification_id'] ?? 0);
+            $userId  = (int)($_SESSION['user_id'] ?? 0);
+            if ($notifId <= 0) jsonResponse(['success' => false, 'message' => 'معرف غير صالح'], 400);
+            jsonResponse(deleteNotification($notifId, $userId));
+            break;
 
+        // ─── حذف كل التنبيهات ────────────────────────────────────
+        case 'delete_all_notifications':
+            if ($method !== 'POST') jsonResponse(['success' => false, 'message' => 'POST فقط'], 405);
+            require_once __DIR__ . '/../includes/notification_functions.php';
+            $input  = json_decode(file_get_contents('php://input'), true);
+            $userId = (int)($_SESSION['user_id'] ?? 0);
+            $filter = $input['filter'] ?? 'all';
+            jsonResponse(deleteAllNotifications($userId, $filter));
+            break;
+       
         // ─── اختبار SMTP ──────────────────────────────────────────
         case 'test_smtp':
             if ($method !== 'POST') jsonResponse(['success' => false, 'message' => 'طريقة غير صحيحة'], 405);

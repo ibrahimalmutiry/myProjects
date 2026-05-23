@@ -332,7 +332,7 @@ try {
                 if ($manualRate > 0) {
                     $exchangeRate = $manualRate;
                 } else {
-                    $rEx = $conn->query("SELECT rate_to_sar FROM exchange_rates WHERE currency='$currency' LIMIT 1");
+                    $rEx = $conn->query("SELECT rate_to_sar FROM exchange_rates WHERE code='$currency' OR currency='$currency' LIMIT 1");
                     if ($rEx && ($exRow = $rEx->fetch_assoc())) {
                         $exchangeRate = (float)$exRow['rate_to_sar'];
                     }
@@ -434,7 +434,7 @@ try {
                 if ($manualRate > 0) {
                     $exchangeRate = $manualRate;
                 } else {
-                    $rEx = $conn->query("SELECT rate_to_sar FROM exchange_rates WHERE currency='$currency' LIMIT 1");
+                    $rEx = $conn->query("SELECT rate_to_sar FROM exchange_rates WHERE code='$currency' OR currency='$currency' LIMIT 1");
                     if ($rEx && ($exRow = $rEx->fetch_assoc())) $exchangeRate = (float)$exRow['rate_to_sar'];
                 }
             }

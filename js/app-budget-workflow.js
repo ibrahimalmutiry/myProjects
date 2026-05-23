@@ -289,7 +289,7 @@ const BudgetWorkflow = (() => {
       { label: 'بانتظار الرئيس التنفيذي', value: s.pending_ceo || 0, icon: '👔', color: '#3b82f6' },
       { label: 'معتمد نهائياً', value: s.final_approved || 0, icon: '✅', color: '#10b981' },
       { label: 'مرفوض', value: s.rejected || 0, icon: '❌', color: '#ef4444' },
-      { label: 'إجمالي المبالغ (ريال)', value: _fmtMoney(s.total_sar), icon: '💰', color: '#8b5cf6', wide: true },
+      { label: 'إجمالي المبالغ', value: _fmtMoney(s.total_sar) + ' <span class="sar-symbol" aria-label="ريال سعودي"></span>', icon: '💰', color: '#8b5cf6', wide: true },
     ];
 
     el.innerHTML = cards.map(c => `
@@ -381,7 +381,7 @@ const BudgetWorkflow = (() => {
               ${sc.icon} ${_esc(r.status)}
             </span>
           </td>
-          <td class="bw-money">${_fmtMoney(r.grand_total_sar)} ﷼</td>
+          <td class="bw-money">${_fmtMoney(r.grand_total_sar)} <span class="sar-symbol" aria-label="ريال سعودي"></span></td>
           <td class="bw-muted">${_fmtDate(r.created_at)}</td>
           <td class="bw-actions">${actions}</td>
         </tr>`;
@@ -533,7 +533,7 @@ const BudgetWorkflow = (() => {
                   ${_infoRow('مركز التكلفة', res.cost_center)}
                   ${_infoRow('الأولوية', res.priority)}
                   ${_infoRow('المبلغ الإجمالي', `${_fmtMoney(res.grand_total)} ${res.currency}`)}
-                  ${_infoRow('بالريال السعودي', `${_fmtMoney(res.grand_total_sar)} ﷼`)}
+                  ${_infoRow('بالريال السعودي', `${_fmtMoney(res.grand_total_sar)} <span class="sar-symbol" aria-label="ريال سعودي"></span>`)}
                   ${_infoRow('تاريخ الطلب', _fmtDate(res.request_date))}
                   ${res.rejection_reason ? _infoRow('سبب الرفض', `<span class="bw-reject-reason">${_esc(res.rejection_reason)}</span>`) : ''}
                 </div>

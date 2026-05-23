@@ -63,23 +63,23 @@
 }
 
 .te-btn-reset {
-    background: rgba(255,255,255,0.15);
+    background: rgba(255, 255, 255, 0.15);
     color: #fff;
-    border: 1px solid rgba(255,255,255,0.3);
+    border: 1px solid rgba(255, 255, 255, 0.3);
 }
 
 .te-btn-reset:hover {
-    background: rgba(255,255,255,0.25);
+    background: rgba(255, 255, 255, 0.25);
 }
 
 .te-btn-export {
-    background: rgba(242,111,99,0.25);
+    background: rgba(242, 111, 99, 0.25);
     color: #fff;
-    border: 1px solid rgba(242,111,99,0.4);
+    border: 1px solid rgba(242, 111, 99, 0.4);
 }
 
 .te-btn-export:hover {
-    background: rgba(242,111,99,0.4);
+    background: rgba(242, 111, 99, 0.4);
 }
 
 /* ── شبكة المجموعات ── */
@@ -195,7 +195,7 @@
 
 .te-color-hex:focus {
     border-color: var(--primary, #3F5950);
-    box-shadow: 0 0 0 3px var(--primary-subtle, rgba(63,89,80,0.1));
+    box-shadow: 0 0 0 3px var(--primary-subtle, rgba(63, 89, 80, 0.1));
 }
 
 /* ── شريط المعاينة الحية ── */
@@ -297,8 +297,14 @@
     transition: background 0.3s;
 }
 
-.te-prev-table tr:nth-child(odd) td  { background: #fff; }
-.te-prev-table tr:nth-child(even) td { background: var(--secondary-bg2, #F2EEEB); transition: background 0.3s; }
+.te-prev-table tr:nth-child(odd) td {
+    background: #fff;
+}
+
+.te-prev-table tr:nth-child(even) td {
+    background: var(--secondary-bg2, #F2EEEB);
+    transition: background 0.3s;
+}
 
 .te-prev-badge-g {
     display: inline-block;
@@ -395,7 +401,7 @@
     opacity: 0;
     transition: all 0.3s ease;
     pointer-events: none;
-    box-shadow: 0 8px 24px rgba(63,89,80,0.35);
+    box-shadow: 0 8px 24px rgba(63, 89, 80, 0.35);
     white-space: nowrap;
 }
 
@@ -406,6 +412,207 @@
 
 /* ── Responsive ── */
 @media (max-width: 640px) {
-    .te-groups { grid-template-columns: 1fr; }
-    .te-header { flex-direction: column; align-items: flex-start; }
+    .te-groups {
+        grid-template-columns: 1fr;
+    }
+
+    .te-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+}
+
+
+/* ── الاقتباسات ─────────────────────────────────────────── */
+.te-quotes-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: .75rem;
+}
+
+.te-quotes-list {
+    display: flex;
+    flex-direction: column;
+    gap: .4rem;
+    max-height: 260px;
+    overflow-y: auto;
+}
+
+.te-quote-row {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    padding: .6rem .85rem;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+}
+
+.te-quote-num {
+    font-size: .72rem;
+    color: var(--text-muted);
+    min-width: 18px;
+}
+
+.te-quote-txt {
+    flex: 1;
+    font-size: .82rem;
+    color: var(--text-primary);
+    line-height: 1.4;
+}
+
+.te-quote-del {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--accent-red, #ef4444);
+    font-size: .85rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+    flex-shrink: 0;
+    opacity: .6;
+    transition: opacity .15s;
+}
+
+.te-quote-del:hover {
+    opacity: 1;
+}
+
+.te-quotes-add {
+    display: flex;
+    gap: .6rem;
+}
+
+.te-quote-input {
+    flex: 1;
+    padding: .5rem .85rem;
+    font-size: .82rem;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--bg-card);
+    color: var(--text-primary);
+    outline: none;
+}
+
+.te-quote-input:focus {
+    border-color: var(--primary, #3F5950);
+}
+
+/* ── هوية المنظمة ───────────────────────────────────────── */
+.te-brand-grid {
+    display: flex;
+    flex-direction: column;
+    gap: .6rem;
+}
+
+.te-var-row {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    flex-wrap: wrap;
+}
+
+.te-var-label {
+    font-size: .78rem;
+    color: var(--text-muted);
+    min-width: 140px;
+    flex-shrink: 0;
+}
+
+.te-font-select {
+    flex: 1;
+    padding: .4rem .7rem;
+    font-size: .8rem;
+    border: 1px solid var(--border-color);
+    border-radius: 7px;
+    background: var(--bg-card);
+    color: var(--text-primary);
+}
+
+.te-var-preview-font {
+    font-size: .85rem;
+    min-width: 90px;
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+.te-font-grid {
+    display: flex;
+    flex-direction: column;
+    gap: .75rem;
+}
+
+.te-loading {
+    padding: 1rem;
+    text-align: center;
+    color: var(--text-muted);
+}
+
+/* ── الشعارات ──────────────────────────────────────────── */
+.te-logos-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: .85rem;
+}
+
+.te-logo-item {
+    display: flex;
+    align-items: center;
+    gap: .85rem;
+    padding: .85rem;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+}
+
+.te-logo-preview {
+    width: 64px;
+    height: 64px;
+    border-radius: 10px;
+    border: 1px dashed var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    background: var(--bg-card);
+    overflow: hidden;
+}
+
+.te-logo-info {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.te-logo-info strong {
+    font-size: .8rem;
+    color: var(--text-primary);
+}
+
+.te-logo-info span {
+    font-size: .7rem;
+    color: var(--text-muted);
+}
+
+.te-upload-btn {
+    font-size: .72rem;
+    padding: 3px 9px;
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-card);
+    color: var(--text-primary);
+    cursor: pointer;
+    display: inline-block;
+    margin-top: 4px;
+}
+
+.te-upload-btn:hover {
+    border-color: var(--primary, #3F5950);
+    color: var(--primary, #3F5950);
+}
+
+@media(max-width:700px) {
+    .te-logos-grid {
+        grid-template-columns: 1fr;
+    }
 }

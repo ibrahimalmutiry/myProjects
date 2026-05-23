@@ -245,31 +245,31 @@ const ThemeEditor = (() => {
                 theme_info: '#1a5f7a',
             }
         },
-        {
-            id: 'royal',
-            label: 'البنفسجي الملكي',
-            color: '#4a2c8a',
-            values: {
-                theme_primary: '#4a2c8a',
-                theme_primary_dark: '#341f62',
-                theme_accent: '#e85d9a',
-                theme_brand_dark: '#2a1a4a',
-                theme_bg_primary: '#f0ecf8',
-                theme_bg_card: '#f6f3fb',
-                theme_bg_surface: '#e8e2f4',
-                theme_bg_secondary: '#ddd6ef',
-                theme_text_primary: '#2a1a4a',
-                theme_text_secondary: '#443270',
-                theme_text_muted: '#8a7aaa',
-                theme_border: '#c8c0e0',
-                theme_sidebar_header_bg: '#4a2c8a',
-                theme_nav_active_bg: '#4a2c8a',
-                theme_nav_hover_bg: '#e8e2f4',
-                theme_success: '#3a8a4a',
-                theme_warning: '#c86a00',
-                theme_info: '#2060c0',
-            }
-        },
+        // {
+        //     id: 'royal',
+        //     label: 'البنفسجي الملكي',
+        //     color: '#4a2c8a',
+        //     values: {
+        //         theme_primary: '#4a2c8a',
+        //         theme_primary_dark: '#341f62',
+        //         theme_accent: '#e85d9a',
+        //         theme_brand_dark: '#2a1a4a',
+        //         theme_bg_primary: '#f0ecf8',
+        //         theme_bg_card: '#f6f3fb',
+        //         theme_bg_surface: '#e8e2f4',
+        //         theme_bg_secondary: '#ddd6ef',
+        //         theme_text_primary: '#2a1a4a',
+        //         theme_text_secondary: '#443270',
+        //         theme_text_muted: '#8a7aaa',
+        //         theme_border: '#c8c0e0',
+        //         theme_sidebar_header_bg: '#4a2c8a',
+        //         theme_nav_active_bg: '#4a2c8a',
+        //         theme_nav_hover_bg: '#e8e2f4',
+        //         theme_success: '#3a8a4a',
+        //         theme_warning: '#c86a00',
+        //         theme_info: '#2060c0',
+        //     }
+        // },
         {
             id: 'slate',
             label: 'الرمادي الأنيق',
@@ -301,8 +301,8 @@ const ThemeEditor = (() => {
        3. State الداخلي
        ══════════════════════════════════════════════════════════ */
     let _currentValues = {};   // القيم الحالية
-    let _savedValues   = {};   // القيم المحفوظة في قاعدة البيانات
-    let _styleEl       = null; // عنصر <style> الديناميكي
+    let _savedValues = {};   // القيم المحفوظة في قاعدة البيانات
+    let _styleEl = null; // عنصر <style> الديناميكي
 
     /* ══════════════════════════════════════════════════════════
        4. تطبيق الثيم على الصفحة فوراً (CSS Variables injection)
@@ -393,20 +393,20 @@ const ThemeEditor = (() => {
 
     /* ── مساعدات تحويل الألوان ── */
     function _hexToRgba(hex, alpha) {
-        const r = parseInt(hex.slice(1,3),16);
-        const g = parseInt(hex.slice(3,5),16);
-        const b = parseInt(hex.slice(5,7),16);
+        const r = parseInt(hex.slice(1, 3), 16);
+        const g = parseInt(hex.slice(3, 5), 16);
+        const b = parseInt(hex.slice(5, 7), 16);
         return `rgba(${r},${g},${b},${alpha})`;
     }
 
     function _darken(hex, percent) {
-        let r = parseInt(hex.slice(1,3),16);
-        let g = parseInt(hex.slice(3,5),16);
-        let b = parseInt(hex.slice(5,7),16);
-        r = Math.max(0, Math.floor(r * (1 - percent/100)));
-        g = Math.max(0, Math.floor(g * (1 - percent/100)));
-        b = Math.max(0, Math.floor(b * (1 - percent/100)));
-        return `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`;
+        let r = parseInt(hex.slice(1, 3), 16);
+        let g = parseInt(hex.slice(3, 5), 16);
+        let b = parseInt(hex.slice(5, 7), 16);
+        r = Math.max(0, Math.floor(r * (1 - percent / 100)));
+        g = Math.max(0, Math.floor(g * (1 - percent / 100)));
+        b = Math.max(0, Math.floor(b * (1 - percent / 100)));
+        return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
     }
 
     /* ══════════════════════════════════════════════════════════
@@ -414,7 +414,7 @@ const ThemeEditor = (() => {
        ══════════════════════════════════════════════════════════ */
     async function _loadFromDB() {
         try {
-            const res  = await fetch('api/settings.php?action=get_system_settings');
+            const res = await fetch('api/settings.php?action=get_system_settings');
             const data = await res.json();
             if (!data.success) return {};
 
@@ -425,7 +425,7 @@ const ThemeEditor = (() => {
                 }
             });
             return values;
-        } catch(e) {
+        } catch (e) {
             console.warn('ThemeEditor: failed to load from DB', e);
             return {};
         }
@@ -558,7 +558,7 @@ const ThemeEditor = (() => {
         GROUPS.forEach(g => {
             g.vars.forEach(v => {
                 _currentValues[v.key] = dbValues[v.key] || v.default;
-                _savedValues[v.key]   = dbValues[v.key] || v.default;
+                _savedValues[v.key] = dbValues[v.key] || v.default;
             });
         });
 
@@ -601,26 +601,158 @@ const ThemeEditor = (() => {
                 ${GROUPS.map(g => _buildGroup(g, _currentValues)).join('')}
             </div>
 
+            <!-- ══ ① هوية المنظمة ══ -->
+            <div class="te-group" style="margin-top:1.5rem">
+                <div class="te-group-head">
+                    <span class="te-group-icon">🏢</span>
+                    <span class="te-group-title">هوية المنظمة</span>
+                    <span style="font-size:.72rem;color:var(--text-muted)">اسم النظام والجهة</span>
+                </div>
+                <div class="te-group-body">
+                    <div class="te-brand-grid" id="te-brand-fields">
+                        <div class="te-loading">⏳ جاري التحميل...</div>
+                    </div>
+                    <div style="margin-top:.5rem;display:flex;justify-content:flex-end">
+                        <button class="te-btn te-btn-save" onclick="ThemeEditor.saveBrand()">💾 حفظ الهوية</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ══ ② الشعارات والأيقونات ══ -->
+            <div class="te-group" style="margin-top:1rem">
+                <div class="te-group-head">
+                    <span class="te-group-icon">🖼</span>
+                    <span class="te-group-title">الشعارات والأيقونات</span>
+                    <span style="font-size:.72rem;color:var(--text-muted)">شعار السايدبار · Splash · Favicon</span>
+                </div>
+                <div class="te-group-body">
+                <div class="te-logos-grid">
+                    <div class="te-logo-item">
+                        <div class="te-logo-preview" id="te-logo-main-preview">
+                            <img src="images/logo.png" alt="الشعار" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" style="width:48px;height:48px;border-radius:50%;object-fit:cover">
+                            <span style="display:none;font-size:1.5rem">🏢</span>
+                        </div>
+                        <div class="te-logo-info">
+                            <strong>الشعار الرئيسي</strong>
+                            <span>السايدبار والـ splash · PNG/SVG</span>
+                            <label class="te-upload-btn">
+                                📁 رفع صورة
+                                <input type="file" accept="image/*" style="display:none" onchange="ThemeEditor.uploadLogo(this,'main')">
+                            </label>
+                        </div>
+                    </div>
+                    <div class="te-logo-item">
+                        <div class="te-logo-preview" id="te-logo-secondary-preview">
+                            <span style="font-size:1.5rem;opacity:.3">+</span>
+                        </div>
+                        <div class="te-logo-info">
+                            <strong>الشعار الثانوي</strong>
+                            <span>جانب الشعار الرئيسي في الـ splash</span>
+                            <label class="te-upload-btn">
+                                📁 رفع صورة
+                                <input type="file" accept="image/*" style="display:none" onchange="ThemeEditor.uploadLogo(this,'secondary')">
+                            </label>
+                        </div>
+                    </div>
+                    <div class="te-logo-item">
+                        <div class="te-logo-preview" style="width:36px;height:36px;border-radius:6px" id="te-favicon-preview">
+                            <span style="font-size:1rem;opacity:.3">🌐</span>
+                        </div>
+                        <div class="te-logo-info">
+                            <strong>Favicon</strong>
+                            <span>أيقونة التبويب · ICO/PNG 32×32</span>
+                            <label class="te-upload-btn">
+                                📁 رفع
+                                <input type="file" accept="image/x-icon,image/png" style="display:none" onchange="ThemeEditor.uploadLogo(this,'favicon')">
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                </div>
+            </div>
+
+            <!-- ══ ④ الخطوط والنصوص ══ -->
+            <div class="te-group" style="margin-top:1rem">
+                <div class="te-group-head">
+                    <span class="te-group-icon">Aa</span>
+                    <span class="te-group-title">الخطوط والنصوص</span>
+                    <span style="font-size:.72rem;color:var(--text-muted)">خط النظام وحجمه</span>
+                </div>
+                <div class="te-group-body">
+                <div class="te-font-grid">
+                    <div class="te-var-row">
+                        <label class="te-var-label">خط النظام</label>
+                        <select id="te-font-family" class="te-font-select" onchange="ThemeEditor.previewFont(this.value)">
+                            <option value="Cairo">Cairo</option>
+                            <option value="Tajawal">Tajawal</option>
+                            <option value="Noto Sans Arabic">Noto Sans Arabic</option>
+                            <option value="IBM Plex Sans Arabic">IBM Plex Sans Arabic</option>
+                            <option value="Almarai">Almarai</option>
+                        </select>
+                        <span class="te-var-preview-font" id="te-font-preview">نموذج النص</span>
+                    </div>
+                    <div class="te-var-row">
+                        <label class="te-var-label">حجم الخط الأساسي</label>
+                        <input type="range" min="12" max="18" step="1" value="14" id="te-font-size"
+                            oninput="document.getElementById('te-font-size-val').textContent=this.value+'px'"
+                            style="flex:1">
+                        <span id="te-font-size-val" style="font-size:.78rem;min-width:36px;color:var(--text-muted)">14px</span>
+                    </div>
+                </div>
+                <div style="margin-top:.5rem;display:flex;justify-content:flex-end">
+                        <button class="te-btn te-btn-save" onclick="ThemeEditor.saveFont()">💾 حفظ الخط</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ══ ⑤ الاقتباسات اليومية ══ -->
+            <div class="te-group" style="margin-top:1rem">
+                <div class="te-group-head">
+                    <span class="te-group-icon">💬</span>
+                    <span class="te-group-title">الاقتباسات اليومية</span>
+                    <span style="font-size:.72rem;color:var(--text-muted)">تتغير تلقائياً في التوبار</span>
+                </div>
+                <div class="te-group-body">
+                <div class="te-quotes-wrap">
+                    <div id="te-quotes-list" class="te-quotes-list">
+                        <div class="te-loading">⏳ جاري التحميل...</div>
+                    </div>
+                    <div class="te-quotes-add">
+                        <input type="text" id="te-quote-input" class="te-quote-input"
+                            placeholder="أضف اقتباساً جديداً..." maxlength="200"
+                            onkeydown="if(event.key==='Enter') ThemeEditor.addQuote()">
+                        <button class="te-btn te-btn-save" onclick="ThemeEditor.addQuote()" style="flex-shrink:0;white-space:nowrap">
+                            + إضافة
+                        </button>
+                    </div>
+                </div>
+                </div>
+            </div>
+
         </div>
 
         <!-- Toast -->
         <div class="te-toast" id="te-toast"></div>
         `;
+
+        // تحميل البيانات بعد render
+        _loadBrand();
+        _loadQuotes();
     }
 
     /* ══════════════════════════════════════════════════════════
        8. معالجات الأحداث
        ══════════════════════════════════════════════════════════ */
     function onColorChange(input) {
-        const key    = input.dataset.key;
-        const val    = input.value;
+        const key = input.dataset.key;
+        const val = input.value;
 
         // تحديث الـ state
         _currentValues[key] = val;
 
         // تحديث حقل الـ hex المجاور
-        const row    = input.closest('.te-row');
-        const hexEl  = row.querySelector('.te-color-hex');
+        const row = input.closest('.te-row');
+        const hexEl = row.querySelector('.te-color-hex');
         if (hexEl) hexEl.value = val.toUpperCase();
 
         // تطبيق فوري
@@ -641,7 +773,7 @@ const ThemeEditor = (() => {
         _currentValues[key] = val;
 
         // تحديث color picker المجاور
-        const row      = input.closest('.te-row');
+        const row = input.closest('.te-row');
         const pickerEl = row.querySelector('.te-color-picker');
         if (pickerEl) pickerEl.value = val;
 
@@ -688,7 +820,7 @@ const ThemeEditor = (() => {
 
     function _detectActivePreset(values) {
         return PRESETS.find(p =>
-            Object.entries(p.values).every(([k,v]) =>
+            Object.entries(p.values).every(([k, v]) =>
                 (values[k] || '').toLowerCase() === v.toLowerCase()
             )
         )?.id || null;
@@ -763,8 +895,8 @@ const ThemeEditor = (() => {
         lines.push('}');
 
         const blob = new Blob([lines.join('\n')], { type: 'text/css' });
-        const a    = document.createElement('a');
-        a.href     = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
         a.download = 'masar-custom-theme.css';
         a.click();
         URL.revokeObjectURL(a.href);
@@ -775,6 +907,164 @@ const ThemeEditor = (() => {
     /* ══════════════════════════════════════════════════════════
        11. تحميل الثيم عند بدء التطبيق (يُستدعى في app-common.js)
        ══════════════════════════════════════════════════════════ */
+    /* ══════════════════════════════════════════════════════════
+       الاقتباسات اليومية
+       ══════════════════════════════════════════════════════════ */
+    /* ══════════════════════════════════════════════════════════
+       هوية المنظمة
+       ══════════════════════════════════════════════════════════ */
+    async function _loadBrand() {
+        try {
+            const res = await fetch('api/settings.php?action=get_brand_identity');
+            const data = await res.json();
+            const d = data.success ? (data.data || {}) : {};
+            const el = document.getElementById('te-brand-fields');
+            if (!el) return;
+            el.innerHTML = `
+            <div class="te-var-row">
+                <label class="te-var-label">اسم النظام (عربي)</label>
+                <input type="text" id="te-brand-ar" class="te-quote-input" value="${_escHtml(d.brand_name_ar || 'نظام مسار')}" placeholder="نظام مسار">
+            </div>
+            <div class="te-var-row">
+                <label class="te-var-label">اسم النظام (إنجليزي)</label>
+                <input type="text" id="te-brand-en" class="te-quote-input" value="${_escHtml(d.brand_name_en || 'MASAR System')}" placeholder="MASAR System">
+            </div>
+            <div class="te-var-row">
+                <label class="te-var-label">اسم الجهة</label>
+                <input type="text" id="te-org-name" class="te-quote-input" value="${_escHtml(d.org_name || '')}" placeholder="القطاع المالي">
+            </div>`;
+            // تحميل الخط المحفوظ
+            const ff = document.getElementById('te-font-family');
+            if (ff && d.font_family) ff.value = d.font_family;
+            const fs = document.getElementById('te-font-size');
+            const fv = document.getElementById('te-font-size-val');
+            if (fs && d.font_size_base) { fs.value = parseInt(d.font_size_base); if (fv) fv.textContent = d.font_size_base + 'px'; }
+        } catch (e) {
+            const el = document.getElementById('te-brand-fields');
+            if (el) el.innerHTML = '<div style="color:var(--accent-red);padding:.5rem">خطأ في التحميل</div>';
+        }
+    }
+
+    async function _saveBrand() {
+        const payload = {
+            brand_name_ar: (document.getElementById('te-brand-ar')?.value || '').trim(),
+            brand_name_en: (document.getElementById('te-brand-en')?.value || '').trim(),
+            org_name: (document.getElementById('te-org-name')?.value || '').trim(),
+        };
+        try {
+            const res = await fetch('api/settings.php?action=save_brand_identity', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            _toast(data.success ? '✅ تم حفظ هوية المنظمة' : (data.message || 'فشل'), !data.success);
+        } catch (e) { _toast('خطأ في الاتصال', true); }
+    }
+
+    async function _saveFont() {
+        const ff = document.getElementById('te-font-family')?.value || '';
+        const fs = document.getElementById('te-font-size')?.value || '14';
+        const payload = { font_family: ff, font_size_base: fs };
+        try {
+            const res = await fetch('api/settings.php?action=save_brand_identity', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            if (data.success) {
+                document.documentElement.style.setProperty('--font-size-base', fs + 'px');
+                if (ff) document.documentElement.style.setProperty('--font-family', ff + ', sans-serif');
+                _toast('✅ تم حفظ إعدادات الخط');
+            } else _toast(data.message || 'فشل', true);
+        } catch (e) { _toast('خطأ في الاتصال', true); }
+    }
+
+    function _previewFont(family) {
+        const el = document.getElementById('te-font-preview');
+        if (el) el.style.fontFamily = family + ', sans-serif';
+    }
+
+    async function _uploadLogo(input, type) {
+        const file = input.files[0];
+        if (!file) return;
+        const maxSize = 2 * 1024 * 1024;
+        if (file.size > maxSize) { _toast('الحجم يتجاوز 2MB', true); return; }
+        const fd = new FormData();
+        fd.append('file', file);
+        fd.append('type', type);
+        try {
+            const res = await fetch('api/settings.php?action=upload_logo', { method: 'POST', body: fd });
+            const data = await res.json();
+            if (data.success) {
+                _toast('✅ تم رفع الشعار');
+                const previewId = { main: 'te-logo-main-preview', secondary: 'te-logo-secondary-preview', favicon: 'te-favicon-preview' }[type];
+                const prev = document.getElementById(previewId);
+                if (prev) { const reader = new FileReader(); reader.onload = e => { prev.innerHTML = `<img src="${e.target.result}" style="width:100%;height:100%;object-fit:contain;border-radius:6px">`; }; reader.readAsDataURL(file); }
+            } else _toast(data.message || 'فشل الرفع', true);
+        } catch (e) { _toast('خطأ في الرفع', true); }
+    }
+
+
+    async function _loadQuotes() {
+        const list = document.getElementById('te-quotes-list');
+        if (!list) return;
+        try {
+            const res = await fetch('api/settings.php?action=get_quotes');
+            const data = await res.json();
+            const rows = data.success ? (data.data || []) : [];
+            if (!rows.length) {
+                list.innerHTML = '<div style="padding:1rem;color:var(--text-muted);text-align:center">لا توجد اقتباسات — أضف أولاً</div>';
+                return;
+            }
+            list.innerHTML = rows.map((q, i) => `
+                <div class="te-quote-row" data-id="${q.id}">
+                    <span class="te-quote-num">${i + 1}</span>
+                    <span class="te-quote-txt">${_escHtml(q.quote_text)}</span>
+                    <button class="te-quote-del" onclick="ThemeEditor.deleteQuote(${q.id})" title="حذف">✕</button>
+                </div>`).join('');
+        } catch (e) {
+            if (list) list.innerHTML = '<div style="padding:1rem;color:var(--accent-red)">خطأ في التحميل</div>';
+        }
+    }
+
+    function _escHtml(str) {
+        return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    async function _addQuote() {
+        const input = document.getElementById('te-quote-input');
+        if (!input) return;
+        const text = input.value.trim();
+        if (!text) { _toast('أدخل نص الاقتباس', true); return; }
+        try {
+            const res = await fetch('api/settings.php?action=save_quote', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ quote_text: text })
+            });
+            const data = await res.json();
+            if (data.success) {
+                input.value = '';
+                _toast('✅ تمت الإضافة');
+                _loadQuotes();
+            } else {
+                _toast(data.message || 'فشل الحفظ', true);
+            }
+        } catch (e) { _toast('خطأ في الاتصال', true); }
+    }
+
+    async function _deleteQuote(id) {
+        if (!confirm('حذف هذا الاقتباس؟')) return;
+        try {
+            const res = await fetch('api/settings.php?action=delete_quote', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id })
+            });
+            const data = await res.json();
+            if (data.success) { _toast('✅ تم الحذف'); _loadQuotes(); }
+        } catch (e) { _toast('خطأ في الاتصال', true); }
+    }
+
+
     async function init() {
         const dbValues = await _loadFromDB();
         if (Object.keys(dbValues).length === 0) return; // لا يوجد ثيم مخصص
@@ -820,9 +1110,16 @@ const ThemeEditor = (() => {
         onColorChange,
         onHexChange,
         onHexBlur,
+        addQuote: _addQuote,
+        deleteQuote: _deleteQuote,
+        saveBrand: _saveBrand,
+        saveFont: _saveFont,
+        previewFont: _previewFont,
+        uploadLogo: _uploadLogo,
     };
 
 })();
 
 /* ── تهيئة تلقائية عند تحميل الصفحة ── */
 document.addEventListener('DOMContentLoaded', () => ThemeEditor.init());
+

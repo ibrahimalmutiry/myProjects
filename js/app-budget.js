@@ -708,7 +708,7 @@ function renderReservationForm(step = BudgetState.currentStep) {
                 ${renderCurrencySelect('rf_currency', _budgetFormData['rf_currency'] || 'SAR', '_onCurrencyChange')}
             </div>
             <div class="res-form-group" id="rf_exchange_rate_wrap" style="margin-top:.25rem;${(_budgetFormData['rf_currency'] && _budgetFormData['rf_currency'] !== 'SAR') ? '' : 'display:none'}">
-                <label>سعر الصرف (1 وحدة = ؟ ريال) <span class="req">*</span></label>
+                <label>سعر الصرف (1 وحدة = ؟ ر.س) <span class="req">*</span></label>
                 <input type="number" class="form-input" id="rf_exchange_rate" style="max-width:220px"
                     value="${_budgetFormData['rf_exchange_rate'] || 3.75}" min="0.0001" step="0.0001"
                     placeholder="مثال: 3.75 للدولار"
@@ -2055,9 +2055,9 @@ function _bpmUpdateSummary() {
 
     const chips = document.getElementById('bpm-total-chips');
     if (chips) chips.innerHTML = `
-        <div class="bpm-chip">الإجمالي: <b>${_fmt(total)} ر.س</b></div>
-        <div class="bpm-chip">الموزّع: <b style="color:${isOver ? '#ef4444' : '#22c55e'}">${_fmt(totalAllocated)} ر.س</b></div>
-        <div class="bpm-chip">${isOver ? '⚠ تجاوز' : 'المتبقي'}: <b style="color:${clr}">${_fmt(Math.abs(remain))} ر.س</b></div>
+        <div class="bpm-chip">الإجمالي: <b>${_fmt(total)} </b><span class="sar-symbol" aria-label="ريال سعودي"></span></div>
+        <div class="bpm-chip">الموزّع: <b style="color:${isOver ? '#ef4444' : '#22c55e'}">${_fmt(totalAllocated)} </b><span class="sar-symbol" aria-label="ريال سعودي"></span></div>
+        <div class="bpm-chip">${isOver ? '⚠ تجاوز' : 'المتبقي'}: <b style="color:${clr}">${_fmt(Math.abs(remain))} </b><span class="sar-symbol" aria-label="ريال سعودي"></span></div>
         <div class="bpm-chip">${pct}%</div>`;
 }
 
@@ -2069,7 +2069,7 @@ function _bpmUpdateCCSummary(idx) {
     const pct = catAmt > 0 ? Math.min(100, Math.round(ccTotal / catAmt * 100)) : 0;
     const clr = ccTotal > catAmt + 0.01 ? '#ef4444' : Math.abs(ccTotal - catAmt) < 0.01 ? '#22c55e' : '#f59e0b';
     const el = document.getElementById(`bpm-cc-summary-${idx}`);
-    if (el) el.innerHTML = `<span style="color:${clr};font-weight:600">${_fmt(ccTotal)} / ${_fmt(catAmt)} ر.س (${pct}%)</span>`;
+    if (el) el.innerHTML = `<span style="color:${clr};font-weight:600">${_fmt(ccTotal)} / ${_fmt(catAmt)} <span class="sar-symbol" aria-label="ريال سعودي"></span> (${pct}%)</span>`;
 }
 
 // ── رسم المودال ─────────────────────────────────────────────
@@ -2103,7 +2103,7 @@ function _bpmRender() {
                         <select class="form-select" style="font-size:.85rem" onchange="_bpmSetYear(this.value)">${yearOpts}</select>
                     </div>
                     <div>
-                        <label style="font-size:.78rem;color:var(--text-muted);display:block;margin-bottom:.3rem">إجمالي الميزانية (ريال) *</label>
+                        <label style="font-size:.78rem;color:var(--text-muted);display:block;margin-bottom:.3rem">إجمالي الميزانية (ر.س) *</label>
                         <input type="number" class="form-input" id="bpm-total"
                             value="${total || ''}" min="0" step="1000" placeholder="0.00"
                             style="font-size:.95rem;font-weight:700"
@@ -2118,7 +2118,7 @@ function _bpmRender() {
                 <span class="bpm-section-title">📋 توزيع البنود</span>
                 <div class="bpm-dist-tabs">
                     <button class="bpm-tab ${st.distMode === 'pct' ? 'on' : ''}"    onclick="_bpmSetMode('pct')">% نسبة</button>
-                    <button class="bpm-tab ${st.distMode === 'amount' ? 'on' : ''}" onclick="_bpmSetMode('amount')">﷼ مبلغ</button>
+                    <button class="bpm-tab ${st.distMode === 'amount' ? 'on' : ''}" onclick="_bpmSetMode('amount')"><span class="sar-symbol" aria-label="ريال سعودي"></span> مبلغ</button>
                     <button class="bpm-tab" onclick="_bpmEqualItems()">= متساوٍ</button>
                 </div>
             </div>
@@ -2127,7 +2127,7 @@ function _bpmRender() {
                             padding:.25rem .6rem;font-size:.72rem;color:var(--text-muted);font-weight:600;margin-bottom:.3rem">
                     <span>بند المصاريف</span>
                     ${st.distMode === 'pct' ? `<span style="text-align:center">النسبة</span>` : ''}
-                    <span style="text-align:left">المبلغ (ريال)</span>
+                    <span style="text-align:left">المبلغ (ر.س)</span>
                     <span></span>
                 </div>
                 <div id="bpm-items-wrap">${itemsHtml}</div>
@@ -2138,9 +2138,9 @@ function _bpmRender() {
                         </div>
                     </div>
                     <div class="bpm-chips" id="bpm-total-chips">
-                        <div class="bpm-chip">الإجمالي: <b>${_fmt(total)} ر.س</b></div>
-                        <div class="bpm-chip">الموزّع: <b style="color:${isOver ? '#ef4444' : '#22c55e'}">${_fmt(totalAllocated)} ر.س</b></div>
-                        <div class="bpm-chip">${isOver ? '⚠ تجاوز' : 'المتبقي'}: <b style="color:${barClr}">${_fmt(Math.abs(remain))} ر.س</b></div>
+                        <div class="bpm-chip">الإجمالي: <b>${_fmt(total)} </b><span class="sar-symbol" aria-label="ريال سعودي"></span></div>
+                        <div class="bpm-chip">الموزّع: <b style="color:${isOver ? '#ef4444' : '#22c55e'}">${_fmt(totalAllocated)} </b><span class="sar-symbol" aria-label="ريال سعودي"></span></div>
+                        <div class="bpm-chip">${isOver ? '⚠ تجاوز' : 'المتبقي'}: <b style="color:${barClr}">${_fmt(Math.abs(remain))} </b><span class="sar-symbol" aria-label="ريال سعودي"></span></div>
                         <div class="bpm-chip">${totalPct}%</div>
                     </div>
                 </div>
@@ -2218,7 +2218,7 @@ function _bpmRenderItem(item, idx, total) {
                 <thead><tr>
                     <th>مركز التكلفة</th>
                     <th style="text-align:center;width:90px">النسبة %</th>
-                    <th style="text-align:left;width:110px">المبلغ ﷼</th>
+                    <th style="text-align:left;width:110px">المبلغ <span class="sar-symbol" aria-label="ريال سعودي"></span></th>
                     <th style="width:55px">الحصة</th>
                     <th style="width:28px"></th>
                 </tr></thead>
@@ -2228,7 +2228,7 @@ function _bpmRenderItem(item, idx, total) {
                 <button class="bpm-add-cc" onclick="_bpmAddCC(${idx})">＋ إضافة مركز تكلفة</button>
                 <button class="bpm-add-cc" onclick="_bpmEqualCC(${idx})" style="color:#6366f1">= توزيع متساوٍ</button>
                 <span id="bpm-cc-summary-${idx}" style="font-size:.75rem;font-weight:600">
-                    <span style="color:${ccBarClr}">${_fmt(ccTotal)} / ${_fmt(catAmt)} ر.س (${ccPctBar}%)</span>
+                    <span style="color:${ccBarClr}">${_fmt(ccTotal)} / ${_fmt(catAmt)} <span class="sar-symbol" aria-label="ريال سعودي"></span> (${ccPctBar}%)</span>
                 </span>
             </div>
         </div>
@@ -2497,7 +2497,7 @@ function renderBudgetInfoBar(info, currency, exchangeRate) {
             <span>الميزانية: <strong>${formatMoneyWithSAR(allocated)}</strong></span>
             <span>المحجوز: <strong style="color:#f59e0b">${formatMoneyWithSAR(reserved)}</strong></span>
             <span>المتبقي: <strong style="color:${remaining < 0 ? '#ef4444' : '#22c55e'}">${formatMoneyWithSAR(remaining)}</strong></span>
-            ${currency !== 'SAR' ? `<span style="color:var(--text-muted)">سعر الصرف: <strong>${rate}</strong> ريال</span>` : ''}
+            ${currency !== 'SAR' ? `<span style="color:var(--text-muted)">سعر الصرف: <strong>${rate}</strong> <span class="sar-symbol" aria-label="ريال سعودي"></span></span>` : ''}
         </div>
         <div style="margin-top:.4rem;background:var(--bg-card);border-radius:4px;height:6px">
             <div style="background:${barColor};height:6px;border-radius:4px;width:${pct}%;transition:.3s"></div>

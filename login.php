@@ -3,7 +3,15 @@
  * صفحة تسجيل الدخول — مسار MASAR
  * Login Page — MASAR Brand
  */
-session_start();
+
+require_once __DIR__ . '/includes/config.php';
+
+// ── Security Headers ──────────────────────────────────────────
+setSecurityHeaders();
+
+// ── جلسة آمنة ────────────────────────────────────────────────
+secureSession();
+
 if (isset($_SESSION['user_id'])) {
     header('Location: index.php');
     exit;

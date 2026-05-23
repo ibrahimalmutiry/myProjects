@@ -874,22 +874,23 @@ async function renderSystemDashboard() {
     const h = d.health || {};
 
     // ── معلومات النظام ───────────────────────────────────────
+    const reqTimeVal = (d.request_time !== undefined && d.request_time !== null) ? d.request_time + ' ms' : '—';
     document.getElementById('sd-info-rows').innerHTML = [
         ['اسم النظام', 'نظام إدارة معاملات القطاع المالي'],
         ['الإصدار', '1.0.0'],
-        ['PHP', d.php_version],
-        ['MySQL', d.mysql_version],
-        ['السيرفر', d.server_software?.split('/').slice(0, 2).join('/') || 'Unknown'],
-        ['زمن الاستجابة', d.request_time + ' ms'],
+        ['PHP', d.php_version || '—'],
+        ['MySQL', d.mysql_version || '—'],
+        ['السيرفر', (d.server_software || 'Unknown').split('/').slice(0, 2).join('/') || 'Unknown'],
+        ['زمن الاستجابة', reqTimeVal],
     ].map(([k, v]) => `<div class="sysdash-info-row"><span>${k}</span><span class="sd-mono">${v}</span></div>`).join('');
 
     // ── صحة النظام ───────────────────────────────────────────
     const healthItems = [
-        { label: 'قاعدة البيانات', status: h.db_connection },
-        { label: 'مجلد الرفع', status: h.uploads_writable },
-        { label: 'الذاكرة', status: h.memory_status, extra: h.memory_pct + '%' },
-        { label: 'إصدار PHP', status: h.php_ok },
-        { label: 'استعلامات بطيئة', status: h.slow_queries },
+        { label: 'قاعدة البيانات', status: h.db_connection || 'error' },
+        { label: 'مجلد الرفع', status: h.uploads_writable || 'error' },
+        { label: 'الذاكرة', status: h.memory_status || 'ok', extra: (h.memory_pct !== undefined ? h.memory_pct : '—') + '%' },
+        { label: 'إصدار PHP', status: h.php_ok || 'ok' },
+        { label: 'استعلامات بطيئة', status: h.slow_queries || 'ok' },
     ];
     document.getElementById('sd-health-items').innerHTML = healthItems.map(i => {
         const cls = i.status === 'ok' ? 'sdi-ok' : i.status === 'warning' ? 'sdi-warn' : 'sdi-err';
@@ -898,12 +899,21 @@ async function renderSystemDashboard() {
     }).join('');
 
     // ── KPI Cards ────────────────────────────────────────────
-    const memPct = d.memory_limit_bytes > 0 ? Math.round((d.memory_usage / d.memory_limit_bytes) * 100) : 0;
+    // حساب نسبة الذاكرة بأمان — memory_limit_bytes يأتي من PHP الآن
+    const memLimitBytes = Number(d.memory_limit_bytes) || 0;
+    const memUsageBytes = Number(d.memory_usage) || 0;
+    const memPct = memLimitBytes > 0 ? Math.round((memUsageBytes / memLimitBytes) * 100) : (h.memory_pct || 0);
+    const memColor = memPct > 85 ? '#ef4444' : memPct > 65 ? '#f59e0b' : '#22c55e';
+
+    // db_connections / db_queries_total يأتيان الآن من SHOW GLOBAL STATUS
+    const dbConns = Number(d.db_connections) || 0;
+    const dbQueries = Number(d.db_queries_total) || 0;
+
     const kpis = [
-        { icon: '📁', label: 'ملفات مرفوعة', val: Number(d.uploads_count).toLocaleString('ar'), sub: _fmt(d.uploads_size), color: '#c9a84c' },
-        { icon: '🗄', label: 'حجم قاعدة البيانات', val: _fmt(d.db_total_size), sub: d.db_table_count + ' جدول', color: '#6366f1' },
-        { icon: '🧠', label: 'استهلاك الذاكرة', val: memPct + '%', sub: _fmt(d.memory_usage) + ' من ' + d.memory_limit, color: memPct > 80 ? '#ef4444' : '#22c55e' },
-        { icon: '⚡', label: 'استعلامات DB', val: Number(d.db_queries_total).toLocaleString('ar'), sub: d.db_connections + ' اتصال نشط', color: '#14b8a6' },
+        { icon: '📁', label: 'ملفات مرفوعة', val: Number(d.uploads_count || 0).toLocaleString('ar'), sub: _fmt(d.uploads_size || 0), color: '#c9a84c' },
+        { icon: '🗄', label: 'حجم قاعدة البيانات', val: _fmt(d.db_total_size || 0), sub: (d.db_table_count || 0) + ' جدول', color: '#6366f1' },
+        { icon: '🧠', label: 'استهلاك الذاكرة', val: memPct + '%', sub: _fmt(memUsageBytes) + ' من ' + (d.memory_limit || '—'), color: memColor },
+        { icon: '⚡', label: 'استعلامات DB', val: dbQueries > 0 ? dbQueries.toLocaleString('ar') : '—', sub: dbConns + ' اتصال نشط', color: '#14b8a6' },
     ];
     document.getElementById('sd-kpi-row').innerHTML = kpis.map(k => `
         <div class="sd-kpi-card">
@@ -916,35 +926,44 @@ async function renderSystemDashboard() {
     // ── الرسوم البيانية (Chart.js) ───────────────────────────
     await _sdLoadChartJS();
 
-    // رسم الذاكرة — Doughnut
-    _sdChart('sd-mem-chart', 'doughnut',
-        ['مستخدم', 'حر'],
-        [d.memory_usage, Math.max(0, d.memory_limit_bytes - d.memory_usage)],
-        ['rgba(239,68,68,.8)', 'rgba(34,197,94,.8)']
-    );
+    // رسم الذاكرة — Doughnut (استخدام memory_limit_bytes بأمان)
+    const memFree = Math.max(0, memLimitBytes - memUsageBytes);
+    if (memLimitBytes > 0) {
+        _sdChart('sd-mem-chart', 'doughnut',
+            ['مستخدم', 'حر'],
+            [memUsageBytes, memFree],
+            ['rgba(239,68,68,.8)', 'rgba(34,197,94,.8)']
+        );
+    } else {
+        // لا يوجد memory_limit محدد — عرض رسالة
+        const cv = document.getElementById('sd-mem-chart');
+        if (cv) cv.parentElement.innerHTML = '<div class="sh-muted" style="text-align:center;padding:30px;font-size:.82rem">لا يمكن تحديد حد الذاكرة</div>';
+    }
 
-    // رسم الجداول — Bar
+    // رسم الجداول — Bar (data_length منفصل الآن)
     const topT = (d.db_tables || []).slice(0, 8);
-    _sdChart('sd-tables-chart', 'bar',
-        topT.map(t => t.table_name),
-        topT.map(t => +(t.data_length / 1024 / 1024).toFixed(3)),
-        topT.map((_, i) => `hsl(${220 + i * 18},70%,55%)`)
-    );
+    if (topT.length) {
+        _sdChart('sd-tables-chart', 'bar',
+            topT.map(t => t.table_name),
+            topT.map(t => +((Number(t.data_length) || 0) / 1024 / 1024).toFixed(3)),
+            topT.map((_, i) => `hsl(${220 + i * 18},70%,55%)`)
+        );
+    }
 
-    // رسم OPcache — Doughnut
+    // رسم OPcache — Doughnut (d.opcache أصبح object كامل من PHP)
     const oc = d.opcache;
-    if (oc) {
+    if (oc && oc.enabled && (oc.used_memory > 0 || oc.free_memory > 0)) {
         _sdChart('sd-opcache-chart', 'doughnut',
             ['مستخدم', 'حر'],
             [oc.used_memory, oc.free_memory],
-            ['rgba(99,102,241,.8)', 'rgba(30,41,59,.5)']
+            ['rgba(99,102,241,.8)', 'rgba(34,197,94,.4)']
         );
     } else {
         const cv = document.getElementById('sd-opcache-chart');
-        if (cv) cv.parentElement.innerHTML = '<div class="sh-muted" style="text-align:center;padding:40px">OPcache غير مفعّل</div>';
+        if (cv) cv.parentElement.innerHTML = '<div class="sh-muted" style="text-align:center;padding:40px;font-size:.82rem">' + (oc ? 'OPcache مفعّل — لا توجد إحصائيات' : 'OPcache غير مفعّل') + '</div>';
     }
 
-    // ── جدول الجداول ────────────────────────────────────────
+    // ── جدول الجداول (data_length و index_length منفصلان الآن) ──
     const allTables = d.db_tables || [];
     document.getElementById('sd-tables-list').innerHTML = allTables.length ? `
         <table class="sh-table">
@@ -953,10 +972,10 @@ async function renderSystemDashboard() {
                 <tr>
                     <td style="color:var(--text-muted);font-size:.72rem">${i + 1}</td>
                     <td class="sh-td-mono">${t.table_name}</td>
-                    <td>${Number(t.table_rows).toLocaleString('ar')}</td>
-                    <td>${_fmt(t.data_length)}</td>
-                    <td>${_fmt(t.index_length)}</td>
-                    <td style="font-weight:700">${_fmt(t.total_size)}</td>
+                    <td>${Number(t.table_rows || 0).toLocaleString('ar')}</td>
+                    <td>${_fmt(t.data_length || 0)}</td>
+                    <td>${_fmt(t.index_length || 0)}</td>
+                    <td style="font-weight:700">${_fmt(t.total_size || 0)}</td>
                 </tr>`).join('')}
             </tbody>
         </table>` : '<div class="sh-muted">لا توجد بيانات</div>';
@@ -1041,8 +1060,10 @@ async function loadSystemHealth() {
 
     const h = d.health || {};
     const oc = d.opcache || null;
-    const memPct = _pct(d.memory_usage, d.memory_limit_bytes);
-    const uploadsMB = _fmt(d.uploads_size);
+    const memLimitBytes = Number(d.memory_limit_bytes) || 0;
+    const memUsageBytes = Number(d.memory_usage) || 0;
+    const memPct = memLimitBytes > 0 ? _pct(memUsageBytes, memLimitBytes) : (h.memory_pct || 0);
+    const uploadsMB = _fmt(d.uploads_size || 0);
 
     // حساب أكبر 5 جداول
     const topTables = (d.db_tables || []).slice(0, 5);
@@ -1096,10 +1117,10 @@ async function loadSystemHealth() {
             <div class="sh-section">
                 <div class="sh-sec-title">⚡ أداء النظام</div>
                 <div class="sh-rows">
-                    <div class="sh-row"><span>زمن الاستجابة</span><span class="sh-val">${d.request_time} ms</span></div>
-                    <div class="sh-row"><span>اتصالات DB نشطة</span><span class="sh-val">${d.db_connections}</span></div>
-                    <div class="sh-row"><span>إجمالي الاستعلامات</span><span class="sh-val">${Number(d.db_queries_total).toLocaleString('ar')}</span></div>
-                    <div class="sh-row"><span>استعلامات بطيئة</span><span class="sh-val ${parseInt(d.db_slow_queries) > 10 ? 'sh-warn-txt' : ''}">${d.db_slow_queries}</span></div>
+                    <div class="sh-row"><span>زمن الاستجابة</span><span class="sh-val">${d.request_time !== undefined ? d.request_time + ' ms' : '—'}</span></div>
+                    <div class="sh-row"><span>اتصالات DB نشطة</span><span class="sh-val">${d.db_connections !== undefined ? d.db_connections : '—'}</span></div>
+                    <div class="sh-row"><span>إجمالي الاستعلامات</span><span class="sh-val">${d.db_queries_total > 0 ? Number(d.db_queries_total).toLocaleString('ar') : '—'}</span></div>
+                    <div class="sh-row"><span>استعلامات بطيئة</span><span class="sh-val ${parseInt(d.db_slow_queries) > 10 ? 'sh-warn-txt' : ''}">${d.db_slow_queries !== undefined ? d.db_slow_queries : '—'}</span></div>
                     ${d.load_avg ? `<div class="sh-row"><span>حمل المعالج (avg)</span><span class="sh-val">${d.load_avg[0]?.toFixed(2)} / ${d.load_avg[1]?.toFixed(2)} / ${d.load_avg[2]?.toFixed(2)}</span></div>` : ''}
                 </div>
             </div>
@@ -1108,23 +1129,22 @@ async function loadSystemHealth() {
             <div class="sh-section">
                 <div class="sh-sec-title">🧠 استهلاك الذاكرة</div>
                 <div class="sh-rows">
-                    <div class="sh-row"><span>الاستخدام الحالي</span><span class="sh-val">${_fmt(d.memory_usage)}</span></div>
-                    <div class="sh-row"><span>ذروة الاستخدام</span><span class="sh-val">${_fmt(d.memory_peak)}</span></div>
-                    <div class="sh-row"><span>الحد الأقصى</span><span class="sh-val">${d.memory_limit}</span></div>
+                    <div class="sh-row"><span>الاستخدام الحالي</span><span class="sh-val">${_fmt(memUsageBytes)}</span></div>
+                    <div class="sh-row"><span>ذروة الاستخدام</span><span class="sh-val">${_fmt(d.memory_peak || 0)}</span></div>
+                    <div class="sh-row"><span>الحد الأقصى</span><span class="sh-val">${d.memory_limit || '—'}</span></div>
                 </div>
                 <div class="sh-metric-label">${memPct}% مستخدم</div>
-                ${_bar(memPct)}
-            </div>
+                ${_bar(memPct)}            </div>
 
             <!-- حجم النظام -->
             <div class="sh-section">
                 <div class="sh-sec-title">💾 حجم النظام</div>
                 <div class="sh-rows">
                     <div class="sh-row"><span>ملفات مرفوعة</span><span class="sh-val">${uploadsMB}</span></div>
-                    <div class="sh-row"><span>عدد الملفات</span><span class="sh-val">${Number(d.uploads_count).toLocaleString('ar')}</span></div>
-                    <div class="sh-row"><span>حجم قاعدة البيانات</span><span class="sh-val">${_fmt(d.db_total_size)}</span></div>
-                    <div class="sh-row"><span>عدد الجداول</span><span class="sh-val">${d.db_table_count}</span></div>
-                    <div class="sh-row"><span>حجم الجلسات</span><span class="sh-val">${_fmt(d.session_size)}</span></div>
+                    <div class="sh-row"><span>عدد الملفات</span><span class="sh-val">${Number(d.uploads_count || 0).toLocaleString('ar')}</span></div>
+                    <div class="sh-row"><span>حجم قاعدة البيانات</span><span class="sh-val">${_fmt(d.db_total_size || 0)}</span></div>
+                    <div class="sh-row"><span>عدد الجداول</span><span class="sh-val">${d.db_table_count || 0}</span></div>
+                    <div class="sh-row"><span>حجم الجلسات</span><span class="sh-val">${_fmt(d.session_size || 0)}</span></div>
                 </div>
             </div>
 
@@ -1137,9 +1157,9 @@ async function loadSystemHealth() {
                     ${topTables.map(t => `
                         <tr>
                             <td class="sh-td-mono">${t.table_name}</td>
-                            <td>${Number(t.table_rows).toLocaleString('ar')}</td>
-                            <td>${_fmt(t.data_length)}</td>
-                            <td>${_fmt(t.index_length)}</td>
+                            <td>${Number(t.table_rows || 0).toLocaleString('ar')}</td>
+                            <td>${_fmt(t.data_length || 0)}</td>
+                            <td>${_fmt(t.index_length || 0)}</td>
                         </tr>`).join('')}
                     </tbody>
                 </table>
@@ -1148,16 +1168,16 @@ async function loadSystemHealth() {
             <!-- OPcache / الذاكرة المؤقتة -->
             <div class="sh-section">
                 <div class="sh-sec-title">⚙️ الذاكرة المؤقتة (OPcache)</div>
-                ${oc ? `
+                ${oc && oc.enabled !== undefined ? `
                 <div class="sh-rows">
                     <div class="sh-row"><span>الحالة</span><span class="sh-val">${oc.enabled ? _healthBadge('ok') : _healthBadge('warning')}</span></div>
-                    <div class="sh-row"><span>ملفات مخزّنة</span><span class="sh-val">${oc.cached_files}</span></div>
-                    <div class="sh-row"><span>ذاكرة مستخدمة</span><span class="sh-val">${_fmt(oc.used_memory)}</span></div>
-                    <div class="sh-row"><span>ذاكرة حرة</span><span class="sh-val">${_fmt(oc.free_memory)}</span></div>
-                    <div class="sh-row"><span>نسبة الإصابة</span><span class="sh-val sh-ok-txt">${oc.hit_rate}%</span></div>
+                    <div class="sh-row"><span>ملفات مخزّنة</span><span class="sh-val">${oc.cached_files || 0}</span></div>
+                    <div class="sh-row"><span>ذاكرة مستخدمة</span><span class="sh-val">${_fmt(oc.used_memory || 0)}</span></div>
+                    <div class="sh-row"><span>ذاكرة حرة</span><span class="sh-val">${_fmt(oc.free_memory || 0)}</span></div>
+                    <div class="sh-row"><span>نسبة الإصابة</span><span class="sh-val sh-ok-txt">${oc.hit_rate || 0}%</span></div>
                 </div>
-                <div class="sh-metric-label">${oc.hit_rate}% hit rate</div>
-                ${_bar(oc.hit_rate, '#6366f1')}
+                <div class="sh-metric-label">${oc.hit_rate || 0}% hit rate</div>
+                ${_bar(oc.hit_rate || 0, '#6366f1')}
                 ` : '<div class="sh-muted">OPcache غير مفعّل أو غير متاح</div>'}
                 <button class="sh-clear-btn sh-clear-sm" onclick="clearSystemCache()" style="margin-top:12px">🗑 تفريغ الذاكرة المؤقتة</button>
             </div>

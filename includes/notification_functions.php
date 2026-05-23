@@ -120,6 +120,31 @@ function createInternalNotification($type, $scope, $refId, $refNumber, $title, $
  */
 function getSystemNotifications($userId = null, $limit = 50, $unreadOnly = false) {
     $conn  = db();
+
+    // ── Retention Policy: حذف تلقائي عند كل استدعاء ───────────
+    static $retentionDone = false;
+    if (!$retentionDone) {
+        $retentionDone = true;
+        // جلب إعدادات الاحتفاظ من قاعدة البيانات (مع قيم افتراضية)
+        $secDays  = (int)_getNotifSetting($conn, 'retention_security', 30);
+        $slaDays  = (int)_getNotifSetting($conn, 'retention_sla',      14);
+        $genDays  = (int)_getNotifSetting($conn, 'retention_general',  10);
+        $secDays  = max(7,  min(90, $secDays));
+        $slaDays  = max(7,  min(90, $slaDays));
+        $genDays  = max(3,  min(90, $genDays));
+        // تنبيهات الأمان
+        $conn->query("DELETE FROM system_notifications WHERE category='security'
+            AND created_at < DATE_SUB(NOW(), INTERVAL $secDays DAY)");
+        // تنبيهات SLA/OLA
+        $conn->query("DELETE FROM system_notifications WHERE category IN
+            ('sla_warning','sla_breach','ola_breach','ola_warning','escalation','manual_escalation')
+            AND created_at < DATE_SUB(NOW(), INTERVAL $slaDays DAY)");
+        // التنبيهات العامة
+        $conn->query("DELETE FROM system_notifications WHERE category NOT IN
+            ('security','sla_warning','sla_breach','ola_breach','ola_warning','escalation','manual_escalation')
+            AND created_at < DATE_SUB(NOW(), INTERVAL $genDays DAY)");
+    }
+
     $uid   = $userId ? (int)$userId : 0;
     $where = $uid > 0
         ? "(sn.employee_id = $uid OR sn.employee_id IS NULL)"
@@ -723,4 +748,43 @@ function testExchangeConnection($testEmail) {
         '5 دقائق', '10 دقائق', '50.0'
     );
     return sendExchangeEmail($testEmail, 'مسؤول النظام', 'اختبار Exchange — نظام SLA', $html, $config);
+}
+
+// ════════════════════════════════════════════════════════════
+// حذف تنبيه واحد
+// ════════════════════════════════════════════════════════════
+function deleteNotification(int $notifId, int $userId): array {
+    $conn = db();
+    $conn->query("DELETE FROM system_notifications WHERE id=$notifId AND (employee_id=$userId OR employee_id IS NULL)");
+    return ['success' => $conn->affected_rows > 0];
+}
+
+// ════════════════════════════════════════════════════════════
+// حذف كل التنبيهات (مع فلترة اختيارية بالنوع)
+// ════════════════════════════════════════════════════════════
+function deleteAllNotifications(int $userId, string $filter = 'all'): array {
+    $conn  = db();
+    $where = "(employee_id=$userId OR employee_id IS NULL)";
+
+    if ($filter === 'security') {
+        $where .= " AND category='security'";
+    } elseif ($filter === 'sla') {
+        $where .= " AND category IN ('sla_warning','sla_breach','ola_breach','ola_warning','escalation','manual_escalation')";
+    } elseif ($filter === 'pr') {
+        $where .= " AND (category LIKE 'pr_%' OR category='purchase_request')";
+    }
+
+    $conn->query("DELETE FROM system_notifications WHERE $where");
+    return ['success' => true, 'deleted' => $conn->affected_rows];
+}
+
+
+// ════════════════════════════════════════════════════════════
+// دالة مساعدة: جلب إعداد notification من system_settings
+// ════════════════════════════════════════════════════════════
+function _getNotifSetting(mysqli $conn, string $key, $default = null) {
+    $k = $conn->real_escape_string('notif_' . $key);
+    $r = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key='$k' LIMIT 1");
+    if ($r && $r->num_rows) return $r->fetch_assoc()['setting_value'];
+    return $default;
 }

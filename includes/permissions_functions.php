@@ -32,6 +32,7 @@ if (!defined('ALL_PAGES')) define('ALL_PAGES', [
     'daily-payments','sla','performance','settings',
     'notifications','reservations','budget-plans',
     'archive','ceo-approvals','purchase-requests',
+    'sample-warehouse','samples',
 ]);
 
 // ════════════════════════════════════════════════════════════════
@@ -67,6 +68,7 @@ function _getDefaultsByRole(string $level): array {
             'daily-payments'=>1,'sla'=>1,'performance'=>1,'settings'=>0,
             'notifications'=>1,'reservations'=>1,'budget-plans'=>1,
             'archive'=>1,'ceo-approvals'=>1,'purchase-requests'=>1,
+            'sample-warehouse'=>1,'samples'=>1,
         ],
         'sector_head' => [
             'dashboard'=>1,'transactions'=>1,'correspondence'=>1,
@@ -74,6 +76,7 @@ function _getDefaultsByRole(string $level): array {
             'daily-payments'=>1,'sla'=>1,'performance'=>1,'settings'=>0,
             'notifications'=>1,'reservations'=>1,'budget-plans'=>1,
             'archive'=>1,'ceo-approvals'=>1,'purchase-requests'=>1,
+            'sample-warehouse'=>1,'samples'=>1,
         ],
         'division_manager' => [
             'dashboard'=>1,'transactions'=>1,'correspondence'=>1,
@@ -81,6 +84,7 @@ function _getDefaultsByRole(string $level): array {
             'daily-payments'=>1,'sla'=>1,'performance'=>1,'settings'=>0,
             'notifications'=>1,'reservations'=>1,'budget-plans'=>1,
             'archive'=>1,'ceo-approvals'=>0,'purchase-requests'=>1,
+            'sample-warehouse'=>1,'samples'=>1,
         ],
         'employee' => [
             'dashboard'=>0,'transactions'=>1,'correspondence'=>1,
@@ -88,6 +92,7 @@ function _getDefaultsByRole(string $level): array {
             'daily-payments'=>0,'sla'=>0,'performance'=>0,'settings'=>0,
             'notifications'=>1,'reservations'=>1,'budget-plans'=>0,
             'archive'=>0,'ceo-approvals'=>0,'purchase-requests'=>1,
+            'sample-warehouse'=>1,'samples'=>1,
         ],
     ];
     // توافق مع الأسماء القديمة
@@ -107,7 +112,7 @@ function _applySectorLayer(array $pages, ?int $sectorId): array {
         case SECTOR_FINANCE:
             foreach (['dashboard','transactions','purchase-requests','budget-plans',
                       'daily-payments','bank-overview','sla','archive',
-                      'correspondence','notifications','reservations','performance'] as $p) {
+                      'correspondence','notifications','reservations','performance','samples'] as $p) {
                 $pages[$p] = true;
             }
             break;
@@ -117,7 +122,14 @@ function _applySectorLayer(array $pages, ?int $sectorId): array {
             }
             break;
         case SECTOR_SUPPLY_CHAIN:
-            foreach (['purchase-requests','transactions','correspondence','notifications'] as $p) {
+            foreach (['purchase-requests','transactions','correspondence','notifications','samples'] as $p) {
+                $pages[$p] = true;
+            }
+            break;
+        // ── قطاعات سير عمل العينات (Sample Tracking Workflow) ──
+        // 3=التجاري · 7=العمليات · 8=الجودة · 9=الإنتاج (من جدول departments)
+        case 3: case 7: case 8: case 9:
+            foreach (['dashboard','samples','notifications','correspondence'] as $p) {
                 $pages[$p] = true;
             }
             break;

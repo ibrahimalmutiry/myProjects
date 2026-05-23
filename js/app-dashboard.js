@@ -11,17 +11,24 @@
 async function loadDashboard() {
     showLoading();
     try {
-        const [statsRes, chartRes, urgentRes] = await Promise.all([
+        const [statsRes, chartRes, urgentRes, quotesRes] = await Promise.all([
             fetch('api/?action=stats'),
             fetch('api/?action=chart'),
-            fetch('api/?action=urgent')
+            fetch('api/?action=urgent'),
+            fetch('api/settings.php?action=get_quotes'),
         ]);
         const stats = await statsRes.json();
         const chart = await chartRes.json();
         const urgent = await urgentRes.json();
+        const quotesData = await quotesRes.json();
 
         if (stats.success) App.stats = stats.data;
         if (chart.success) App.chartData = chart.data;
+
+        // حفظ الاقتباسات في App لاستخدامها في renderDashboard
+        App.quotes = (quotesData.success && quotesData.data?.length)
+            ? quotesData.data.map(q => q.quote_text)
+            : ['التنظيم الجيد يجعل الأشياء الصعبة ممكنة.'];
 
         renderDashboard(urgent.success ? urgent.data : []);
     } catch (error) {
@@ -37,11 +44,19 @@ function renderDashboard(urgentTransactions) {
     const s = App.stats || {};
     const isEn = (typeof currentLang !== 'undefined' ? currentLang : 'ar') === 'en';
 
-    // تنسيق التاريخ حسب اللغة
+    // تنسيق التاريخ الميلادي والهجري
     const dateLocale = isEn ? 'en-US' : 'ar-SA';
     const dateStr = new Date().toLocaleDateString(dateLocale, {
         weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
     });
+    const hijriStr = new Date().toLocaleDateString('ar-SA-u-ca-islamic', {
+        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+    });
+
+    // جلب الاقتباسات من قاعدة البيانات
+    // الاقتباسات — تُجلب في loadDashboard وتُخزن في App.quotes
+    const _quotes = App.quotes || ['التنظيم الجيد يجعل الأشياء الصعبة ممكنة.'];
+    const _todayQuote = _quotes[new Date().getDay() % _quotes.length];
 
     // سهم عرض الكل حسب الاتجاه
     const arrowPoints = isEn ? '9 18 15 12 9 6' : '15 18 9 12 15 6';
@@ -51,19 +66,42 @@ function renderDashboard(urgentTransactions) {
 
         <!-- ══ شريط الترحيب ══ -->
         <div class="dash-topbar">
-            <div class="dash-greeting">
-                <span class="dash-greeting-icon">${getGreetingIcon()}</span>
-                <div>
-                    <h2 class="dash-greeting-text">${getGreeting()}، ${(currentUser?.name || '').split(' ')[0]}</h2>
-                    <p class="dash-greeting-sub">${dateStr}</p>
+
+            <!-- الترحيب + التواريخ -->
+            <div style="flex-shrink:0">
+                <div class="dash-greeting-text">${getGreetingIcon()} ${getGreeting()}، ${(currentUser?.name || '').split(' ')[0]}</div>
+                <div class="dash-dates-row">
+                    <span class="dash-date-item">${dateStr}</span>
+                    <div class="dash-date-sep"></div>
+                    <span class="dash-date-item">${hijriStr}</span>
                 </div>
             </div>
-            <div class="dash-quick-actions">
-                <button class="dash-qa-btn secondary" onclick="loadDashboard()">
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-                    ${t('refresh')}
-                </button>
+
+            <div class="dash-topbar-sep"></div>
+
+            <!-- الاقتباس اليومي -->
+            <div class="dash-quote-wrap">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#854F0B" stroke-width="2" style="flex-shrink:0"><path d="M3 21c3 0 7-1 7-8V5c0-1.25-.756-2.017-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z"/><path d="M15 21c3 0 7-1 7-8V5c0-1.25-.757-2.017-2-2h-4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2h.75c0 2.25.25 4-2.75 4v3c0 1 0 1 1 1z"/></svg>
+                <span class="dash-quote-text">${_todayQuote}</span>
             </div>
+
+            <div class="dash-topbar-sep"></div>
+
+            <!-- البحث السريع -->
+            <div class="dash-search-box" onclick="document.dispatchEvent(new KeyboardEvent('keydown',{key:'k',metaKey:true}))">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <span class="dash-search-ph">بحث سريع...</span>
+                <span class="dash-search-kbd">⌘K</span>
+            </div>
+
+            <div class="dash-topbar-sep"></div>
+
+            <!-- تحديث -->
+            <button class="dash-qa-btn secondary" onclick="loadDashboard()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                ${t('refresh')}
+            </button>
+
         </div>
 
         <!-- ══ KPI Cards ══ -->
@@ -235,6 +273,7 @@ function renderDashboard(urgentTransactions) {
         DOM.notificationBadge.style.display = (s.urgent || 0) > 0 ? 'flex' : 'none';
     }
 
+    _injectTopbarStyles();
     loadDashboardEvents();
     loadBankBalances();
     loadAvgCompletionTime();
@@ -646,6 +685,112 @@ async function submitSetPriority(txId) {
 // ═══════════════════════════════════════════════════════════
 //  دوال مساعدة
 // ═══════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════
+// CSS dash-topbar الجديد
+// ════════════════════════════════════════════════════════════
+function _injectTopbarStyles() {
+    if (document.getElementById('_dash-topbar-css')) return;
+    const s = document.createElement('style');
+    s.id = '_dash-topbar-css';
+    s.textContent = `
+    .dash-topbar {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 1rem;
+        background: var(--bg-card, var(--color-background-primary));
+        border: 1px solid var(--border-color, var(--color-border-tertiary));
+        border-radius: 12px;
+        margin-bottom: .85rem;
+        flex-wrap: wrap;
+    }
+    .dash-topbar-sep {
+        width: 1px;
+        height: 24px;
+        background: var(--border-color, var(--color-border-tertiary));
+        flex-shrink: 0;
+    }
+    .dash-greeting-text {
+        font-size: .85rem;
+        font-weight: 600;
+        color: var(--text-primary, var(--color-text-primary));
+    }
+    .dash-dates-row {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        margin-top: 2px;
+    }
+    .dash-date-item {
+        font-size: .7rem;
+        color: var(--text-muted, var(--color-text-secondary));
+    }
+    .dash-date-sep {
+        width: 1px;
+        height: 10px;
+        background: var(--border-color, var(--color-border-tertiary));
+    }
+    .dash-quote-wrap {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+    }
+    .dash-quote-text {
+        font-size: .72rem;
+        color: var(--text-muted, var(--color-text-secondary));
+        font-style: italic;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .dash-search-box {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        background: var(--bg-surface, var(--color-background-secondary));
+        border: 0.5px solid var(--border-color, var(--color-border-tertiary));
+        border-radius: 8px;
+        padding: 5px 10px;
+        cursor: pointer;
+        flex-shrink: 0;
+        min-width: 160px;
+        max-width: 220px;
+        color: var(--text-muted, var(--color-text-secondary));
+        transition: border-color .15s;
+    }
+    .dash-search-box:hover {
+        border-color: var(--primary, #3F5950);
+    }
+    .dash-search-ph {
+        font-size: .72rem;
+        color: var(--text-muted, var(--color-text-tertiary));
+        flex: 1;
+    }
+    .dash-search-kbd {
+        font-size: .65rem;
+        padding: 1px 5px;
+        border-radius: 4px;
+        background: var(--bg-card, var(--color-background-primary));
+        border: 0.5px solid var(--border-color, var(--color-border-tertiary));
+        color: var(--text-muted, var(--color-text-secondary));
+        flex-shrink: 0;
+    }
+    @media (max-width: 900px) {
+        .dash-quote-wrap { display: none; }
+        .dash-topbar-sep:nth-child(3),
+        .dash-topbar-sep:nth-child(4) { display: none; }
+    }
+    @media (max-width: 640px) {
+        .dash-search-box { display: none; }
+    }
+    `;
+    document.head.appendChild(s);
+}
+
+
 function getGreeting() {
     const h = new Date().getHours();
     return h < 12 ? t('greeting_morning') : h < 17 ? t('greeting_afternoon') : t('greeting_evening');

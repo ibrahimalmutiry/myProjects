@@ -714,8 +714,8 @@ async function renderAccountsTab() {
                 ? `<span style="color:${diffColor}">${diffSign}${formatMoneyWithSAR(Math.abs(diff))}</span>`
                 : ''}
                                 ${todayBal
-                ? `<span style="color:var(--accent-green);font-size:.72rem">✅ مسجّل اليوم</span>`
-                : `<span style="color:var(--accent-orange);font-size:.72rem">⏳ لم يُسجَّل</span>`}
+                ? `<span style="color:var(--accent-green);font-size:.72rem">✅ ${tr('مسجّل اليوم')}</span>`
+                : `<span style="color:var(--accent-orange);font-size:.72rem">⏳ ${tr('لم يُسجَّل')}</span>`}
                             </span>
                         </div>
                         <div class="br-trend ${trend}">${trend === 'up' ? '▲' : '▼'}</div>
@@ -1720,6 +1720,40 @@ function openAddMonthlyDepositModal() {
     openModal();
 }
 
+// ─── Custom Dropdown: نوع الحساب ──────────────────────────
+function bankToggleTypeSel(mode) {
+    const dropId = mode === 'add' ? 'acc-type-drop' : 'acc-edit-type-drop';
+    const drop = document.getElementById(dropId);
+    if (!drop) return;
+    const isOpen = drop.style.display !== 'none';
+    drop.style.display = isOpen ? 'none' : 'block';
+    // إغلاق عند النقر خارجاً
+    if (!isOpen) {
+        setTimeout(() => {
+            document.addEventListener('click', function handler(e) {
+                if (!drop.closest('.prf-sel-wrap')?.contains(e.target)) {
+                    drop.style.display = 'none';
+                    document.removeEventListener('click', handler);
+                }
+            });
+        }, 10);
+    }
+}
+
+function bankSelectType(mode, val) {
+    const prefix = mode === 'add' ? 'acc-type' : 'acc-edit-type';
+    const input = document.getElementById(prefix + '-input');
+    const label = document.getElementById(prefix + '-val');
+    const drop = document.getElementById(prefix + '-drop');
+    if (input) input.value = val;
+    if (label) label.textContent = tr(val);
+    if (drop) drop.style.display = 'none';
+    // تظليل المختار
+    drop?.querySelectorAll('.bank-type-opt').forEach(el => {
+        el.classList.toggle('prf-sel-opt-active', el.dataset.val === val);
+    });
+}
+
 // ─── إضافة حساب بنكي ─────────────────────────────────────
 function openAddAccountModal() {
     DOM.modalTitle.textContent = `🏛️ ${tr('إضافة حساب بنكي')}`;
@@ -1738,13 +1772,20 @@ function openAddAccountModal() {
                     <label class="form-label">${tr('اسم البنك')} *</label>
                     <input type="text" name="bank_name" class="form-input" required>
                 </div>
-                <div class="form-group">
-                    <label class="form-label">نوع الحساب</label>
-                    <select name="account_type" class="form-input">
-                        <option value="جاري">${tr('جاري')}</option>
-                        <option value="توفير">${tr('توفير')}</option>
-                        <option value="استثماري">استثماري</option>
-                    </select>
+                <div class="form-group" style="grid-column:1/-1">
+                    <label class="form-label">${tr('نوع الحساب')}</label>
+                    <div class="prf-sel-wrap" id="acc-type-wrap" style="position:relative">
+                        <div class="prf-sel-box" onclick="bankToggleTypeSel('add')" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;border:1px solid var(--border-color);border-radius:var(--border-radius-md);padding:.55rem .85rem;background:var(--bg-input,var(--bg-card));min-height:38px">
+                            <span class="prf-sel-val" id="acc-type-val" style="font-size:.9rem;color:var(--text-primary)">${tr('جاري')}</span>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+                            <input type="hidden" name="account_type" id="acc-type-input" value="جاري">
+                        </div>
+                        <div class="prf-sel-drop" id="acc-type-drop" style="display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:999;background:var(--bg-card);border:1px solid var(--border-color);border-radius:var(--border-radius-md);box-shadow:0 4px 16px rgba(0,0,0,.12);overflow:hidden">
+                            <div onclick="bankSelectType('add','جاري')"   class="prf-sel-opt bank-type-opt prf-sel-opt-active" data-val="جاري"   style="padding:.65rem 1rem;cursor:pointer;font-size:.88rem;display:flex;align-items:center;gap:.5rem"><span>${tr('جاري')}</span></div>
+                            <div onclick="bankSelectType('add','توفير')"  class="prf-sel-opt bank-type-opt" data-val="توفير"  style="padding:.65rem 1rem;cursor:pointer;font-size:.88rem;display:flex;align-items:center;gap:.5rem"><span>${tr('توفير')}</span></div>
+                            <div onclick="bankSelectType('add','استثماري')" class="prf-sel-opt bank-type-opt" data-val="استثماري" style="padding:.65rem 1rem;cursor:pointer;font-size:.88rem;display:flex;align-items:center;gap:.5rem"><span>${tr('استثماري')}</span></div>
+                        </div>
+                    </div>
                 </div>
                 <div class="form-group">
                     <label class="form-label">${tr('الرصيد الافتتاحي')}</label>
@@ -1756,8 +1797,8 @@ function openAddAccountModal() {
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" onclick="closeModal()">إلغاء</button>
-                <button type="submit" class="btn btn-primary">💾 حفظ الحساب</button>
+                <button type="button" class="btn btn-secondary" onclick="closeModal()">${tr('إلغاء')}</button>
+                <button type="submit" class="btn btn-primary">💾 ${tr('حفظ الحساب')}</button>
             </div>
         </form>`;
     openModal();
@@ -2057,11 +2098,18 @@ function editAccount(id) {
                 </div>
                 <div class="form-group">
                     <label class="form-label">نوع الحساب</label>
-                    <select name="account_type" class="form-input">
-                        <option value="جاري" ${acc.account_type === 'جاري' ? 'selected' : ''}>${tr('جاري')}</option>
-                        <option value="توفير" ${acc.account_type === 'توفير' ? 'selected' : ''}>${tr('توفير')}</option>
-                        <option value="استثماري" ${acc.account_type === 'استثماري' ? 'selected' : ''}>استثماري</option>
-                    </select>
+                    <div class="prf-sel-wrap" id="acc-edit-type-wrap" style="position:relative">
+                        <div class="prf-sel-box" onclick="bankToggleTypeSel('edit')" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;border:1px solid var(--border-color);border-radius:var(--border-radius-md);padding:.55rem .85rem;background:var(--bg-input,var(--bg-card));min-height:38px">
+                            <span class="prf-sel-val" id="acc-edit-type-val" style="font-size:.9rem;color:var(--text-primary)">\${tr(acc.account_type) || tr('جاري')}</span>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+                            <input type="hidden" name="account_type" id="acc-edit-type-input" value="\${acc.account_type || 'جاري'}">
+                        </div>
+                        <div class="prf-sel-drop" id="acc-edit-type-drop" style="display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:999;background:var(--bg-card);border:1px solid var(--border-color);border-radius:var(--border-radius-md);box-shadow:0 4px 16px rgba(0,0,0,.12);overflow:hidden">
+                            <div onclick="bankSelectType('edit','جاري')"   class="prf-sel-opt bank-type-opt \${acc.account_type==='جاري'?'prf-sel-opt-active':''}"   data-val="جاري"   style="padding:.65rem 1rem;cursor:pointer;font-size:.88rem">\${tr('جاري')}</div>
+                            <div onclick="bankSelectType('edit','توفير')"  class="prf-sel-opt bank-type-opt \${acc.account_type==='توفير'?'prf-sel-opt-active':''}"  data-val="توفير"  style="padding:.65rem 1rem;cursor:pointer;font-size:.88rem">\${tr('توفير')}</div>
+                            <div onclick="bankSelectType('edit','استثماري')" class="prf-sel-opt bank-type-opt \${acc.account_type==='استثماري'?'prf-sel-opt-active':''}" data-val="استثماري" style="padding:.65rem 1rem;cursor:pointer;font-size:.88rem">\${tr('استثماري')}</div>
+                        </div>
+                    </div>
                 </div>
                 <div class="form-group">
                     <label class="form-label">IBAN</label>

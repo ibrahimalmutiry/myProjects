@@ -101,6 +101,65 @@ $action       = $_GET['action'] ?? '';
 try {
     switch ($action) {
 
+
+        // ══ تصنيفات الأرشيف الديناميكية ═════════════════════
+        case 'get_categories':
+            $cats = getArchiveCategories();
+            ob_end_clean();
+            echo json_encode(['success'=>true,'data'=>$cats], JSON_UNESCAPED_UNICODE);
+            break;
+
+        case 'add_category':
+            if ($method !== 'POST') { ob_end_clean(); echo json_encode(['success'=>false,'message'=>'POST فقط']); break; }
+            $conn  = db();
+            $body  = json_decode(file_get_contents('php://input'), true) ?? [];
+            $sk    = $conn->real_escape_string($body['section_key']   ?? '');
+            $sl    = $conn->real_escape_string($body['section_label'] ?? '');
+            $si    = $conn->real_escape_string($body['section_icon']  ?? '📂');
+            $subk  = $conn->real_escape_string($body['sub_key']       ?? '');
+            $subl  = $conn->real_escape_string($body['sub_label']     ?? '');
+            $cat   = $conn->real_escape_string($body['category_tag']  ?? '');
+            $ord   = (int)($body['sort_order'] ?? 99);
+            if (!$sk || !$subk || !$subl || !$cat) {
+                ob_end_clean(); echo json_encode(['success'=>false,'message'=>'بيانات ناقصة'], JSON_UNESCAPED_UNICODE); break;
+            }
+            $conn->query("INSERT INTO archive_categories
+                (section_key,section_label,section_icon,sub_key,sub_label,category_tag,sort_order)
+                VALUES ('$sk','$sl','$si','$subk','$subl','$cat',$ord)
+                ON DUPLICATE KEY UPDATE sub_label='$subl', category_tag='$cat', sort_order=$ord");
+            ob_end_clean();
+            echo json_encode(['success'=>true,'message'=>'تم الإضافة','id'=>$conn->insert_id], JSON_UNESCAPED_UNICODE);
+            break;
+
+        case 'update_category':
+            if ($method !== 'POST') { ob_end_clean(); echo json_encode(['success'=>false,'message'=>'POST فقط']); break; }
+            $conn  = db();
+            $body  = json_decode(file_get_contents('php://input'), true) ?? [];
+            $id    = (int)($body['id'] ?? 0);
+            $sl    = $conn->real_escape_string($body['section_label'] ?? '');
+            $si    = $conn->real_escape_string($body['section_icon']  ?? '📂');
+            $subl  = $conn->real_escape_string($body['sub_label']     ?? '');
+            $cat   = $conn->real_escape_string($body['category_tag']  ?? '');
+            $ord   = (int)($body['sort_order'] ?? 99);
+            if (!$id) { ob_end_clean(); echo json_encode(['success'=>false,'message'=>'id مطلوب'], JSON_UNESCAPED_UNICODE); break; }
+            $conn->query("UPDATE archive_categories
+                SET section_label='$sl', section_icon='$si', sub_label='$subl', category_tag='$cat', sort_order=$ord
+                WHERE id=$id");
+            ob_end_clean();
+            echo json_encode(['success'=>true,'message'=>'تم التحديث'], JSON_UNESCAPED_UNICODE);
+            break;
+
+        case 'delete_category':
+            if ($method !== 'POST') { ob_end_clean(); echo json_encode(['success'=>false,'message'=>'POST فقط']); break; }
+            $conn = db();
+            $body = json_decode(file_get_contents('php://input'), true) ?? [];
+            $id   = (int)($body['id'] ?? 0);
+            if (!$id) { ob_end_clean(); echo json_encode(['success'=>false,'message'=>'id مطلوب'], JSON_UNESCAPED_UNICODE); break; }
+            $conn->query("UPDATE archive_categories SET is_active=0 WHERE id=$id");
+            ob_end_clean();
+            echo json_encode(['success'=>true,'message'=>'تم الإخفاء'], JSON_UNESCAPED_UNICODE);
+            break;
+
         // ══ الإحصائيات ════════════════════════════════════════
         case 'stats':
             $stats = getArchiveStats($permLevel, $departmentId);

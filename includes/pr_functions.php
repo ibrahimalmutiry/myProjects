@@ -108,6 +108,7 @@ function prEnsureColumns(): void {
         'payment_executed_by'   => "ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS payment_executed_by INT DEFAULT NULL",
         'payment_executed_at'   => "ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS payment_executed_at DATETIME DEFAULT NULL",
         'linked_transaction_id' => "ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS linked_transaction_id INT DEFAULT NULL",
+        'transaction_type_id'   => "ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS transaction_type_id INT DEFAULT NULL",
     ];
     foreach ($prCols as $sql) { @$conn->query($sql); }
 
@@ -121,6 +122,7 @@ function prEnsureColumns(): void {
         "ALTER TABLE pr_workflow_stages ADD COLUMN IF NOT EXISTS action VARCHAR(50) DEFAULT NULL",
         "ALTER TABLE pr_workflow_stages ADD COLUMN IF NOT EXISTS notes TEXT DEFAULT NULL",
         "ALTER TABLE pr_workflow_stages ADD COLUMN IF NOT EXISTS employee_id INT DEFAULT NULL",
+        "ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS items_json JSON DEFAULT NULL",
     ];
     foreach ($wsCols as $sql) { @$conn->query($sql); }
 }
@@ -215,6 +217,31 @@ function prGetSetting(string $key, string $default = ''): string {
  */
 function prGetAmountThreshold(): float {
     return (float) prGetSetting('pr_amount_threshold', '5000');
+}
+
+/**
+ * اختيار مسار سير العمل المناسب بناءً على المبلغ
+ * يقرأ من workflow_templates في قاعدة البيانات
+ * إذا لم تُثبَّت الجداول → fallback للكود القديم
+ */
+function prSelectWorkflowPath(float $amountSar): string {
+    $conn = db();
+    $check = $conn->query("SHOW TABLES LIKE 'workflow_templates'");
+    if ($check && $check->num_rows > 0) {
+        $r = $conn->query("SELECT template_key, amount_min, amount_max FROM workflow_templates WHERE is_active=1 ORDER BY sort_order ASC, id ASC");
+        if ($r) {
+            while ($row = $r->fetch_assoc()) {
+                $min = $row['amount_min'] !== null ? (float)$row['amount_min'] : null;
+                $max = $row['amount_max'] !== null ? (float)$row['amount_max'] : null;
+                if (($min === null || $amountSar >= $min) && ($max === null || $amountSar <= $max)) {
+                    return $row['template_key'];
+                }
+            }
+        }
+    }
+    // Fallback
+    $threshold = prGetAmountThreshold();
+    return $amountSar < $threshold ? 'short' : 'long';
 }
 
 
@@ -316,8 +343,7 @@ function prCreateRequest(array $data): array {
     $amountSar = round($amount * $exchangeRate, 2);
 
     // ── تحديد المسار بناءً على المبلغ بالريال ─────────────────
-    $threshold    = prGetAmountThreshold();
-    $workflowPath = $amountSar < $threshold ? 'short' : 'long';
+    $workflowPath = prSelectWorkflowPath($amountSar);
     $firstStage   = 'reception'; // الاستلام أول مرحلة دائماً
 
     // ── توليد رقم الطلب ───────────────────────────────────────
@@ -358,6 +384,15 @@ function prCreateRequest(array $data): array {
         return ['success' => false, 'message' => 'فشل إنشاء الطلب: ' . $conn->error];
     }
 
+    // ── حفظ الأصناف إن وُجدت ─────────────────────────────────
+    if (!empty($data['items']) && is_array($data['items'])) {
+        $validItems = array_filter($data['items'], fn($it) => !empty($it['name']));
+        if (!empty($validItems)) {
+            $itemsJson = $conn->real_escape_string(json_encode(array_values($validItems), JSON_UNESCAPED_UNICODE));
+            $conn->query("UPDATE purchase_requests SET items_json='$itemsJson' WHERE id=$requestId");
+        }
+    }
+
     // ── تسجيل مراحل سير العمل ────────────────────────────────
     prInitWorkflowStages($requestId, $workflowPath);
 
@@ -391,40 +426,57 @@ function prCreateRequest(array $data): array {
 function prInitWorkflowStages(int $requestId, string $workflowPath): void {
     $conn = db();
 
-    // تعريف المراحل حسب المسار — reception أول مرحلة في كلا المسارين
+    // ── قراءة المراحل من قاعدة البيانات ──────────────────────
+    $check = $conn->query("SHOW TABLES LIKE 'workflow_stage_definitions'");
+    if ($check && $check->num_rows > 0) {
+        $keyE   = $conn->real_escape_string($workflowPath);
+        $tplRow = $conn->query("SELECT id FROM workflow_templates WHERE template_key='$keyE' AND is_active=1 LIMIT 1")->fetch_assoc();
+        if ($tplRow) {
+            $tplId   = (int)$tplRow['id'];
+            $stagesR = $conn->query("SELECT stage_key, stage_order FROM workflow_stage_definitions WHERE template_id=$tplId ORDER BY stage_order ASC");
+            if ($stagesR && $stagesR->num_rows > 0) {
+                $first = true;
+                while ($row = $stagesR->fetch_assoc()) {
+                    $sk      = $conn->real_escape_string($row['stage_key']);
+                    $ord     = (int)$row['stage_order'];
+                    $arrived = $first ? "NOW()" : 'NULL';
+                    $first   = false;
+                    $conn->query("INSERT INTO pr_workflow_stages (request_id, stage_name, stage_order, status, arrived_at) VALUES ($requestId, '$sk', $ord, 'pending', $arrived)");
+                }
+                return; // تم بنجاح من DB
+            }
+        }
+    }
+
+    // ── Fallback: الكود الصلب ─────────────────────────────────
     $stages = $workflowPath === 'short'
         ? [
             ['reception',               1],
-            ['budget_review',           2],  // موظف الموازنة
-            ['treasury_review',         3],  // مدير الخزينة + رئيس القطاع المالي (موافقة مزدوجة)
-            ['finance_review',          4],  // رئيس القطاع المالي (الطرف الثاني)
-            ['purchasing',              5],  // موظف المشتريات — يوافق ثم يُنشئ حجز الموازنة
-            ['waiting_budget_approval', 6],  // موظف الموازنة يعتمد الحجز
-            ['accounts_review',         7],  // الحسابات — يختار مسار PO أو دفع مباشر
-            ['payment',                 8],  // الدفع النهائي
+            ['budget_review',           2],
+            ['treasury_review',         3],
+            ['finance_review',          4],
+            ['purchasing',              5],
+            ['waiting_budget_approval', 6],
+            ['accounts_review',         7],
+            ['payment',                 8],
             ['completed',               9],
         ]
         : [
             ['reception',               1],
-            ['budget_review',           2],  // موظف الموازنة (مرحلة إضافية في الطويل)
-            ['treasury_review',         3],  // مدير الخزينة + رئيس القطاع المالي (موافقة مزدوجة)
-            ['finance_review',          4],  // رئيس القطاع المالي (الطرف الثاني)
-            ['ceo_approval',            5],  // موافقة الرئيس التنفيذي
-            ['purchasing',              6],  // موظف المشتريات — يوافق ثم يُنشئ حجز الموازنة
-            ['waiting_budget_approval', 7],  // موظف الموازنة يعتمد الحجز
-            ['accounts_review',         8],  // الحسابات — يختار مسار PO أو دفع مباشر
-            ['payment',                 9],  // الدفع النهائي
+            ['budget_review',           2],
+            ['treasury_review',         3],
+            ['finance_review',          4],
+            ['ceo_approval',            5],
+            ['purchasing',              6],
+            ['waiting_budget_approval', 7],
+            ['accounts_review',         8],
+            ['payment',                 9],
             ['completed',              10],
         ];
 
     foreach ($stages as [$stageName, $order]) {
         $arrived = $order === 1 ? "NOW()" : 'NULL';
-        $conn->query("
-            INSERT INTO pr_workflow_stages
-                (request_id, stage_name, stage_order, status, arrived_at)
-            VALUES
-                ($requestId, '$stageName', $order, 'pending', $arrived)
-        ");
+        $conn->query("INSERT INTO pr_workflow_stages (request_id, stage_name, stage_order, status, arrived_at) VALUES ($requestId, '$stageName', $order, 'pending', $arrived)");
     }
 }
 
@@ -448,7 +500,7 @@ function prApproveStage(int $requestId, int $employeeId, string $stage, string $
 
     // ── جلب بيانات الطلب ─────────────────────────────────────
     $req = prGetRequest($requestId);
-    if (!$req) return ['success' => false, 'message' => 'الطلب غير موجود'];
+    if (!$req) return ['success' => false, 'message' => 'الطلب #' . $requestId . ' غير موجود أو فشل تحميله (تحقق من جدول purchase_requests)'];
 
     // ── التحقق أن المرحلة صحيحة ──────────────────────────────
     if ($req['current_stage'] !== $stage) {
@@ -1225,6 +1277,7 @@ function prGetRequest(int $requestId): ?array {
     $r    = $conn->query("
         SELECT
             pr.*,
+            pr.id               AS id,
             d.name              AS department_name,
             d.code              AS department_code,
             e.name              AS created_by_name,
@@ -1255,7 +1308,15 @@ function prGetRequest(int $requestId): ?array {
         WHERE pr.id = $requestId
         LIMIT 1
     ");
-    return $r && $r->num_rows ? $r->fetch_assoc() : null;
+    if (!$r || !$r->num_rows) return null;
+    $row = $r->fetch_assoc();
+    // فك تشفير الأصناف من JSON
+    if (!empty($row['items_json'])) {
+        $row['items'] = json_decode($row['items_json'], true) ?? [];
+    } else {
+        $row['items'] = [];
+    }
+    return $row;
 }
 
 /**
@@ -2056,6 +2117,111 @@ function prLogEvent(int $requestId, string $eventType, ?int $employeeId, array $
              $assEmpId, $prevAss,
              NOW())
     ");
+
+    // ── تسجيل في security_log تلقائياً ──────────────────────
+    _prLogToSecurityLog($conn, $requestId, $eventType, $employeeId, $empName, $stage, $data);
+}
+
+/**
+ * تسجيل أحداث طلبات الشراء في security_log
+ */
+function _prLogToSecurityLog(
+    mysqli  $conn,
+    int     $requestId,
+    string  $eventType,
+    ?int    $employeeId,
+    string  $empName,
+    string  $stage,
+    array   $data = []
+): void {
+    // تأكد من وجود الجدول
+    static $tableChecked = false;
+    if (!$tableChecked) {
+        $conn->query("CREATE TABLE IF NOT EXISTS security_log (
+            id              BIGINT AUTO_INCREMENT PRIMARY KEY,
+            employee_id     INT           DEFAULT NULL,
+            employee_number VARCHAR(20)   DEFAULT NULL,
+            employee_name   VARCHAR(200)  DEFAULT NULL,
+            event_type      VARCHAR(50)   NOT NULL,
+            event_result    ENUM('success','failure','warning') NOT NULL DEFAULT 'success',
+            ip_address      VARCHAR(45)   NOT NULL DEFAULT '',
+            user_agent      VARCHAR(500)  DEFAULT NULL,
+            session_id      VARCHAR(128)  DEFAULT NULL,
+            page_url        VARCHAR(500)  DEFAULT NULL,
+            action_detail   TEXT          DEFAULT NULL,
+            extra_data      JSON          DEFAULT NULL,
+            created_at      DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_emp   (employee_id),
+            INDEX idx_type  (event_type),
+            INDEX idx_time  (created_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        $tableChecked = true;
+    }
+
+    // ترجمة نوع الحدث
+    $typeMap = [
+        'created'            => 'pr_create',
+        'approved'           => 'pr_approve',
+        'rejected'           => 'pr_reject',
+        'returned'           => 'pr_return',
+        'referred'           => 'pr_refer',
+        'assigned'           => 'pr_assign',
+        'stage_changed'      => 'pr_stage_change',
+        'po_issued'          => 'pr_po_issue',
+        'budget_linked'      => 'pr_budget_link',
+        'sent_to_payment'    => 'pr_payment',
+        'sla_paused'         => 'pr_sla_pause',
+        'sla_resumed'        => 'pr_sla_resume',
+        'workflow_redirected'=> 'pr_workflow_redirect',
+        'note_added'         => 'pr_note',
+        'attachment_added'   => 'pr_attachment',
+        'amount_changed'     => 'pr_amount_change',
+    ];
+    $secEventType = $typeMap[$eventType] ?? ('pr_' . $eventType);
+
+    // تفاصيل الحدث
+    $desc  = $data['description'] ?? '';
+    $stage = $stage ?: ($data['stage'] ?? '');
+
+    $stageLabels = [
+        'reception' => 'الاستلام والتحقق', 'budget_review' => 'مراجعة الموازنة',
+        'treasury_review' => 'مراجعة الخزينة', 'finance_review' => 'مراجعة المالية',
+        'ceo_approval' => 'موافقة CEO', 'purchasing' => 'المشتريات',
+        'accounts_review' => 'الحسابات', 'po_issuance' => 'إصدار PO',
+        'payment' => 'الدفع', 'completed' => 'مكتمل', 'rejected' => 'مرفوض',
+    ];
+    $stageLabel = $stageLabels[$stage] ?? $stage;
+
+    $detail = "طلب #$requestId";
+    if ($stageLabel) $detail .= " — $stageLabel";
+    if ($desc)       $detail .= ": $desc";
+
+    // بيانات إضافية
+    $extra = ['request_id' => $requestId, 'stage' => $stage];
+    if (!empty($data['new_value']))   $extra['new_value']   = $data['new_value'];
+    if (!empty($data['old_value']))   $extra['old_value']   = $data['old_value'];
+    if (!empty($data['referral_reason'])) $extra['reason']  = $data['referral_reason'];
+
+    $empId   = $employeeId ?? 'NULL';
+    $empN    = $conn->real_escape_string($empName);
+    $empNum  = '';
+    if ($employeeId) {
+        $er = $conn->query("SELECT employee_number FROM employees WHERE id=$employeeId LIMIT 1");
+        if ($er && $er->num_rows) $empNum = $er->fetch_assoc()['employee_number'] ?? '';
+    }
+    $empNumE = $conn->real_escape_string($empNum);
+    $secType = $conn->real_escape_string($secEventType);
+    $detailE = $conn->real_escape_string(substr($detail, 0, 490));
+    $extraE  = $conn->real_escape_string(json_encode($extra, JSON_UNESCAPED_UNICODE));
+    $ip      = $conn->real_escape_string($_SERVER['REMOTE_ADDR'] ?? '');
+    $ua      = $conn->real_escape_string(substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 490));
+    $sessId  = $conn->real_escape_string(session_id() ?: '');
+
+    $conn->query("INSERT INTO security_log
+        (employee_id, employee_number, employee_name, event_type, event_result,
+         ip_address, user_agent, session_id, action_detail, extra_data)
+        VALUES ($empId, '$empNumE', '$empN', '$secType', 'success',
+        '$ip', '$ua', '$sessId', '$detailE', '$extraE')");
 }
 
 /**
@@ -2440,24 +2606,43 @@ function prGetStageRecipients(int $deptId, string $stage, string $workflowPath):
  * @return string المرحلة التالية
  */
 function prGetNextStage(string $workflowPath, string $currentStage): string {
-    // مرحلة الحسابات تنتهي بقرار يدوي (PO أو دفع مباشر) — لا تنتقل تلقائياً
-    // مرحلة po_issuance مشتركة وتنتهي بالدفع دائماً
+    $conn = db();
+
+    // ── قراءة المرحلة التالية من قاعدة البيانات ──────────────
+    $check = $conn->query("SHOW TABLES LIKE 'workflow_stage_definitions'");
+    if ($check && $check->num_rows > 0) {
+        $keyE   = $conn->real_escape_string($workflowPath);
+        $stageE = $conn->real_escape_string($currentStage);
+        $tplRow = $conn->query("SELECT id FROM workflow_templates WHERE template_key='$keyE' AND is_active=1 LIMIT 1")->fetch_assoc();
+        if ($tplRow) {
+            $tplId  = (int)$tplRow['id'];
+            $curR   = $conn->query("SELECT stage_order FROM workflow_stage_definitions WHERE template_id=$tplId AND stage_key='$stageE' LIMIT 1");
+            if ($curR && $curR->num_rows) {
+                $curOrder = (int)$curR->fetch_assoc()['stage_order'];
+                $nextR    = $conn->query("SELECT stage_key FROM workflow_stage_definitions WHERE template_id=$tplId AND stage_order > $curOrder ORDER BY stage_order ASC LIMIT 1");
+                if ($nextR && $nextR->num_rows) {
+                    return $nextR->fetch_assoc()['stage_key'];
+                }
+            }
+        }
+    }
+
+    // ── Fallback: الخريطة الصلبة ──────────────────────────────
     $shortFlow = [
         'reception'               => 'budget_review',
-        'budget_review'           => 'treasury_review',   // موظف الموازنة → مدير الخزينة
-        'treasury_review'         => 'finance_review',    // موافقة مزدوجة
-        'finance_review'          => 'purchasing',        // → المشتريات
+        'budget_review'           => 'treasury_review',
+        'treasury_review'         => 'finance_review',
+        'finance_review'          => 'purchasing',
         'purchasing'              => 'waiting_budget_approval',
         'waiting_budget_approval' => 'accounts_review',
         'accounts_review'         => 'payment',
         'po_issuance'             => 'payment',
         'payment'                 => 'completed',
     ];
-
     $longFlow = [
-        'reception'               => 'budget_review',     // مرحلة إضافية في الطويل
+        'reception'               => 'budget_review',
         'budget_review'           => 'treasury_review',
-        'treasury_review'         => 'finance_review',    // موافقة مزدوجة
+        'treasury_review'         => 'finance_review',
         'finance_review'          => 'ceo_approval',
         'ceo_approval'            => 'purchasing',
         'purchasing'              => 'waiting_budget_approval',
@@ -2466,15 +2651,11 @@ function prGetNextStage(string $workflowPath, string $currentStage): string {
         'po_issuance'             => 'payment',
         'payment'                 => 'completed',
     ];
-
     $flow = $workflowPath === 'short' ? $shortFlow : $longFlow;
-
     if (!isset($flow[$currentStage])) {
-        // تسجيل تحذير وإعادة المرحلة الحالية لمنع قفز غير مقصود
         error_log("prGetNextStage: مرحلة غير معروفة '$currentStage' في المسار '$workflowPath'");
-        return $currentStage; // لا تقفز لـ completed
+        return $currentStage;
     }
-
     return $flow[$currentStage];
 }
 
@@ -2485,6 +2666,23 @@ function prGetNextStage(string $workflowPath, string $currentStage): string {
  * @return string
  */
 function prStageName(string $stage): string {
+    static $cache = [];
+    if (isset($cache[$stage])) return $cache[$stage];
+
+    // ── قراءة الاسم من قاعدة البيانات ────────────────────────
+    $conn  = db();
+    $check = $conn->query("SHOW TABLES LIKE 'workflow_stage_definitions'");
+    if ($check && $check->num_rows > 0) {
+        $stageE = $conn->real_escape_string($stage);
+        $r = $conn->query("SELECT stage_name_ar FROM workflow_stage_definitions WHERE stage_key='$stageE' LIMIT 1");
+        if ($r && $r->num_rows) {
+            $name = $r->fetch_assoc()['stage_name_ar'];
+            $cache[$stage] = $name;
+            return $name;
+        }
+    }
+
+    // ── Fallback ──────────────────────────────────────────────
     $names = [
         'draft'                   => 'مسودة',
         'reception'               => 'الاستلام والتحقق',
@@ -2502,7 +2700,9 @@ function prStageName(string $stage): string {
         'rejected'                => 'مرفوضة',
         'returned'                => 'مُرجَعة للمنشئ',
     ];
-    return $names[$stage] ?? $stage;
+    $result = $names[$stage] ?? $stage;
+    $cache[$stage] = $result;
+    return $result;
 }
 
 /**
@@ -3214,4 +3414,96 @@ th{background:#1a1a2e;color:#fff}@media print{body{padding:0}}</style></head><bo
         'path'          => $saved ? $relPath : null,
         'file_name'     => $fileName,
     ];
+}
+// ════════════════════════════════════════════════════════════
+// دوال التعليقات والروابط والاشتراكات
+// ════════════════════════════════════════════════════════════
+
+function prGetComments(int $prId): array {
+    $conn = db();
+    $r = $conn->query("SELECT c.*, e.name AS emp_name, e.role AS emp_role, e.job_title AS emp_title
+        FROM pr_comments c LEFT JOIN employees e ON c.employee_id=e.id
+        WHERE c.pr_id=$prId ORDER BY c.created_at ASC");
+    $rows = [];
+    while ($row = $r->fetch_assoc()) $rows[] = $row;
+    return $rows;
+}
+
+function prGetLinks(int $prId): array {
+    $conn = db();
+    $r = $conn->query("SELECT l.*, pr.request_number, pr.title, pr.current_stage, pr.amount, pr.currency
+        FROM pr_links l LEFT JOIN purchase_requests pr ON l.linked_pr_id=pr.id
+        WHERE l.pr_id=$prId ORDER BY l.created_at DESC");
+    $rows = [];
+    while ($row = $r->fetch_assoc()) $rows[] = $row;
+    return $rows;
+}
+
+function prGetSubscriptionInfo(int $prId, int $userId): array {
+    $conn = db();
+    $subscribed = (bool)$conn->query("SELECT id FROM pr_subscriptions WHERE pr_id=$prId AND employee_id=$userId LIMIT 1")->num_rows;
+    $total = (int)$conn->query("SELECT COUNT(*) AS c FROM pr_subscriptions WHERE pr_id=$prId")->fetch_assoc()['c'];
+    return ['subscribed' => $subscribed, 'total' => $total];
+}
+
+function prGetSimilar(int $prId): array {
+    $conn = db();
+    $req = prGetRequest($prId);
+    if (!$req) return [];
+
+    $costCenterId     = (int)($req['cost_center_id']     ?? 0);
+    $budgetCategoryId = (int)($req['budget_category_id'] ?? 0);
+
+    // لا فائدة إذا لم يكن هناك مركز تكلفة ولا بند مصروف
+    if (!$costCenterId && !$budgetCategoryId) return [];
+
+    // بناء شرط المطابقة
+    $conditions = [];
+    if ($costCenterId)     $conditions[] = "pr.cost_center_id = $costCenterId";
+    if ($budgetCategoryId) $conditions[] = "pr.budget_category_id = $budgetCategoryId";
+
+    $whereOr = implode(' OR ', $conditions);
+
+    $r = $conn->query("
+        SELECT
+            pr.id, pr.request_number, pr.title,
+            pr.amount, pr.currency, pr.current_stage,
+            pr.cost_center_id, pr.budget_category_id,
+            cc.name AS cost_center_name,
+            bc.name AS budget_category_name
+        FROM purchase_requests pr
+        LEFT JOIN cost_centers    cc ON cc.id = pr.cost_center_id
+        LEFT JOIN budget_categories bc ON bc.id = pr.budget_category_id
+        WHERE ($whereOr)
+          AND pr.id != $prId
+        ORDER BY pr.created_at DESC
+        LIMIT 8
+    ");
+
+    $rows = [];
+    while ($row = $r->fetch_assoc()) {
+        $matchCC  = $costCenterId     && (int)$row['cost_center_id']     === $costCenterId;
+        $matchBC  = $budgetCategoryId && (int)$row['budget_category_id'] === $budgetCategoryId;
+
+        if ($matchCC && $matchBC) {
+            $row['match_type']  = 'high';
+            $row['match_label'] = 'تطابق عالي';
+        } elseif ($matchCC) {
+            $row['match_type']  = 'cost_center';
+            $row['match_label'] = 'مركز تكلفة مطابق';
+        } else {
+            $row['match_type']  = 'budget_category';
+            $row['match_label'] = 'بند مصروف مطابق';
+        }
+
+        $rows[] = $row;
+    }
+
+    // ترتيب: تطابق عالي أولاً
+    usort($rows, function($a, $b) {
+        $order = ['high' => 0, 'cost_center' => 1, 'budget_category' => 2];
+        return ($order[$a['match_type']] ?? 9) <=> ($order[$b['match_type']] ?? 9);
+    });
+
+    return array_slice($rows, 0, 6);
 }

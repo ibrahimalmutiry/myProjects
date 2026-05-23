@@ -45,7 +45,8 @@ function ensureArchiveTables() {
         source_module   ENUM('transactions','correspondence','bank','budget','archive') NOT NULL DEFAULT 'archive',
         source_id       INT DEFAULT NULL,
         source_ref      VARCHAR(255) DEFAULT NULL,
-        category        ENUM('معاملة_مالية','خطاب_مراسلة','إيداع_بنكي','موازنة_تخطيط','سجل_تجاري','عقد_اتفاقية','تعميد_تفويض','وثيقة_حكومية','أخرى') NOT NULL DEFAULT 'أخرى',
+        category        VARCHAR(100) NOT NULL DEFAULT 'أخرى',
+        section_key     VARCHAR(50)  NOT NULL DEFAULT 'financial',
         tags            TEXT DEFAULT NULL,
         description     TEXT DEFAULT NULL,
         has_expiry      TINYINT(1) DEFAULT 0,
@@ -63,6 +64,40 @@ function ensureArchiveTables() {
         INDEX idx_expiry   (expiry_date),
         INDEX idx_active   (is_active)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+    // ── جدول تصنيفات الأرشيف الديناميكية ──────────────────────
+    $conn->query("CREATE TABLE IF NOT EXISTS archive_categories (
+        id          INT AUTO_INCREMENT PRIMARY KEY,
+        section_key VARCHAR(50)  NOT NULL,
+        section_label VARCHAR(100) NOT NULL,
+        section_icon  VARCHAR(10)  NOT NULL DEFAULT '📂',
+        sub_key     VARCHAR(50)  NOT NULL,
+        sub_label   VARCHAR(100) NOT NULL,
+        category_tag VARCHAR(100) NOT NULL,
+        sort_order  INT NOT NULL DEFAULT 0,
+        is_active   TINYINT(1) NOT NULL DEFAULT 1,
+        created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_sub (sub_key)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+    // إدراج التصنيفات الافتراضية
+    $defaultCategories = [
+        ['financial', 'مستندات مالية',  '💰', 'fin_supplier',  'فواتير موردين',    'فاتورة_موردين',  1],
+        ['financial', 'مستندات مالية',  '💰', 'fin_customer',  'فواتير عملاء',     'فاتورة_عملاء',   2],
+        ['financial', 'مستندات مالية',  '💰', 'fin_journal',   'قيود يومية',       'قيد_يومي',       3],
+        ['financial', 'مستندات مالية',  '💰', 'fin_bank',      'مستندات بنكية',    'مستند_بنكي',     4],
+        ['financial', 'مستندات مالية',  '💰', 'fin_tax',       'ضرائب وزكاة',      'ضريبة_زكاة',     5],
+        ['letters',   'خطابات',          '✉️', 'let_outgoing',  'خطابات صادرة',     'خطاب_صادر',      1],
+        ['letters',   'خطابات',          '✉️', 'let_incoming',  'خطابات واردة',     'خطاب_وارد',      2],
+        ['letters',   'خطابات',          '✉️', 'let_official',  'مراسلات رسمية',    'مراسلة_رسمية',   3],
+        ['payments',  'مدفوعات يومية',   '💳', 'pay_receipt',   'إيصالات الدفع',   'إيصال_دفع',      1],
+        ['payments',  'مدفوعات يومية',   '💳', 'pay_order',     'أوامر الدفع',      'أمر_دفع',        2],
+    ];
+    foreach ($defaultCategories as [$sk, $sl, $si, $subk, $subl, $cat, $ord]) {
+        $conn->query("INSERT IGNORE INTO archive_categories
+            (section_key, section_label, section_icon, sub_key, sub_label, category_tag, sort_order)
+            VALUES ('$sk','$sl','$si','$subk','$subl','$cat',$ord)");
+    }
 
     // جدول وثائق الصلاحية
     $conn->query("CREATE TABLE IF NOT EXISTS archive_expiry_docs (
@@ -166,6 +201,34 @@ function syncExistingAttachments() {
 /**
  * جلب الملفات من الأرشيف مع الفلاتر
  */
+// ════════════════════════════════════════════════════════════
+// جلب تصنيفات الأرشيف الديناميكية
+// ════════════════════════════════════════════════════════════
+function getArchiveCategories(): array {
+    $conn = db();
+    $r = $conn->query("SELECT * FROM archive_categories WHERE is_active=1 ORDER BY section_key, sort_order");
+    $sections = [];
+    while ($row = $r->fetch_assoc()) {
+        $sk = $row['section_key'];
+        if (!isset($sections[$sk])) {
+            $sections[$sk] = [
+                'key'   => $sk,
+                'label' => $row['section_label'],
+                'icon'  => $row['section_icon'],
+                'subs'  => [],
+            ];
+        }
+        $sections[$sk]['subs'][] = [
+            'key'          => $row['sub_key'],
+            'label'        => $row['sub_label'],
+            'category_tag' => $row['category_tag'],
+            'id'           => $row['id'],
+        ];
+    }
+    return array_values($sections);
+}
+
+
 function getArchiveFiles($filters = [], $userId = null, $userRole = null, $departmentId = null) {
     $conn   = db();
     $where  = ["fa.is_active = 1"];

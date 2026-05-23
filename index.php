@@ -73,6 +73,7 @@ $htmlDir  = $appLang === 'en' ? 'ltr' : 'rtl';
     <link rel="stylesheet" href="css/archive.css">
     <link rel="stylesheet" href="css/purchase-requests.css">
     <link rel="stylesheet" href="css/reports.css">
+    <link rel="stylesheet" href="css/samples.css">
     <link rel="icon" href="images/logo.png">
     <!-- خطوط متعددة اللغات -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -112,6 +113,25 @@ $htmlDir  = $appLang === 'en' ? 'ltr' : 'rtl';
         font-family: 'saudi_riyal' !important;
     }
     </style>
+    <?php
+    // ── منع وميض التبويبات الممنوعة (FOUC): إخفاؤها بـ CSS قبل الرسم ──
+    // الصلاحيات متاحة من الجلسة فوراً، فنولّد قواعد إخفاء تُطبَّق قبل رسم الـ body.
+    $__perms = $_SESSION['page_permissions'] ?? [];
+    $__lvl   = $_SESSION['permission_level'] ?? 'employee';
+    if ($__lvl !== 'system_admin' && is_array($__perms) && $__perms) {
+        $__hidden = [];
+        foreach ($__perms as $__tab => $__allowed) {
+            if (!$__allowed) {
+                $__safe = preg_replace('/[^a-z0-9_-]/i', '', (string)$__tab);
+                if ($__safe !== '') $__hidden[] = '.nav-tab[data-tab="' . $__safe . '"]';
+            }
+        }
+        if ($__hidden) {
+            echo "\n    <style id=\"perm-hide\">\n        " . implode(",\n        ", $__hidden)
+               . " { display: none !important; }\n    </style>\n";
+        }
+    }
+    ?>
 </head>
 
 <body>
@@ -305,7 +325,7 @@ $htmlDir  = $appLang === 'en' ? 'ltr' : 'rtl';
             <!-- ══ الأرشيف المالي ══ -->
             <span class="nav-group-label" data-tr="الأرشيف المالي">الأرشيف المالي</span>
 
-            <button class="nav-tab" data-tab="archive-all" data-tooltip="جميع المستندات"
+            <button class="nav-tab" data-tab="archive-all" data-tooltip="الأرشيف المالي"
                 onclick="openArchiveSub('all')">
                 <span class="nav-icon">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -316,65 +336,6 @@ $htmlDir  = $appLang === 'en' ? 'ltr' : 'rtl';
                 </span>
                 <span class="nav-label" data-tr="جميع المستندات">جميع المستندات</span>
                 <span class="nav-badge" id="archive-expiry-badge" style="display:none">!</span>
-            </button>
-
-            <button class="nav-tab" data-tab="archive-operational" data-tooltip="مستندات تشغيلية"
-                onclick="openArchiveSub('operational')">
-                <span class="nav-icon">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                        <polyline points="14 2 14 8 20 8" />
-                        <line x1="16" y1="13" x2="8" y2="13" />
-                        <line x1="16" y1="17" x2="8" y2="17" />
-                        <polyline points="10 9 9 9 8 9" />
-                    </svg>
-                </span>
-                <span class="nav-label" data-tr="مستندات تشغيلية">مستندات تشغيلية</span>
-            </button>
-
-            <button class="nav-tab" data-tab="archive-financial" data-tooltip="مستندات مالية"
-                onclick="openArchiveSub('financial')">
-                <span class="nav-icon">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <line x1="12" y1="1" x2="12" y2="23" />
-                        <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-                    </svg>
-                </span>
-                <span class="nav-label" data-tr="مستندات مالية">مستندات مالية</span>
-            </button>
-
-            <button class="nav-tab" data-tab="archive-reports" data-tooltip="تقارير وموازنة"
-                onclick="openArchiveSub('reports')">
-                <span class="nav-icon">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M21.21 15.89A10 10 0 1 1 8 2.83" />
-                        <path d="M22 12A10 10 0 0 0 12 2v10z" />
-                    </svg>
-                </span>
-                <span class="nav-label" data-tr="تقارير وموازنة">تقارير وموازنة</span>
-            </button>
-
-            <button class="nav-tab" data-tab="archive-official" data-tooltip="وثائق رسمية"
-                onclick="openArchiveSub('official')">
-                <span class="nav-icon">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-                        <polyline points="9 22 9 12 15 12 15 22" />
-                    </svg>
-                </span>
-                <span class="nav-label" data-tr="وثائق رسمية">وثائق رسمية</span>
-            </button>
-
-            <button class="nav-tab" data-tab="archive-renewals" data-tooltip="التجديد والصلاحيات"
-                onclick="openArchiveSub('renewals')">
-                <span class="nav-icon">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <polyline points="23 4 23 10 17 10" />
-                        <polyline points="1 20 1 14 7 14" />
-                        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
-                    </svg>
-                </span>
-                <span class="nav-label" data-tr="التجديد والصلاحيات">التجديد والصلاحيات</span>
             </button>
 
             <span class="nav-group-label" data-tr="المتابعة">المتابعة</span>
@@ -404,6 +365,10 @@ $htmlDir  = $appLang === 'en' ? 'ltr' : 'rtl';
                 <span class="nav-label" data-tr="اعتمادات الرئيس التنفيذي">اعتمادات الرئيس التنفيذي</span>
             </button>
             <?php endif; ?>
+            <button class="nav-tab" data-tab="samples" data-tooltip="ادارة العينات">
+                <span class="nav-icon">🧪</span>
+                <span class="nav-label" data-tr="ادارة العينات">ادارة العينات</span>
+            </button>
             <!-- ══ التقارير ══ -->
             <?php
             $userRole2  = $_SESSION['user_role']        ?? '';
@@ -546,16 +511,8 @@ $htmlDir  = $appLang === 'en' ? 'ltr' : 'rtl';
     <div class="toast" id="toast"></div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
     <?php
-        // كشف مسار الملفات الفردية: في js/ أو في الجذر
-        $_jsPrefix = file_exists(__DIR__ . '/js/pdf-engine.js') ? 'js/' : '';
-    ?>
-    <?php if ($jsBundleFile): ?>
-    <!-- ✅ Bundle مضغوط — أُنشئ بـ: node build.js -->
-    <script src="<?= htmlspecialchars($jsBundleFile) ?>"></script>
-    <!-- theme-editor خارج الـ bundle لأنه يُحمَّل منفصلاً -->
-    <script src="<?= $_jsPrefix ?>theme-editor.js"></script>
-    <?php else: ?>
-    <!-- ⚡ Fallback: الملفات الفردية -->
+$_jsPrefix = file_exists(__DIR__ . '/js/pdf-engine.js') ? 'js/' : '';
+?>
     <script src="<?= $_jsPrefix ?>pdf-engine.js"></script>
     <script src="<?= $_jsPrefix ?>app-common.js"></script>
     <script src="<?= $_jsPrefix ?>app-i18n.js"></script>
@@ -576,13 +533,15 @@ $htmlDir  = $appLang === 'en' ? 'ltr' : 'rtl';
     <script src="<?= $_jsPrefix ?>app-settings-employees.js"></script>
     <script src="<?= $_jsPrefix ?>app-settings-system.js"></script>
     <script src="<?= $_jsPrefix ?>app-settings-suppliers.js"></script>
+    <script src="<?= $_jsPrefix ?>app-settings-workflow.js"></script>
+    <script src="<?= $_jsPrefix ?>app-security-log.js"></script>
     <script src="<?= $_jsPrefix ?>app-settings-types.js"></script>
     <script src="<?= $_jsPrefix ?>sidebar-init.js"></script>
     <script src="<?= $_jsPrefix ?>app-profile.js"></script>
     <script src="<?= $_jsPrefix ?>app-purchase-requests.js"></script>
+    <script src="<?= $_jsPrefix ?>app-samples.js"></script>
     <script src="<?= $_jsPrefix ?>app-reports.js"></script>
     <script src="<?= $_jsPrefix ?>theme-editor.js"></script>
-    <?php endif; ?>
 
     <script>
     // معلومات المستخدم الحالي
@@ -605,10 +564,13 @@ if (isset($_SESSION['user_id'])) {
         departmentCode: '<?= addslashes($_SESSION['department_code'] ?? '') ?>'
     };
 
-    // ── تطبيق صلاحيات الصفحات على السايدبار ──────────────────
+    // ── صلاحيات الصفحات على السايدبار ──────────────────
+    // الإخفاء يتم الآن بـ CSS في <head> (perm-hide) قبل الرسم — لا وميض.
+    // هنا نُبقي فقط مساعد "أول تبويب مسموح" المستخدم عند التحميل الأولي.
     (function applyPagePermissions() {
         var perms = currentUser.pagePermissions || {};
 
+        // شبكة أمان: في حال أُضيف تبويب ديناميكياً بعد التحميل
         document.querySelectorAll('.nav-tab[data-tab]').forEach(function(btn) {
             var tab = btn.dataset.tab;
             if (tab && perms.hasOwnProperty(tab) && !perms[tab]) {
@@ -616,7 +578,6 @@ if (isset($_SESSION['user_id'])) {
             }
         });
 
-        // أول تبويب مسموح به (يُستخدم عند التحميل الأولي)
         window._firstAllowedTab = function() {
             var order = ['dashboard', 'notifications', 'transactions', 'purchase-requests', 'bank-deposits',
                 'correspondence', 'reservations', 'sla', 'performance', 'settings'

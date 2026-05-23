@@ -572,6 +572,62 @@ try {
             break;
 
         // ════════════════════════════════════════════════════════
+
+        case 'list_receipts': {
+            $conn    = db();
+            $perPage = max(1, min(200, (int)($_GET['per_page'] ?? 50)));
+            $r = $conn->query("
+                SELECT
+                    a.id,
+                    a.original_name,
+                    a.file_path,
+                    a.file_type,
+                    a.file_size,
+                    a.created_at,
+                    a.order_ref AS reference_number,
+                    pr.request_number AS payment_order_number,
+                    pr.amount,
+                    pr.currency,
+                    pr.title AS description,
+                    e.name AS beneficiary_name,
+                    a.created_at AS payment_date
+                FROM payment_order_attachments a
+                LEFT JOIN purchase_requests pr ON pr.id = a.pr_id
+                LEFT JOIN employees e ON e.id = a.created_by
+                WHERE a.attachment_type = 'payment_receipt'
+                ORDER BY a.created_at DESC
+                LIMIT $perPage
+            ");
+            $rows = [];
+            while ($row = $r->fetch_assoc()) {
+                // اسم الإيصال: رقم الأمر + المبلغ
+                $refNum = $row['payment_order_number'] ?: $row['reference_number'] ?: $row['id'];
+                $amt    = $row['amount'] ? number_format((float)$row['amount'], 2) : '0.00';
+                $cur    = $row['currency'] ?: 'SAR';
+                $row['receipt_title'] = "إيصال دفع {$refNum} — {$amt} {$cur}";
+                $rows[] = $row;
+            }
+            jsonResponse(['success'=>true,'data'=>$rows]);
+            break;
+        }
+
+        case 'download_receipt': {
+            $conn = db();
+            $id   = (int)($_GET['id'] ?? 0);
+            if (!$id) { header('HTTP/1.1 400 Bad Request'); exit; }
+            $r    = $conn->query("SELECT * FROM payment_order_attachments WHERE id=$id AND attachment_type='payment_receipt' LIMIT 1");
+            if (!$r || !$r->num_rows) { header('HTTP/1.1 404 Not Found'); exit; }
+            $file = $r->fetch_assoc();
+            $path = dirname(__DIR__) . '/' . $file['file_path'];
+            if (!file_exists($path)) { header('HTTP/1.1 404 Not Found'); exit; }
+            $name = $file['original_name'] ?: basename($file['file_path']);
+            header('Content-Type: ' . ($file['file_type'] ?: 'application/octet-stream'));
+            header('Content-Disposition: attachment; filename="' . addslashes($name) . '"');
+            header('Content-Length: ' . filesize($path));
+            readfile($path);
+            exit;
+        }
+
         //  action غير معروف
         // ════════════════════════════════════════════════════════
         default:

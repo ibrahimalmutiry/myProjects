@@ -1019,7 +1019,7 @@ async function dpLoadHistory() {
             const ordH = orders.map(o => {
                 const sid = _dpSafeId(o.order_ref);
                 const amt = parseFloat(o.total_amount || 0);
-                const fmtAmt = amt.toLocaleString('ar-SA', { minimumFractionDigits: 2 }) + ' ريال';
+                const fmtAmt = amt.toLocaleString('ar-SA', { minimumFractionDigits: 2 }) + ' <span class="sar-symbol" aria-label="ريال سعودي"></span>';
                 return `<div class="dp-day-order">
                     <div class="dp-day-order-header">
                         <div class="dp-day-order-ref">🧾 ${o.order_ref || '—'}</div>
@@ -1047,7 +1047,7 @@ async function dpLoadHistory() {
                 <div class="dp-day-header">
                     <div class="dp-day-label">${lbl}</div>
                     <div class="dp-day-date">${day}</div>
-                    <div class="dp-day-total">${tot.toLocaleString('ar-SA', { minimumFractionDigits: 2 })} ريال</div>
+                    <div class="dp-day-total">${tot.toLocaleString('ar-SA', { minimumFractionDigits: 2 })} <span class="sar-symbol" aria-label="ريال سعودي"></span></div>
                     <div class="dp-day-count">${orders.length} أمر</div>
                 </div>
                 ${ordH}

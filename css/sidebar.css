@@ -173,6 +173,20 @@ body.sidebar-collapsed .main-content {
     pointer-events: none;
 }
 
+.sidebar.collapsed .sidebar-header {
+    justify-content: center;
+    gap: 0;
+    padding: 0.875rem 0.5rem;
+}
+
+.sidebar.collapsed .sidebar-logos {
+    display: none;
+}
+
+.sidebar.collapsed .sidebar-toggle {
+    margin-right: 0;
+}
+
 .sidebar.collapsed .logo-divider {
     opacity: 0;
 }
@@ -183,30 +197,25 @@ body.sidebar-collapsed .main-content {
 
 /* ── زر الطي ──────────────────────────────────────────────── */
 .sidebar-toggle {
-    position: fixed;
-    top: 20px;
-    right: calc(var(--sidebar-width) - 14px);
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    border: 1px solid var(--sidebar-border);
-    background: var(--bg-card);
-    color: var(--text-muted);
+    width: 26px;
+    height: 26px;
+    border-radius: 7px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.8);
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    z-index: 201;
-    transition: right var(--sidebar-transition), background 0.2s, color 0.2s, border-color 0.2s;
-    box-shadow: 0 2px 8px rgba(64, 43, 41, 0.15);
     flex-shrink: 0;
+    margin-right: auto;
+    transition: background 0.2s, color 0.2s, border-color 0.2s;
 }
 
 .sidebar-toggle:hover {
-    background: var(--primary, #3F5950);
+    background: rgba(255, 255, 255, 0.22);
     color: #fff;
-    border-color: var(--primary, #3F5950);
-    box-shadow: 0 4px 12px rgba(63, 89, 80, 0.3);
+    border-color: rgba(255, 255, 255, 0.4);
 }
 
 .sidebar-toggle .toggle-icon-open {
@@ -217,18 +226,12 @@ body.sidebar-collapsed .main-content {
     display: flex;
 }
 
-.sidebar.collapsed~.sidebar-toggle .toggle-icon-open,
-body.sidebar-collapsed .sidebar-toggle .toggle-icon-open {
+.sidebar.collapsed .sidebar-toggle .toggle-icon-open {
     display: flex;
 }
 
-.sidebar.collapsed~.sidebar-toggle .toggle-icon-close,
-body.sidebar-collapsed .sidebar-toggle .toggle-icon-close {
+.sidebar.collapsed .sidebar-toggle .toggle-icon-close {
     display: none;
-}
-
-.sidebar.collapsed~.sidebar-toggle {
-    right: calc(var(--sidebar-collapsed) - 14px);
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -864,4 +867,27 @@ body.sidebar-collapsed .sidebar-toggle .toggle-icon-close {
         opacity: 1;
         transform: rotateY(0deg);
     }
+}
+
+/* ════════════════════════════════════════════════════════════
+   إصلاح زر الطي — مدمج في هيدر السايدبار
+   ════════════════════════════════════════════════════════════ */
+
+/* تأكيد: الزر داخل الـ flow الطبيعي */
+#sidebarToggle {
+    position: static !important;
+    top: auto !important;
+    right: auto !important;
+    left: auto !important;
+    transform: none !important;
+    z-index: auto !important;
+    /* يبقى في نهاية صف الهيدر */
+    margin-right: auto;
+    margin-left: 0;
+}
+
+[dir="ltr"] #sidebarToggle,
+.lang-en #sidebarToggle {
+    margin-right: 0;
+    margin-left: auto;
 }

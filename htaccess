@@ -1,0 +1,101 @@
+# ================================================================
+#  .htaccess — نظام إدارة معاملات القطاع المالي
+#  Security Configuration
+#  ⚠ يتطلب: Apache mod_headers + mod_rewrite + mod_expires
+# ================================================================
+
+# ── إخفاء إصدار Apache ──────────────────────────────────────────
+ServerTokens Prod
+ServerSignature Off
+
+# ── منع الوصول لملفات حساسة مباشرةً ──────────────────────────
+<FilesMatch "^(\.env|\.git|config\.php|functions\.php|auth\.php|composer\.(json|lock)|package(-lock)?\.json)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# ── منع الوصول للمجلدات الحساسة ────────────────────────────────
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # منع الوصول لمجلد includes/ مباشرةً
+    RewriteRule ^includes/ - [F,L]
+
+    # منع الوصول لمجلد logs/
+    RewriteRule ^logs/ - [F,L]
+
+    # منع الوصول لملفات .bak و .sql و .log
+    RewriteRule \.(bak|sql|log|sh|py)$ - [F,L]
+</IfModule>
+
+# ── Security Headers (Apache mod_headers) ──────────────────────
+<IfModule mod_headers.c>
+
+    # منع Clickjacking
+    Header always set X-Frame-Options "SAMEORIGIN"
+
+    # منع MIME Type Sniffing
+    Header always set X-Content-Type-Options "nosniff"
+
+    # XSS Protection للمتصفحات القديمة
+    Header always set X-XSS-Protection "1; mode=block"
+
+    # Referrer Policy
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+
+    # منع الـ caching للصفحات الحساسة
+    Header always set Cache-Control "no-store, no-cache, must-revalidate, private"
+    Header always set Pragma "no-cache"
+
+    # إخفاء معلومات السيرفر
+    Header always unset X-Powered-By
+    Header always unset Server
+
+    # HSTS — يُفعَّل فقط عند وجود HTTPS (علّق السطر في التطوير)
+    # Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
+
+    # Content Security Policy
+    Header always set Content-Security-Policy "\
+default-src 'self'; \
+script-src 'self' 'unsafe-inline' cdnjs.cloudflare.com; \
+style-src 'self' 'unsafe-inline' fonts.googleapis.com; \
+font-src 'self' fonts.gstatic.com data:; \
+img-src 'self' data: blob:; \
+connect-src 'self'; \
+object-src 'none'; \
+base-uri 'self'; \
+form-action 'self'; \
+frame-ancestors 'self'"
+
+    # السماح بـ CSRF header من JS
+    Header always set Access-Control-Allow-Headers "Content-Type, X-CSRF-Token"
+
+</IfModule>
+
+# ── حماية مجلد uploads/ من تنفيذ PHP ──────────────────────────
+# يمنع تنفيذ أي ملف PHP رُفع بشكل خبيث
+<IfModule mod_rewrite.c>
+    RewriteRule ^uploads/.*\.php$ - [F,L]
+    RewriteRule ^uploads/.*\.phtml$ - [F,L]
+    RewriteRule ^uploads/.*\.phar$ - [F,L]
+</IfModule>
+
+# ── منع استعراض محتوى المجلدات ─────────────────────────────────
+Options -Indexes
+
+# ── PHP Session Security (يتجاوز php.ini إن كان مسموحاً) ──────
+<IfModule mod_php.c>
+    php_flag session.cookie_httponly On
+    php_flag session.use_only_cookies On
+    php_flag session.use_strict_mode On
+    php_value session.cookie_samesite "Strict"
+    php_value session.gc_maxlifetime 7200
+    php_flag session.use_trans_sid Off
+</IfModule>
+
+# ── منع hotlinking للملفات المرفوعة ────────────────────────────
+<IfModule mod_rewrite.c>
+    RewriteCond %{HTTP_REFERER} !^$
+    RewriteCond %{HTTP_REFERER} !^https?://%{HTTP_HOST} [NC]
+    RewriteRule ^uploads/.*\.(pdf|docx?|xlsx?)$ - [F,L]
+</IfModule>

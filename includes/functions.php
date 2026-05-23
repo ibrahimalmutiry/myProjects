@@ -25,6 +25,15 @@ function bootstrapSystem(): void {
     if ($booted) return;
     $booted = true;
 
+    // ── Session cache للـ schema version ─────────────────────
+    // يوفّر 1 SELECT في كل طلب HTTP بعد أول تحقق
+    $sessionKey = '_schema_v_' . SCHEMA_VERSION;
+    if (session_status() === PHP_SESSION_ACTIVE && isset($_SESSION[$sessionKey])) {
+        // الـ View قد يحتاج تحقق خفيف — لكن نتجنب migrations كاملاً
+        _ensureViewCreated(db());
+        return;
+    }
+
     $conn = db();
 
     // هل أكملنا الـ Migration لهذا الإصدار من قبل؟
@@ -40,6 +49,11 @@ function bootstrapSystem(): void {
         $conn->query("INSERT INTO system_settings (setting_key, setting_value)
                       VALUES ('schema_version', '$v')
                       ON DUPLICATE KEY UPDATE setting_value = '$v'");
+    }
+
+    // احفظ في session — يُوفّر SELECT schema_version في الطلبات التالية
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        $_SESSION['_schema_v_' . SCHEMA_VERSION] = 1;
     }
 
     // تأكد من وجود الـ View — استعلام واحد للفحص فقط
@@ -133,6 +147,46 @@ function _runSchemaMigrations(\mysqli $conn): void {
     if (!$idx || $idx->num_rows === 0) {
         fixDuplicateTransactionNumbers($conn);
     }
+
+    // ⑩ Performance Indexes — تُضاف مرة واحدة عند أول تشغيل
+    //    هذه الـ Indexes تُحوّل عمليات الفلترة من O(n) إلى O(log n)
+    $existingIdx = [];
+    $ir = $conn->query("SHOW INDEX FROM transactions");
+    if ($ir) while ($ix = $ir->fetch_assoc()) $existingIdx[] = $ix['Key_name'];
+
+    if (!in_array('idx_status', $existingIdx))
+        @$conn->query("ALTER TABLE transactions ADD INDEX idx_status (status)");
+    if (!in_array('idx_date', $existingIdx))
+        @$conn->query("ALTER TABLE transactions ADD INDEX idx_date (transaction_date)");
+    if (!in_array('idx_priority', $existingIdx))
+        @$conn->query("ALTER TABLE transactions ADD INDEX idx_priority (priority)");
+    if (!in_array('idx_created_at', $existingIdx))
+        @$conn->query("ALTER TABLE transactions ADD INDEX idx_created_at (created_at)");
+    if (!in_array('idx_created_by', $existingIdx))
+        @$conn->query("ALTER TABLE transactions ADD INDEX idx_created_by (created_by)");
+
+    // ⑪ عمود sequence_num — بديل أسرع لـ CAST(SUBSTRING_INDEX(...))
+    //    ORDER BY sequence_num يستخدم الـ Index — CAST(SUBSTRING_INDEX) لا يستخدمه
+    $r = $conn->query("SHOW COLUMNS FROM transactions LIKE 'sequence_num'");
+    if (!$r || $r->num_rows === 0) {
+        $conn->query("ALTER TABLE transactions ADD COLUMN sequence_num INT UNSIGNED DEFAULT 0 AFTER transaction_number");
+        @$conn->query("ALTER TABLE transactions ADD INDEX idx_seq (sequence_num)");
+        // ملء القيم الموجودة من transaction_number (مثال: TR-0042 → 42)
+        $conn->query("UPDATE transactions SET sequence_num = CAST(SUBSTRING_INDEX(transaction_number, '-', -1) AS UNSIGNED) WHERE sequence_num = 0");
+    }
+
+    // Indexes على جداول الحالة (للـ getStats() الجديدة)
+    $ir2 = $conn->query("SHOW INDEX FROM payment_data");
+    $pdIdx = [];
+    if ($ir2) while ($ix = $ir2->fetch_assoc()) $pdIdx[] = $ix['Key_name'];
+    if (!in_array('idx_pd_status', $pdIdx))
+        @$conn->query("ALTER TABLE payment_data ADD INDEX idx_pd_status (status)");
+
+    $ir3 = $conn->query("SHOW INDEX FROM receiving_data");
+    $rdIdx = [];
+    if ($ir3) while ($ix = $ir3->fetch_assoc()) $rdIdx[] = $ix['Key_name'];
+    if (!in_array('idx_rd_status', $rdIdx))
+        @$conn->query("ALTER TABLE receiving_data ADD INDEX idx_rd_status (status)");
 }
 
 // ───────────────────────────────────────────────────────────────
@@ -231,7 +285,16 @@ function getAllTransactions($filters = []) {
         $where .= " AND transaction_date <= '$dateTo'";
     }
 
-    $orderBy   = "ORDER BY CAST(SUBSTRING_INDEX(transaction_number, '-', -1) AS UNSIGNED) DESC";
+    // ── ORDER BY: استخدام session cache لتجنب SHOW COLUMNS في كل طلب ──
+    // sequence_num يستخدم Index، CAST(SUBSTRING_INDEX) لا يستخدمه
+    // نتحقق مرة واحدة لكل session، لا في كل استعلام
+    if (!isset($_SESSION['_has_seq_col'])) {
+        $chk = $conn->query("SHOW COLUMNS FROM transactions LIKE 'sequence_num'");
+        $_SESSION['_has_seq_col'] = ($chk && $chk->num_rows > 0) ? 1 : 0;
+    }
+    $orderBy = $_SESSION['_has_seq_col']
+        ? "ORDER BY sequence_num DESC"
+        : "ORDER BY CAST(SUBSTRING_INDEX(transaction_number, '-', -1) AS UNSIGNED) DESC";
     $paginated = isset($filters['page']);
 
     // ── Pagination ─────────────────────────────────────────────
@@ -304,73 +367,78 @@ function getTransaction($id) {
  * الحصول على الإحصائيات
  */
 function getStats() {
+    // ── Query Cache: نتيجة getStats() تُحفظ 5 دقائق ──────────
+    // الإحصائيات لا تتغير بشكل لحظي — هذا التحسين يوفّر
+    // ~7 استعلام لكل طلب dashboard بدون أي تأثير على المستخدم
+    $cacheKey = 'stats_cache';
+    $cacheTTL = 300; // 5 دقائق
+
+    if (isset($_SESSION[$cacheKey]) &&
+        is_array($_SESSION[$cacheKey]) &&
+        isset($_SESSION[$cacheKey]['_ts']) &&
+        (time() - $_SESSION[$cacheKey]['_ts']) < $cacheTTL) {
+        return $_SESSION[$cacheKey];
+    }
+
     $conn = db();
-    
-    $stats = [
-        'total' => 0,
-        'received' => 0,
-        'paid' => 0,
-        'invoiced' => 0,
-        'urgent' => 0,
-        'pending' => 0,
-        'total_amount' => 0,
-        'paid_amount' => 0
-    ];
-    
-    // إجمالي المعاملات
-    $result = $conn->query("SELECT COUNT(*) as count FROM transactions");
-    if ($row = $result->fetch_assoc()) {
-        $stats['total'] = (int)$row['count'];
-    }
-    
-    // المعاملات المستلمة
-    $result = $conn->query("SELECT COUNT(*) as count FROM receiving_data WHERE status = 'مستلم'");
-    if ($row = $result->fetch_assoc()) {
-        $stats['received'] = (int)$row['count'];
-    }
-    
-    // المعاملات المدفوعة
-    $result = $conn->query("SELECT COUNT(*) as count FROM payment_data WHERE status = 'تم الدفع'");
-    if ($row = $result->fetch_assoc()) {
-        $stats['paid'] = (int)$row['count'];
-    }
-    
-    // المعاملات المفوترة
-    $result = $conn->query("SELECT COUNT(*) as count FROM invoice_data WHERE status = 'صدرت الفاتورة'");
-    if ($row = $result->fetch_assoc()) {
-        $stats['invoiced'] = (int)$row['count'];
-    }
-    
-    // المعاملات العاجلة
-    $result = $conn->query("SELECT COUNT(*) as count FROM invoice_data WHERE alert_type = 'عاجل'");
-    if ($row = $result->fetch_assoc()) {
-        $stats['urgent'] = (int)$row['count'];
-    }
-    
-    // المعاملات المعلقة
-    $result = $conn->query("SELECT COUNT(*) as count FROM payment_data WHERE status = 'معلق'");
-    if ($row = $result->fetch_assoc()) {
-        $stats['pending'] = (int)$row['count'];
-    }
-    
-    // إجمالي المبالغ
-    $result = $conn->query("SELECT SUM(amount) as total FROM transactions");
-    if ($row = $result->fetch_assoc()) {
-        $stats['total_amount'] = (float)$row['total'];
-    }
-    
-    // المبالغ المدفوعة
-    $result = $conn->query("
-        SELECT SUM(t.amount) as total 
-        FROM transactions t 
-        JOIN payment_data p ON t.id = p.transaction_id 
-        WHERE p.status = 'تم الدفع'
+
+    // ── استعلام واحد بدلاً من 8 — توفير ~7 رحلة DB/طلب ────────
+    // SUM(CASE WHEN ... THEN 1 ELSE 0 END) يحسب شروط متعددة
+    // في مسح واحد للجدول بدلاً من 8 مسحات منفصلة
+    $r = $conn->query("
+        SELECT
+            COUNT(DISTINCT t.id)                                         AS total,
+            SUM(CASE WHEN rd.status = 'مستلم'        THEN 1 ELSE 0 END) AS received,
+            SUM(CASE WHEN pd.status = 'تم الدفع'     THEN 1 ELSE 0 END) AS paid,
+            SUM(CASE WHEN inv.status = 'صدرت الفاتورة' THEN 1 ELSE 0 END) AS invoiced,
+            SUM(CASE WHEN inv.alert_type = 'عاجل'    THEN 1 ELSE 0 END) AS urgent,
+            SUM(CASE WHEN pd.status = 'معلق'         THEN 1 ELSE 0 END) AS pending,
+            COALESCE(SUM(t.amount), 0)                                   AS total_amount,
+            COALESCE(SUM(CASE WHEN pd.status = 'تم الدفع' THEN t.amount ELSE 0 END), 0) AS paid_amount
+        FROM transactions t
+        LEFT JOIN receiving_data rd  ON rd.transaction_id  = t.id
+        LEFT JOIN payment_data   pd  ON pd.transaction_id  = t.id
+        LEFT JOIN invoice_data   inv ON inv.transaction_id = t.id
     ");
-    if ($row = $result->fetch_assoc()) {
-        $stats['paid_amount'] = (float)$row['total'];
+
+    $stats = [
+        'total' => 0, 'received' => 0, 'paid' => 0,
+        'invoiced' => 0, 'urgent' => 0, 'pending' => 0,
+        'total_amount' => 0, 'paid_amount' => 0,
+    ];
+
+    if ($r && $row = $r->fetch_assoc()) {
+        $stats = [
+            'total'        => (int)$row['total'],
+            'received'     => (int)$row['received'],
+            'paid'         => (int)$row['paid'],
+            'invoiced'     => (int)$row['invoiced'],
+            'urgent'       => (int)$row['urgent'],
+            'pending'      => (int)$row['pending'],
+            'total_amount' => (float)$row['total_amount'],
+            'paid_amount'  => (float)$row['paid_amount'],
+        ];
     }
-    
+
+    // ── حفظ في Session Cache ──────────────────────────────────
+    $stats['_ts'] = time();
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        $_SESSION[$cacheKey] = $stats;
+    }
+    unset($stats['_ts']); // لا نُرجع الـ timestamp للمُستدعي
+
     return $stats;
+}
+
+/**
+ * invalidateStatsCache()
+ * استدعِها في كل عملية تُضيف أو تُعدّل أو تحذف معاملة
+ * حتى تُجبر getStats() على إعادة الحساب في المرة القادمة
+ */
+function invalidateStatsCache(): void {
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        unset($_SESSION['stats_cache']);
+    }
 }
 
 /**
@@ -525,15 +593,8 @@ function getEmployees($role = null) {
 function getTransactionTypes() {
     $conn = db();
 
-    // ضمان وجود أعمدة التصنيف الهرمي
-    $chkPar = $conn->query("SHOW COLUMNS FROM transaction_types LIKE 'parent_id'");
-    if (!$chkPar || $chkPar->num_rows === 0)
-        $conn->query("ALTER TABLE transaction_types ADD COLUMN parent_id INT DEFAULT NULL");
-    $chkSort = $conn->query("SHOW COLUMNS FROM transaction_types LIKE 'sort_order'");
-    if (!$chkSort || $chkSort->num_rows === 0)
-        $conn->query("ALTER TABLE transaction_types ADD COLUMN sort_order INT DEFAULT 0");
-
-    // نجلب الكل مرتبة: الرئيسية أولاً ثم الفرعية، وداخل كل مستوى حسب sort_order ثم الاسم
+    // الأعمدة parent_id وsort_order مضمونة بـ _runSchemaMigrations() ⑦
+    // لا حاجة لـ SHOW COLUMNS في كل استدعاء
     $sql = "SELECT * FROM transaction_types WHERE is_active = 1
             ORDER BY COALESCE(parent_id, id), sort_order, name";
     $result = $conn->query($sql);
@@ -653,7 +714,7 @@ function addTransaction($data, $file = null) {
         if ($manualRate > 0) {
             $exchangeRate = $manualRate;
         } else {
-            $rEx = $conn->query("SELECT rate_to_sar FROM exchange_rates WHERE currency='$currency' LIMIT 1");
+            $rEx = $conn->query("SELECT rate_to_sar FROM exchange_rates WHERE code='$currency' OR currency='$currency' LIMIT 1");
             if ($rEx && ($exRow = $rEx->fetch_assoc())) $exchangeRate = (float)$exRow['rate_to_sar'];
         }
     }
@@ -695,6 +756,8 @@ function addTransaction($data, $file = null) {
         
         $creatorName = $_SESSION['user_name'] ?? 'النظام';
         logActivity($transactionId, 'إنشاء', "تم إنشاء المعاملة بواسطة: $creatorName في $now");
+        // إبطال الـ Cache — الإحصائيات تغيّرت
+        invalidateStatsCache();
         return $transactionId;
     }
     return false;
@@ -2166,9 +2229,197 @@ function loadPermissionsForSession($userId) {
 
 } // end function_exists
 
+// ═══════════════════════════════════════════════════════════════
+//  Rate Limiting — تحديد معدل الطلبات لكل الـ API endpoints
+// ═══════════════════════════════════════════════════════════════
+/**
+ * apiRateLimit(action, maxRequests, windowSeconds)
+ *
+ * كيف يعمل:
+ *   - يحفظ كل طلب في جدول api_rate_limits برقم IP + اسم الـ action
+ *   - يعدّ الطلبات في النافذة الزمنية (مثلاً آخر 60 ثانية)
+ *   - إذا تجاوز الحد: يرجع 429 ويوقف التنفيذ
+ *   - بـ 1% احتمال يُنظّف السجلات القديمة (تجنب CRON إضافي)
+ *
+ * الاستخدام:
+ *   apiRateLimit('add_employee', 10, 60);  // 10 طلبات/دقيقة
+ *   apiRateLimit('upload',        5, 60);  // 5 رفعات/دقيقة
+ *   apiRateLimit('export',        3, 300); // 3 تصديرات/5 دقائق
+ */
+if (!function_exists('apiRateLimit')) {
+function apiRateLimit(string $action, int $maxRequests = 60, int $windowSeconds = 60): void {
+    $conn = db();
+
+    // إنشاء الجدول مرة واحدة
+    $conn->query("CREATE TABLE IF NOT EXISTS api_rate_limits (
+        id         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        rate_key   VARCHAR(160) NOT NULL,
+        hit_at     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_key_time (rate_key, hit_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+    // مفتاح فريد: action + IP
+    $ip  = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+    // دعم IPv6 وX-Forwarded-For (خلف load balancer)
+    if (!empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
+        $ip = trim(explode(',', $_SERVER['HTTP_X_FORWARDED_FOR'])[0]);
+    }
+    $ip      = filter_var($ip, FILTER_VALIDATE_IP) ? $ip : '0.0.0.0';
+    $safeKey = $conn->real_escape_string(substr($action . ':' . $ip, 0, 160));
+
+    // عدّ الطلبات في النافذة الزمنية
+    $r     = $conn->query("
+        SELECT COUNT(*) AS c FROM api_rate_limits
+        WHERE rate_key = '$safeKey'
+          AND hit_at   > DATE_SUB(NOW(), INTERVAL $windowSeconds SECOND)
+    ");
+    $count = (int)($r ? $r->fetch_assoc()['c'] : 0);
+
+    if ($count >= $maxRequests) {
+        // إضافة Retry-After header للعميل
+        header('Retry-After: ' . $windowSeconds);
+        http_response_code(429);
+        echo json_encode([
+            'success'     => false,
+            'message'     => 'تجاوزت الحد المسموح به — حاول بعد ' . ceil($windowSeconds / 60) . ' دقيقة',
+            'retry_after' => $windowSeconds,
+            'limit'       => $maxRequests,
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // سجّل هذا الطلب
+    $conn->query("INSERT INTO api_rate_limits (rate_key) VALUES ('$safeKey')");
+
+    // تنظيف دوري بـ 1% احتمال (بدلاً من CRON منفصل)
+    if (random_int(1, 100) === 1) {
+        $conn->query("DELETE FROM api_rate_limits WHERE hit_at < DATE_SUB(NOW(), INTERVAL 1 HOUR)");
+    }
+}
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  Audit Logging — سجل التدقيق لكل تغييرات الإعدادات والبيانات
+// ═══════════════════════════════════════════════════════════════
+/**
+ * auditLog(action, targetType, targetId, changes, meta)
+ *
+ * يُسجّل كل عملية حساسة: من نفّذها، متى، ماذا تغيّر.
+ *
+ * الاستخدام:
+ *   auditLog('add_employee',    'employee',   $newId, ['name'=>$name, 'role'=>$role]);
+ *   auditLog('delete_employee', 'employee',   $id,    ['name'=>$oldName]);
+ *   auditLog('change_permission','employee',  $empId, ['old'=>$oldLevel,'new'=>$newLevel]);
+ *   auditLog('clear_all',       'system',     0,      []);
+ *
+ * @param string $action      ما الذي حدث (add/update/delete/change_permission)
+ * @param string $targetType  نوع الكيان (employee/department/type/system)
+ * @param int    $targetId    ID الكيان (0 للعمليات على النظام كاملاً)
+ * @param array  $changes     البيانات المتغيّرة — ['field'=>value] أو ['old'=>x,'new'=>y]
+ * @param array  $meta        بيانات إضافية اختيارية
+ */
+if (!function_exists('auditLog')) {
+function auditLog(
+    string $action,
+    string $targetType,
+    int    $targetId,
+    array  $changes = [],
+    array  $meta    = []
+): void {
+    $conn = db();
+
+    // إنشاء جدول audit_log مرة واحدة
+    $conn->query("CREATE TABLE IF NOT EXISTS audit_log (
+        id            INT UNSIGNED   AUTO_INCREMENT PRIMARY KEY,
+        performed_by  INT            DEFAULT NULL  COMMENT 'employee id',
+        actor_name    VARCHAR(120)   DEFAULT NULL,
+        action        VARCHAR(80)    NOT NULL,
+        target_type   VARCHAR(40)    NOT NULL,
+        target_id     INT            NOT NULL DEFAULT 0,
+        changes_json  TEXT           DEFAULT NULL  COMMENT 'JSON diff',
+        meta_json     TEXT           DEFAULT NULL  COMMENT 'extra context',
+        ip            VARCHAR(45)    DEFAULT NULL,
+        user_agent    VARCHAR(300)   DEFAULT NULL,
+        created_at    DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_actor    (performed_by),
+        INDEX idx_target   (target_type, target_id),
+        INDEX idx_action   (action),
+        INDEX idx_time     (created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+    $actorId   = (int)($_SESSION['user_id']   ?? 0);
+    $actorName = $_SESSION['user_name']        ?? '';
+    $ip        = $_SERVER['REMOTE_ADDR']       ?? '';
+    $ua        = substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 300);
+
+    $stmt = $conn->prepare(
+        "INSERT INTO audit_log
+            (performed_by, actor_name, action, target_type, target_id,
+             changes_json, meta_json, ip, user_agent)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    );
+
+    $changesJson = !empty($changes) ? json_encode($changes, JSON_UNESCAPED_UNICODE) : null;
+    $metaJson    = !empty($meta)    ? json_encode($meta,    JSON_UNESCAPED_UNICODE) : null;
+    $actorIdVal  = $actorId ?: null;
+
+    $stmt->bind_param(
+        'isssissss',
+        $actorIdVal, $actorName, $action, $targetType, $targetId,
+        $changesJson, $metaJson, $ip, $ua
+    );
+    $stmt->execute();
+}
+}
+
 // ── نظام المعاملات (طلبات الشراء) — خارج if(!function_exists) ──
 // يُحمَّل دائماً بغض النظر عن حالة الجلسة
 $_prFunctionsPath = __DIR__ . '/pr_functions.php';
 if (file_exists($_prFunctionsPath)) {
     require_once $_prFunctionsPath;
+}
+// ════════════════════════════════════════════════════════════
+// تسجيل الأحداث في security_log — دالة عامة مشتركة
+// ════════════════════════════════════════════════════════════
+function logToSecurityLog(string $eventType, string $detail, string $result = 'success', array $extra = []): void {
+    static $tableReady = false;
+    $conn = db();
+
+    if (!$tableReady) {
+        $conn->query("CREATE TABLE IF NOT EXISTS security_log (
+            id              BIGINT AUTO_INCREMENT PRIMARY KEY,
+            employee_id     INT           DEFAULT NULL,
+            employee_number VARCHAR(20)   DEFAULT NULL,
+            employee_name   VARCHAR(200)  DEFAULT NULL,
+            event_type      VARCHAR(50)   NOT NULL,
+            event_result    ENUM('success','failure','warning') NOT NULL DEFAULT 'success',
+            ip_address      VARCHAR(45)   NOT NULL DEFAULT '',
+            user_agent      VARCHAR(500)  DEFAULT NULL,
+            session_id      VARCHAR(128)  DEFAULT NULL,
+            action_detail   TEXT          DEFAULT NULL,
+            extra_data      JSON          DEFAULT NULL,
+            created_at      DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_emp  (employee_id),
+            INDEX idx_type (event_type),
+            INDEX idx_time (created_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        $tableReady = true;
+    }
+
+    $userId  = isset($_SESSION['user_id'])        ? (int)$_SESSION['user_id']               : 'NULL';
+    $empNum  = $conn->real_escape_string($_SESSION['employee_number'] ?? '');
+    $empName = $conn->real_escape_string($_SESSION['user_name']       ?? '');
+    $eType   = $conn->real_escape_string($eventType);
+    $eResult = in_array($result, ['success','failure','warning']) ? $result : 'success';
+    $det     = $conn->real_escape_string(substr($detail, 0, 490));
+    $extraJ  = $conn->real_escape_string(json_encode($extra, JSON_UNESCAPED_UNICODE));
+    $ip      = $conn->real_escape_string($_SERVER['REMOTE_ADDR']      ?? '');
+    $ua      = $conn->real_escape_string(substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 490));
+    $sessId  = $conn->real_escape_string(session_id() ?: '');
+
+    $conn->query("INSERT INTO security_log
+        (employee_id, employee_number, employee_name, event_type, event_result,
+         ip_address, user_agent, session_id, action_detail, extra_data)
+        VALUES ($userId, '$empNum', '$empName', '$eType', '$eResult',
+        '$ip', '$ua', '$sessId', '$det', '$extraJ')");
 }
